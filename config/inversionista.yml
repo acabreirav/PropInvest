@@ -30,6 +30,18 @@ estrategia_dfl2:
     llegar ahi, evaluar una segunda persona natural (conyuge con separacion de bienes),
     NUNCA una sociedad.
   exencion_ganancia_capital_uf: 8000   # acumulativa de por vida, por persona
+  # D-011 resuelta en lo esencial: conyuge bajo PARTICIPACION EN LOS GANANCIALES
+  # (patrimonios separados durante el matrimonio), sin propiedades y con 0 cupos DFL2.
+  # El hogar dispone de 4 cupos, no de 2, y de DOS solicitantes elegibles al subsidio.
+  # Estructura preferida: una unidad por comprador, cada quien dueno de la suya.
+  segunda_persona_natural:
+    regimen: participacion_en_los_gananciales
+    propiedades_actuales: 0
+    viviendas_dfl2_actuales: 0
+    califica_subsidio_tasa: true
+    renta_liquida_mensual_clp: 2500000
+    ticket_max_uf: 3886                # capacidad propia, calculada con `cli capacidad`
+    verificar_en_escritura: "que la propiedad quede a nombre de un solo titular"
 
 restricciones:
   # Completar con datos reales antes de correr `make score`.

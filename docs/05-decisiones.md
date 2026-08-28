@@ -124,7 +124,8 @@ verificación del DFL2 en escritura o certificado municipal antes de firmar.
 ---
 
 ## D-011 · ¿Conviene sumar la renta de la cónyuge? **BLOQUEA el ticket objetivo**
-**Estado:** abierta · **Dueño:** humano + banco + notaría · **Abierta:** 28-ago-2026
+**Estado:** parcialmente resuelta · **Dueño:** banco + notaría · **Abierta:** 28-ago-2026
+**Actualizada:** 28-ago-2026 con los datos del inversionista.
 
 El inversionista plantea complementar renta con su cónyuge ($2.500.000 líquidos).
 Aritméticamente el efecto es grande y está calculado:
@@ -140,30 +141,49 @@ de búsqueda por completo.
 **Pero el beneficio tributario y el subsidio no son aritmética, y no están resueltos.**
 Cuatro preguntas, ninguna respondible desde el modelo:
 
-1. **Régimen patrimonial del matrimonio.** Con **sociedad conyugal**, lo adquirido a título
-   oneroso entra al haber común, y eso arrastra cómo se cuentan los cupos DFL2 y quién
-   figura como propietario. Con **separación total de bienes**, cada uno es dueño de lo suyo
-   y los cupos se cuentan por separado — que es justo el escenario que D-010 identificó como
-   la vía para ir más allá de dos unidades. **Sin saber el régimen, no se puede modelar.**
-2. **¿La cónyuge tiene propiedades a su nombre?** Si las tiene, bajo la lectura de "primera
-   vivienda del comprador" el subsidio podría perderse, y con él el tramo especial de
-   ≤ UF 3.000 del Decreto 180 art. 4 — que, según D-009, es el tramo que mejor calza con
-   este perfil.
-3. **¿Cuántos cupos DFL2 tiene usados la cónyuge?** El límite de 2 es **por persona natural**
-   (Ley 20.455). Si ella tiene 0, el hogar dispone de 4 cupos, no de 2.
-4. **¿El banco acepta co-deudor sin exigir co-propiedad?** Sumar renta como co-deudor y
-   dejar la propiedad a nombre de uno solo es lo que preservaría los cupos DFL2 del otro.
-   Es práctica común, pero **debe confirmarse por escrito** con cada banco.
+1. ~~Régimen patrimonial~~ → **RESUELTO: participación en los gananciales.** Durante el
+   matrimonio los patrimonios se mantienen **separados** y cada cónyuge administra y es dueño
+   de lo suyo; al disolverse no se dividen bienes, se compara la ganancia de cada uno y se
+   compensa con un **crédito en dinero**. Para lo que nos importa —quién figura como dueño y
+   a quién se le imputa el cupo DFL2— **funciona como separación de bienes.**
+   *Confianza alta, pero se confirma con el notario antes de escriturar. El §2.5 del contrato
+   es explícito: el DFL2 se verifica en la escritura, nunca en lo que diga un tercero.*
+2. ~~¿Tiene propiedades?~~ → **RESUELTO: no tiene ninguna.** Califica al subsidio bajo las dos
+   lecturas del requisito en disputa, igual que él. **Son dos solicitantes elegibles, no uno.**
+3. ~~¿Cupos DFL2 usados?~~ → **RESUELTO: cero.** El hogar dispone de **4 cupos DFL2**
+   (2 por persona natural, Ley 20.455), no de 2.
+4. **¿El banco acepta co-deudor sin exigir co-propiedad?** ÚNICA PREGUNTA ABIERTA. Sólo
+   importa si se elige la Estructura A. **Debe confirmarse por escrito** con cada banco.
 
-**Riesgo si se avanza sin resolverlo:** duplicar la capacidad de crédito y perder el
-subsidio, o consumir dos cupos DFL2 en una sola propiedad. Ambos errores son caros y
-difíciles de deshacer después de la escritura.
+## Las dos estructuras, ahora que los datos están
 
-**Hasta resolverlo:** el ticket objetivo sigue siendo **UF 3.497** (renta individual), y el
-informe se calcula sobre esa base. La variante conjunta se modela sólo como escenario de
-contraste, nunca como caso base.
+| | **A · una unidad, ambos co-deudores** | **B · una unidad cada uno** |
+|---|---|---|
+| Ticket máximo | UF 6.000 (tope legal) | UF 3.497 él + UF 3.886 ella = **UF 7.383** |
+| Propiedades | 1 | **2** |
+| Subsidios usados | 1 | **2** (ambos califican) |
+| Cupos DFL2 consumidos | 1 o 2, según quién escriture | **1 de cada uno; quedan 2 libres** |
+| Diversificación de microzona | ninguna | **dos microzonas distintas** |
+| Depende del banco | **sí** (pregunta 4) | no |
 
-**Qué se necesita para cerrarla:** (a) el régimen patrimonial del matrimonio, (b) si la
-cónyuge tiene propiedades, (c) cuántos cupos DFL2 tiene usados, y (d) la respuesta escrita
-del banco a la pregunta 4. Las tres primeras las tiene el inversionista; la cuarta va a la
-lista de preguntas del PASO 9 del runbook.
+**La Estructura B domina en todas las dimensiones medibles.** Más ladrillo total, dos
+subsidios en vez de uno, dos cupos DFL2 preservados para después, riesgo repartido en dos
+microzonas, y no depende de que el banco acepte co-deudor sin co-propiedad.
+
+Y encaja con el hallazgo del §2.3 del contrato: **dos tickets chicos alcanzan el pie de
+equilibrio antes que uno grande**, porque el ahorro disponible se reparte sobre un precio
+total menor por unidad. Además ambos tickets caben bajo UF 3.000 si se apunta ahí, que es el
+tramo especial de D-009.
+
+**Riesgo específico de la Estructura A** que ya no aplica si se elige B: escriturar a nombre
+de los dos consume **dos cupos DFL2 en una sola propiedad**, la peor asignación posible de un
+recurso del que sólo hay cuatro en toda la vida del hogar.
+
+**Decisión operativa:** el ranking se calcula sobre **UF 3.497** (capacidad individual de él)
+como caso base, y se agrega un escenario **B** con dos unidades, una por comprador. La
+Estructura A se conserva como contraste, no como plan.
+
+**Qué falta para cerrar del todo:** (a) confirmación del notario de que bajo participación en
+los gananciales la propiedad adquirida es individual para efectos de DFL2 — trámite de
+minutos al escriturar; (b) la respuesta del banco a la pregunta 4, que sólo importa si se
+vuelve a considerar la Estructura A.
