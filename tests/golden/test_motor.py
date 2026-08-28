@@ -1,9 +1,11 @@
 """Casos de oro del motor financiero — CLAUDE.md §7.2."""
 
-from decimal import Decimal as D, getcontext
+from decimal import Decimal as D
+from decimal import getcontext
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from flujocero.finance import core as f
 from tests.golden.reference_impl import dividendo_por_amortizacion

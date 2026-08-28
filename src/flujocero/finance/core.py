@@ -17,6 +17,7 @@ D = Decimal
 
 # --------------------------------------------------------------------------- crédito
 
+
 def tasa_mensual(tasa_anual: Decimal, capitalizacion: str = "simple") -> Decimal:
     """Convierte tasa anual a mensual.
 
@@ -59,6 +60,7 @@ def saldo_insoluto(
 
 # --------------------------------------------------------------------------- ingresos
 
+
 def factor_erosion(inflacion_anual: Decimal) -> Decimal:
     """Erosión intra-anual del arriendo medido en UF.
 
@@ -88,6 +90,7 @@ def egi(
 
 
 # --------------------------------------------------------------------------- resultado
+
 
 @dataclass(frozen=True)
 class Opex:
@@ -136,6 +139,7 @@ def btcf_mensual(noi_uf: Decimal, dividendo_total_mensual_uf: Decimal) -> Decima
 
 # ------------------------------------------------------------------- puntos de equilibrio
 
+
 def pie_minimo_flujo_cero(
     yield_bruto: Decimal, tasa_anual: Decimal, plazo_anios: int, opex_pct: Decimal
 ) -> Decimal:
@@ -166,6 +170,7 @@ def break_even_occupancy(
 
 
 # --------------------------------------------------------------------------- retorno
+
 
 def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 300) -> Decimal:
     """TIR por bisección sobre [-0,9999; 10]. Flujos en UF => la TIR resultante es REAL.

@@ -31,7 +31,7 @@ def construir_escenarios(p: Config, inv: Config) -> list[Escenario]:
         gestion = "prof" if vac == vacancias[1] else "indiv"
         salida.append(
             Escenario(
-                escenario_id=f"{'sub' if con_sub else 'nosub'}_pie{int(pie*100)}_"
+                escenario_id=f"{'sub' if con_sub else 'nosub'}_pie{int(pie * 100)}_"
                 f"{'dfl2' if dfl2 else 'nodfl2'}_{gestion}",
                 con_subsidio=con_sub,
                 pie_pct=pie,
@@ -61,9 +61,7 @@ def _normalizar(valores: list[Decimal], mayor_es_mejor: bool) -> list[Decimal]:
     lo, hi = min(vivos), max(vivos)
     if hi == lo:
         return [D("0.5")] * len(valores)
-    return [
-        ((v - lo) / (hi - lo)) if mayor_es_mejor else ((hi - v) / (hi - lo)) for v in valores
-    ]
+    return [((v - lo) / (hi - lo)) if mayor_es_mejor else ((hi - v) / (hi - lo)) for v in valores]
 
 
 def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
@@ -76,9 +74,7 @@ def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
     comps = {
         "deficit_flujo_mensual_uf": _normalizar([e.btcf_mensual_uf for _, e in vivos], True),
         "pie_minimo_flujo_cero": _normalizar([e.pie_minimo_flujo_cero for _, e in vivos], False),
-        "tir_real_apalancada_10a": _normalizar(
-            [e.tir_real.get(10, D(-1)) for _, e in vivos], True
-        ),
+        "tir_real_apalancada_10a": _normalizar([e.tir_real.get(10, D(-1)) for _, e in vivos], True),
         "riesgo_microzona": _normalizar([u.riesgo_microzona for u, _ in vivos], False),
         "catalizador": _normalizar([u.catalizador for u, _ in vivos], True),
         "descuento_vs_microzona": _normalizar([u.descuento_vs_microzona for u, _ in vivos], True),

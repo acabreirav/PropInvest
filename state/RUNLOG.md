@@ -50,3 +50,45 @@ aprendizajes: el escenario `sin_subsidio` se construye siempre, aunque el invers
 
 siguiente: T-010 a T-012 (CMF, OAuth de MercadoLibre, tasas por banco) — se paralelizan.
 Requiere credenciales en `.env` y, para los colectores, IP chilena.
+
+## 2026-08-28 · iteración 2 — reproducibilidad del entorno y del gate de estilo
+tareas: ninguna del backlog cerrada; trabajo de infraestructura previo a fase 1
+gates: **VERDE** · ruff + ruff format + mypy --strict + `pytest`: **28 passed** + gates de CLI
+
+qué se arregló:
+1. **`make test` no corría desde un checkout limpio.** `pyproject.toml` no declaraba
+   `[build-system]`, así que `uv sync` no instalaba el paquete y ni los tests ni
+   `python -m flujocero.cli` podían importar `flujocero`. Además las dependencias de
+   desarrollo vivían en `[project.optional-dependencies]`, que `uv sync` no instala por
+   defecto. Pasan a `[dependency-groups]`.
+2. **`uv.lock` versionado.** Sin lock, la versión de ruff que resuelve `uv` cambia el
+   conjunto de reglas por defecto y con ello el veredicto del gate.
+3. **Gate de estilo determinístico.** `ruff>=0.5` sin fijar resolvía ruff 0.16.5, cuyo
+   default es mucho más amplio: 42 hallazgos donde antes había 0. Se declara
+   `[tool.ruff.lint] select = ["E4","E7","E9","F","I"]` y se fija `ruff==0.16.5`.
+   El gate deja de depender del default de turno.
+
+hallazgos:
+1. **Bajo los 42 hallazgos de estilo había 2 reales**, no cero: `E702` (dos sentencias en
+   una línea en `cli.py`) y `F401` (import sin usar en `tests/golden/test_modelo.py`).
+   Corregidos. El resto era inflación del conjunto de reglas.
+2. **El contenedor remoto no alcanza ninguna de las dos fuentes de fase 1.** El proxy de
+   egreso bloquea `api.mercadolibre.com`, `api.cmfchile.cl` y `developers.mercadolibre.cl`.
+   No es el bloqueo por IP de datacenter previsto en D-007: es una pared anterior.
+   **Confirma D-007 por una razón distinta a la registrada:** los colectores se ejecutan en
+   la máquina del inversionista. El código y sus tests contra fixtures sí se escriben acá.
+3. **El Redirect URI de `.env.example` era inválido.** El formulario de MercadoLibre exige
+   HTTPS y valida que el dominio resuelva, así que rechaza `http://localhost:8000/...`.
+   Valor adoptado y verificado por el usuario contra el formulario:
+   `https://acabreirav.github.io/PropInvest/oauth/callback`. No necesita servir nada: solo
+   es el destino al que MELI devuelve el navegador con el `?code=` en la barra.
+4. `docs/RUNBOOK.md` sigue diciendo "make test → 12 passed" en el paso 2 y en la tabla
+   resumen. Son 28. Documento desactualizado respecto a la iteración 1.
+
+verificación: `demo` produce salida idéntica antes y después del reformateo de 7 archivos.
+
+tareas nuevas abiertas: T-905 (corregir el conteo de tests en RUNBOOK), T-906 (borrar el
+`flujo-cero.tar.gz` vacío commiteado en la raíz).
+
+siguiente: T-010 y T-012 (CMF: UF/UTM/IPC y tasas por banco) — código y tests contra
+fixtures grabadas acá; ejecución contra la red, en la máquina del usuario.

@@ -28,8 +28,8 @@ class Unidad:
     es_vivienda_nueva: bool = True
     evidence_precio: str = "V"
     microzona_saturada: bool = False
-    riesgo_microzona: Decimal = D("0.5")   # 0 = sin riesgo, 1 = máximo
-    catalizador: Decimal = D("0")          # 0..1, Metro con fecha creíble <= 3 años
+    riesgo_microzona: Decimal = D("0.5")  # 0 = sin riesgo, 1 = máximo
+    catalizador: Decimal = D("0")  # 0..1, Metro con fecha creíble <= 3 años
     descuento_vs_microzona: Decimal = D("0")
 
 
@@ -75,6 +75,7 @@ class Evaluacion:
 
 # ----------------------------------------------------------------------- exclusiones duras
 
+
 def evaluar_exclusiones(u: Unidad, params: Config, inv: Config) -> str | None:
     """Las exclusiones EXCLUYEN, no restan puntos (CLAUDE.md §12)."""
     ex = params.crudo("score.exclusiones_duras")
@@ -97,6 +98,7 @@ def evaluar_exclusiones(u: Unidad, params: Config, inv: Config) -> str | None:
 
 # ------------------------------------------------------------------------------ componentes
 
+
 def contribuciones_anuales_uf(precio_uf: Decimal, dfl2: bool, p: Config) -> Decimal:
     """Impuesto territorial. Se calcula en pesos sobre el avalúo fiscal y se lleva a UF.
 
@@ -109,7 +111,12 @@ def contribuciones_anuales_uf(precio_uf: Decimal, dfl2: bool, p: Config) -> Deci
     corte = p.d("gastos_operativos.contribuciones_avaluo_corte_clp")
     t1 = p.d("gastos_operativos.contribuciones_tasa_anual")
     t2 = p.d("gastos_operativos.contribuciones_tasa_tramo_alto")
-    clp = base * t1 if avaluo <= corte else (corte - min(corte, p.d("gastos_operativos.avaluo_exento_clp"))) * t1 + (avaluo - corte) * t2
+    clp = (
+        base * t1
+        if avaluo <= corte
+        else (corte - min(corte, p.d("gastos_operativos.avaluo_exento_clp"))) * t1
+        + (avaluo - corte) * t2
+    )
     if dfl2:
         clp *= D(1) - p.d("gastos_operativos.rebaja_dfl2_contribuciones")
     return clp / uf
@@ -150,11 +157,13 @@ def gastos_de_cierre_uf(precio_uf: Decimal, credito_uf: Decimal, p: Config) -> D
         + p.d("gastos_de_cierre.estudio_titulos_uf")
         + p.d("gastos_de_cierre.notaria_escritura_cv_uf")
         + p.d("gastos_de_cierre.notaria_escritura_mutuo_uf")
-        + (p.d("gastos_de_cierre.inscripcion_cbr_clp") + p.d("gastos_de_cierre.certificados_clp")) / uf
+        + (p.d("gastos_de_cierre.inscripcion_cbr_clp") + p.d("gastos_de_cierre.certificados_clp"))
+        / uf
     )
 
 
 # -------------------------------------------------------------------------------- evaluación
+
 
 def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
     ev = Evaluacion(unidad_key=u.unidad_key, escenario_id=e.escenario_id)
@@ -169,12 +178,15 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
 
     ev.credito_uf = u.precio_uf * (D(1) - e.pie_pct)
     ev.dividendo_uf = f.dividendo_frances(ev.credito_uf, e.tasa_anual, plazo)
-    seguros_mensuales = ev.credito_uf * p.d("gastos_operativos.seguro_desgravamen_pct_mensual_saldo") + \
-        u.precio_uf * p.d("gastos_operativos.seguro_incendio_sismo_pct_mensual_tasacion")
+    seguros_mensuales = ev.credito_uf * p.d(
+        "gastos_operativos.seguro_desgravamen_pct_mensual_saldo"
+    ) + u.precio_uf * p.d("gastos_operativos.seguro_incendio_sismo_pct_mensual_tasacion")
     ev.dividendo_total_uf = ev.dividendo_uf + seguros_mensuales
 
     ev.pgi_uf = f.pgi(u.arriendo_mensual_uf)
-    ev.egi_uf = f.egi(u.arriendo_mensual_uf, e.vacancia, p.d("vacancia_y_riesgo.incobrabilidad"), pi)
+    ev.egi_uf = f.egi(
+        u.arriendo_mensual_uf, e.vacancia, p.d("vacancia_y_riesgo.incobrabilidad"), pi
+    )
     opex = construir_opex(u, e, ev.egi_uf, p)
     ev.opex_anual_uf = opex.total()
     ev.noi_uf = f.noi(ev.egi_uf, opex)
@@ -191,7 +203,9 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
 
     ev.capital_invertido_uf = u.precio_uf * e.pie_pct + cierre
     ev.cash_on_cash = ev.btcf_mensual_uf * D(12) / ev.capital_invertido_uf
-    ev.arriendo_equilibrio_uf = f.arriendo_equilibrio_uf(servicio_anual, ev.opex_anual_uf, e.vacancia, pi)
+    ev.arriendo_equilibrio_uf = f.arriendo_equilibrio_uf(
+        servicio_anual, ev.opex_anual_uf, e.vacancia, pi
+    )
     ev.pie_minimo_flujo_cero = f.pie_minimo_flujo_cero(
         ev.rentabilidad_bruta, e.tasa_anual, plazo, ev.opex_anual_uf / ev.pgi_uf
     )
@@ -208,9 +222,11 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
         flujos = [-ev.capital_invertido_uf] + [ev.atcf_mensual_uf * D(12)] * n
         venta = u.precio_uf * (D(1) + g) ** n
         ganancia = max(D(0), venta - u.precio_uf - exencion)
-        flujos[n] += venta * (D(1) - com_venta) - f.saldo_insoluto(
-            ev.credito_uf, e.tasa_anual, plazo, n * 12
-        ) - ganancia * tasa_gc
+        flujos[n] += (
+            venta * (D(1) - com_venta)
+            - f.saldo_insoluto(ev.credito_uf, e.tasa_anual, plazo, n * 12)
+            - ganancia * tasa_gc
+        )
         try:
             ev.tir_real[n] = f.tir(flujos)
         except ValueError:

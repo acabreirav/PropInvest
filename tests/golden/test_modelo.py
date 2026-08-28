@@ -1,11 +1,11 @@
 """Casos de oro del modelo completo — invariantes contables y reglas del régimen."""
 
-from decimal import Decimal as D, getcontext
+from decimal import Decimal as D
+from decimal import getcontext
 
 import pytest
 
 from flujocero.config import cargar, ticket_maximo_uf
-from flujocero.finance import core as f
 from flujocero.finance.escenarios import construir_escenarios, escenario_base, evaluar_universo
 from flujocero.finance.modelo import Escenario, Unidad, contribuciones_anuales_uf, evaluar
 
@@ -19,9 +19,15 @@ def cfg():
 
 def unidad(**kw) -> Unidad:
     base = dict(
-        unidad_key="U-1", precio_uf=D(3000), m2_utiles=D(45), tipologia="2D1B",
-        comuna_id="san-miguel", microzona_id="san-miguel/gran-avenida",
-        arriendo_mensual_uf=D(10), arriendo_n_comparables=20, acogida_dfl2=True,
+        unidad_key="U-1",
+        precio_uf=D(3000),
+        m2_utiles=D(45),
+        tipologia="2D1B",
+        comuna_id="san-miguel",
+        microzona_id="san-miguel/gran-avenida",
+        arriendo_mensual_uf=D(10),
+        arriendo_n_comparables=20,
+        acogida_dfl2=True,
     )
     base.update(kw)
     return Unidad(**base)
@@ -29,8 +35,12 @@ def unidad(**kw) -> Unidad:
 
 def escenario(**kw) -> Escenario:
     base = dict(
-        escenario_id="t", con_subsidio=True, pie_pct=D("0.10"), dfl2=True,
-        vacancia=D("0.08"), tasa_anual=D("0.0330"),
+        escenario_id="t",
+        con_subsidio=True,
+        pie_pct=D("0.10"),
+        dfl2=True,
+        vacancia=D("0.08"),
+        tasa_anual=D("0.0330"),
     )
     base.update(kw)
     return Escenario(**base)
@@ -67,6 +77,7 @@ def test_seguros_no_se_duplican(cfg) -> None:
     ev = evaluar(unidad(), escenario(), p, inv)
     assert ev.dividendo_total_uf > ev.dividendo_uf
     from flujocero.finance.modelo import construir_opex
+
     assert construir_opex(unidad(), escenario(), ev.egi_uf, p).seguro_incendio_sismo == D(0)
 
 
@@ -136,8 +147,13 @@ def test_score_suma_pesos(cfg) -> None:
 def test_capacidad_carga_financiera(cfg) -> None:
     p, _ = cfg
     args = dict(
-        tasa_anual=D("0.033"), plazo_anios=30, ltv=D("0.90"), uf_clp=D(40804),
-        max_pct_ingreso=D("0.25"), max_carga_financiera=D("0.45"), tope_uf=D(6000),
+        tasa_anual=D("0.033"),
+        plazo_anios=30,
+        ltv=D("0.90"),
+        uf_clp=D(40804),
+        max_pct_ingreso=D("0.25"),
+        max_carga_financiera=D("0.45"),
+        tope_uf=D(6000),
     )
     limpio = ticket_maximo_uf(D(2_000_000), D(0), **args)
     endeudado = ticket_maximo_uf(D(2_000_000), D(500_000), **args)

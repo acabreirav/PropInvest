@@ -21,9 +21,7 @@ def saldo_final(credito: Decimal, tasa_anual: Decimal, plazo_anios: int, cuota: 
     return saldo
 
 
-def dividendo_por_amortizacion(
-    credito: Decimal, tasa_anual: Decimal, plazo_anios: int
-) -> Decimal:
+def dividendo_por_amortizacion(credito: Decimal, tasa_anual: Decimal, plazo_anios: int) -> Decimal:
     lo, hi = D(0), credito
     for _ in range(300):
         mid = (lo + hi) / D(2)

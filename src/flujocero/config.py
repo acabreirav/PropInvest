@@ -100,6 +100,7 @@ def cargar(nombre: str, raiz: Path | None = None) -> Config:
 
 # --------------------------------------------------------------- capacidad de endeudamiento
 
+
 def ticket_maximo_uf(
     renta_liquida_clp: Decimal,
     otras_cuotas_clp: Decimal,
