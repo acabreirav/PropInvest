@@ -29,12 +29,24 @@ $ErrorActionPreference = "Stop"
 
 $Repo    = "https://github.com/acabreirav/PropInvest.git"
 $Rama    = "claude/flujo-cero-subsidio-0j4hc6"
-$Carpeta = Join-Path $HOME "PropInvest"
+$Carpeta = Join-Path $HOME "flujo-cero"   # carpeta propia: no pisa nada existente
 
 function Titulo($t) { Write-Host "" ; Write-Host "=== $t ===" -ForegroundColor Cyan }
 function Ok($t)     { Write-Host "  OK  $t" -ForegroundColor Green }
 function Aviso($t)  { Write-Host "  !!  $t" -ForegroundColor Yellow }
 function Existe($c) { $null -ne (Get-Command $c -ErrorAction SilentlyContinue) }
+
+# PowerShell NO detiene el script cuando un programa externo (git, uv, pytest) devuelve
+# un codigo de salida distinto de cero: $ErrorActionPreference solo gobierna los cmdlets.
+# Sin esta funcion el script imprime "OK" despues de cada paso que fallo, que es
+# exactamente lo que paso en la primera version. Todo comando externo pasa por aqui.
+function Correr {
+  param([Parameter(Mandatory)][string]$Que, [Parameter(Mandatory)][scriptblock]$Bloque)
+  & $Bloque
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Que fallo con codigo $LASTEXITCODE. El script se detiene aqui a proposito: seguir seria reportar un verde falso."
+  }
+}
 
 # ---------------------------------------------------------------- 1 - herramientas
 
@@ -70,15 +82,25 @@ Titulo "2/5  Repositorio"
 
 if (Test-Path (Join-Path $Carpeta ".git")) {
   Set-Location $Carpeta
+  # Antes de tocar nada: confirmar que esta carpeta es ESTE proyecto y no otra cosa.
+  $remoto = (git remote get-url origin 2>$null)
+  if (-not $remoto -or $remoto -notmatch "acabreirav/PropInvest") {
+    throw "En $Carpeta hay un repositorio git que NO es este proyecto (remoto: '$remoto'). No se toca. Mueve o renombra esa carpeta, o edita `$Carpeta al principio de este script."
+  }
   Ok "ya existe en $Carpeta, actualizando"
-  git fetch origin $Rama
-  git checkout $Rama
-  git pull origin $Rama
+  Correr "git fetch"    { git fetch origin $Rama }
+  Correr "git checkout" { git checkout $Rama }
+  Correr "git pull"     { git pull origin $Rama }
+} elseif (Test-Path $Carpeta) {
+  throw "La carpeta $Carpeta ya existe pero no es un repositorio git. No se toca. Muevela o renombrala y vuelve a correr."
 } else {
   Write-Host "  Clonando en $Carpeta"
   Write-Host "  El repositorio es privado: se va a abrir el navegador para que autorices a GitHub." -ForegroundColor DarkGray
-  git clone --branch $Rama $Repo $Carpeta
+  Correr "git clone" { git clone --branch $Rama $Repo $Carpeta }
   Set-Location $Carpeta
+}
+if (-not (Test-Path (Join-Path $Carpeta "pyproject.toml"))) {
+  throw "No hay pyproject.toml en $Carpeta. El clon quedo incompleto; borra la carpeta y vuelve a correr."
 }
 $rama_actual = git rev-parse --abbrev-ref HEAD
 $commit      = git rev-parse --short HEAD
@@ -87,7 +109,7 @@ Ok "en la rama $rama_actual, commit $commit"
 # ---------------------------------------------------------------- 3 - dependencias
 
 Titulo "3/5  Dependencias de Python"
-uv sync
+Correr "uv sync" { uv sync }
 Ok "instaladas"
 
 # ---------------------------------------------------------------- 4 - credenciales
@@ -120,16 +142,24 @@ if ($faltan.Count -gt 0) {
 
 Titulo "5/5  Verificacion"
 
+if ($faltan.Count -gt 0) {
+  Aviso "sin credenciales no tiene sentido verificar. Llena el .env y vuelve a correr."
+  Write-Host ""
+  Write-Host "SIGUIENTE: pega en PowerShell el bloque del .env que te di en el chat," -ForegroundColor Yellow
+  Write-Host "estando parado en $Carpeta, y vuelve a correr este script." -ForegroundColor Yellow
+  exit 1
+}
+
 Write-Host "  Tests..." -ForegroundColor DarkGray
-uv run pytest -q
+Correr "pytest" { uv run pytest -q }
 Ok "tests en verde"
 
 Write-Host "  Gates..." -ForegroundColor DarkGray
-uv run python -m flujocero.cli gates
+Correr "gates" { uv run python -m flujocero.cli gates }
 Ok "gates en verde"
 
 Write-Host "  Demo del motor financiero:" -ForegroundColor DarkGray
-uv run python -m flujocero.cli demo
+Correr "demo" { uv run python -m flujocero.cli demo }
 
 # ---------------------------------------------------------------- listo
 

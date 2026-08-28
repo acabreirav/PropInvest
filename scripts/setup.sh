@@ -13,7 +13,7 @@ set -euo pipefail
 
 REPO="https://github.com/acabreirav/PropInvest.git"
 RAMA="claude/flujo-cero-subsidio-0j4hc6"
-CARPETA="${HOME}/PropInvest"
+CARPETA="${HOME}/flujo-cero"   # carpeta propia: no pisa nada existente
 
 titulo() { printf '\n\033[36m=== %s ===\033[0m\n' "$1"; }
 ok()     { printf '\033[32m  OK  %s\033[0m\n' "$1"; }
@@ -37,14 +37,24 @@ fi
 titulo "2/5  Repositorio"
 if [ -d "${CARPETA}/.git" ]; then
   cd "${CARPETA}"
-  ok "ya existe en ${CARPETA} — actualizando"
+  # Confirmar que esta carpeta es ESTE proyecto y no otra cosa del usuario.
+  REMOTO="$(git remote get-url origin 2>/dev/null || true)"
+  case "${REMOTO}" in
+    *acabreirav/PropInvest*) : ;;
+    *) aviso "En ${CARPETA} hay un git que NO es este proyecto (remoto: '${REMOTO}'). No se toca."; exit 1 ;;
+  esac
+  ok "ya existe en ${CARPETA}, actualizando"
   git fetch origin "${RAMA}"
   git checkout "${RAMA}"
   git pull origin "${RAMA}"
+elif [ -e "${CARPETA}" ]; then
+  aviso "${CARPETA} ya existe y no es un repositorio git. No se toca. Muevela y repite."
+  exit 1
 else
   git clone --branch "${RAMA}" "${REPO}" "${CARPETA}"
   cd "${CARPETA}"
 fi
+[ -f pyproject.toml ] || { aviso "no hay pyproject.toml: el clon quedo incompleto"; exit 1; }
 ok "rama $(git rev-parse --abbrev-ref HEAD), commit $(git rev-parse --short HEAD)"
 
 titulo "3/5  Dependencias de Python"
@@ -63,6 +73,10 @@ FALTAN=$(grep -E '^(MELI_CLIENT_ID|MELI_CLIENT_SECRET|MELI_REFRESH_TOKEN|CMF_API
 if [ -n "${FALTAN}" ]; then aviso "faltan credenciales: ${FALTAN}"; else ok "las cuatro credenciales estan puestas"; fi
 
 titulo "5/5  Verificacion"
+if [ -n "${FALTAN}" ]; then
+  aviso "sin credenciales no tiene sentido verificar. Llena el .env y repite."
+  exit 1
+fi
 uv run pytest -q && ok "tests en verde"
 uv run python -m flujocero.cli gates && ok "gates en verde"
 uv run python -m flujocero.cli demo

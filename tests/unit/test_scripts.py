@@ -98,3 +98,77 @@ def test_los_scripts_apuntan_a_la_rama_correcta(nombre: str) -> None:
     texto = (SCRIPTS / nombre).read_text(encoding="utf-8")
     assert "acabreirav/PropInvest" in texto
     assert "claude/flujo-cero-subsidio-0j4hc6" in texto
+
+
+# --------------------------------------------------------------------- verdad del reporte
+
+# Programas externos: PowerShell NO aborta cuando devuelven un codigo distinto de cero.
+EXTERNOS = ("git ", "uv ", "pytest", "winget ")
+
+
+def _lineas_ejecutables(texto: str) -> list[tuple[int, str]]:
+    return [
+        (i, linea.strip())
+        for i, linea in enumerate(texto.splitlines(), 1)
+        if linea.strip() and not linea.strip().startswith("#")
+    ]
+
+
+def test_todo_comando_externo_del_script_verifica_su_codigo_de_salida() -> None:
+    """EL SEGUNDO FALLO REAL, reportado por el usuario.
+
+    `$ErrorActionPreference = "Stop"` solo gobierna los cmdlets de PowerShell. Un programa
+    externo que falla no detiene el script: `git fetch` reventaba, `uv sync` reventaba,
+    `pytest` ni se encontraba, y el script igual imprimia "OK tests en verde".
+
+    Un reporte que miente es peor que un error: hace creer que hay un verde donde no lo hay.
+    Todo comando externo tiene que pasar por `Correr`, que revisa `$LASTEXITCODE`.
+    """
+    texto = (SCRIPTS / "setup.ps1").read_text(encoding="utf-8")
+    assert "function Correr" in texto, "falta el envoltorio que revisa $LASTEXITCODE"
+    assert "$LASTEXITCODE" in texto
+
+    sueltos = []
+    for i, linea in _lineas_ejecutables(texto):
+        if "Correr " in linea or linea.startswith(("function", "Write-Host", "throw")):
+            continue
+        for prog in EXTERNOS:
+            if linea.startswith(prog):
+                # Dos excepciones, ambas con razon:
+                # - `git rev-parse` y `git remote` solo LEEN: su fallo no produce un verde falso.
+                # - `winget install` devuelve codigo distinto de cero tambien cuando el
+                #   programa ya estaba instalado, asi que su codigo de salida no es
+                #   confiable. La verificacion real es el `if (-not (Existe git)) { throw }`
+                #   de la linea siguiente, que es mas fuerte que mirar el codigo.
+                if linea.startswith(("git rev-parse", "git remote", "winget install")):
+                    continue
+                sueltos.append(f"linea {i}: {linea[:70]}")
+    assert not sueltos, "comandos externos sin verificar su codigo de salida:\n" + "\n".join(
+        sueltos
+    )
+
+
+def test_winget_se_verifica_por_presencia_y_no_por_codigo_de_salida() -> None:
+    """La excepcion anterior no es un agujero: hay que comprobar que la verificacion existe."""
+    texto = (SCRIPTS / "setup.ps1").read_text(encoding="utf-8")
+    i_winget = texto.index("winget install")
+    resto = texto[i_winget : i_winget + 400]
+    assert "Existe git" in resto and "throw" in resto, (
+        "winget queda sin verificar: falta el chequeo de presencia despues de instalar"
+    )
+
+
+def test_el_script_verifica_que_la_carpeta_sea_este_proyecto() -> None:
+    """La causa raiz del fallo: el usuario ya tenia una carpeta con ese nombre, con un
+    repositorio git distinto adentro. El script la adopto y siguio como si nada."""
+    texto = (SCRIPTS / "setup.ps1").read_text(encoding="utf-8")
+    assert "git remote get-url origin" in texto
+    assert "pyproject.toml" in texto, "falta comprobar que el clon quedo completo"
+
+
+def test_el_script_no_verifica_nada_si_faltan_credenciales() -> None:
+    """Correr los tests sin .env produce fallos que no dicen nada del sistema."""
+    texto = (SCRIPTS / "setup.ps1").read_text(encoding="utf-8")
+    i_faltan = texto.index("sin credenciales no tiene sentido verificar")
+    i_tests = texto.index('Correr "pytest"')
+    assert i_faltan < i_tests, "la salida temprana debe ir ANTES de correr los tests"
