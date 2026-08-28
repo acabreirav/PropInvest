@@ -44,12 +44,15 @@ EGI = PGI × (1 − vacancia) × (1 − incobrabilidad) / (1 + π/2)
 NOI = EGI
     − contribuciones
     − gastos comunes en periodos de vacancia
-    − seguro de incendio/sismo
     − administración (% × EGI)
     − corretaje amortizado (0,595 meses ÷ años de permanencia del arrendatario)
     − mantención y reparaciones (% del PGI)
     − impuesto a la renta si NO es DFL2
 ```
+⚠️ **Los seguros NO van en el NOI.** En Chile el banco cobra el desgravamen y el de incendio/sismo
+**junto con el dividendo**, así que viven en `dividendo_total`. Ponerlos en los dos lados es un
+doble conteo que infla el déficit mensual — es un error fácil de cometer copiando modelos gringos,
+donde el seguro de la propiedad sí es un gasto operativo separado.
 
 **Rentabilidad bruta / cap rate / GRM**
 ```

@@ -7,7 +7,7 @@ Regla: nada se marca `hecha` sin `make gates` verde.
 # FASE 0 · Cimientos (sin red)
 
 ## T-001 · Esqueleto del repo y toolchain
-estado: pendiente · agente: colector · fase: 0 · depende_de: []
+estado: hecha · agente: colector · fase: 0 · depende_de: []
 paraleliza_con: [T-002]
 criterio_de_aceptacion:
   - `uv sync` instala; `make setup` deja Playwright chromium listo
@@ -15,7 +15,7 @@ criterio_de_aceptacion:
   - `make test` corre aunque no haya tests todavía
 
 ## T-005 · Cargar y validar el perfil del inversionista
-estado: pendiente · agente: motor-financiero · fase: 0 · depende_de: [T-002]
+estado: hecha · agente: motor-financiero · fase: 0 · depende_de: [T-002]
 criterio_de_aceptacion:
   - `config/inversionista.yml` cargado y validado; falla si falta `renta_liquida_mensual_clp`
   - `ticket_max_uf` calculado = min(6000, capacidad por dividendo <=25% renta y carga total <=45%)
@@ -24,7 +24,7 @@ criterio_de_aceptacion:
   - el informe reporta por separado el subconjunto <= UF 3.000 (tramo especial, ver D-009)
 
 ## T-002 · Esquema DuckDB + carga de params
-estado: pendiente · agente: colector · fase: 0 · depende_de: []
+estado: hecha · agente: colector · fase: 0 · depende_de: []
 paraleliza_con: [T-001]
 criterio_de_aceptacion:
   - `schema/schema.sql` se aplica sin error sobre una base vacía
@@ -32,7 +32,7 @@ criterio_de_aceptacion:
   - `make rebuild` reconstruye desde cero
 
 ## T-003 · Motor financiero
-estado: pendiente · agente: motor-financiero · fase: 0 · depende_de: [T-002]
+estado: hecha · agente: motor-financiero · fase: 0 · depende_de: [T-002]
 paraleliza_con: []   # NUNCA en paralelo
 criterio_de_aceptacion:
   - Todas las fórmulas de `docs/02-modelo-financiero.md` implementadas
@@ -41,7 +41,7 @@ criterio_de_aceptacion:
   - Invariantes con `hypothesis` sobre 10.000 casos
 
 ## T-004 · Motor de escenarios y score
-estado: pendiente · agente: motor-financiero · fase: 0 · depende_de: [T-003]
+estado: hecha · agente: motor-financiero · fase: 0 · depende_de: [T-003]
 criterio_de_aceptacion:
   - Producto cartesiano `{con,sin subsidio} × {pie 10/15/20/equilibrio} × {DFL2} × {vacancia}`
   - Score con pesos leídos de `config/params.yml`, con `score_desglose` en JSON auditable

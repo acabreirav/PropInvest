@@ -72,12 +72,12 @@ ingresos:
 vacancia_y_riesgo:
   vacancia_gestion_individual: {v: 0.08, evidence: V, rango: [0.08, 0.10]}
   vacancia_gestion_profesional: {v: 0.045, evidence: V}
-  incobrabilidad: {v: 0.02, evidence: E}
-  permanencia_arrendatario_anios: {v: 2, evidence: E}
+  incobrabilidad: {v: 0.02, evidence: E, rango: [0.01, 0.05]}
+  permanencia_arrendatario_anios: {v: 2, evidence: E, rango: [1, 4]}
 
 gastos_operativos:
   gastos_comunes_clp_m2_mes:
-    default: {v: 3000, evidence: E}
+    default: {v: 3000, evidence: E, rango: [2000, 5000]}
     por_comuna:
       santiago: 2200
       estacion-central: 2200
@@ -94,7 +94,7 @@ gastos_operativos:
   rebaja_dfl2_contribuciones: {v: 0.50, evidence: V}
   rebaja_dfl2_anios: {hasta_70m2: 20, hasta_100m2: 15, hasta_140m2: 10}
   reavaluo_no_agricola_proximo: "2027-01-01"
-  mantencion_pct_pgi: {v: 0.05, evidence: E}
+  mantencion_pct_pgi: {v: 0.05, evidence: E, rango: [0.03, 0.08]}
   seguro_desgravamen_pct_mensual_saldo: {v: 0.00035, evidence: E, rango: [0.0002, 0.0005]}
   seguro_incendio_sismo_pct_mensual_tasacion: {v: 0.00028, evidence: E, rango: [0.0002, 0.00035]}
 
@@ -111,7 +111,7 @@ tributacion:
   impuesto_renta_arriendo_dfl2: {v: 0.0, evidence: V}
   iva_arriendo_amoblado: {v: 0.19, evidence: V, nota: "EVITAR AMOBLAR"}
   igc_tramo_exento_clp: {v: 11270000, evidence: V}
-  igc_tasa_marginal_default: {v: 0.23, evidence: E, nota: "ajustar al tramo real del inversionista"}
+  igc_tasa_marginal_default: {v: 0.23, evidence: E, rango: [0.04, 0.40], nota: "ajustar al tramo real del inversionista"}
   ganancia_capital_exencion_uf: {v: 8000, evidence: V, nota: "acumulativa DE POR VIDA"}
   ganancia_capital_tasa_unica: {v: 0.10, evidence: V}
 
@@ -140,5 +140,5 @@ indicadores_objetivo:
   cap_rate_neto_aceptable: 0.035
   cap_rate_neto_bueno: 0.045
   cap_rate_neto_excelente: 0.060
-  dscr_esperado_90ltv: {v: 0.70, evidence: E, nota: "flujo negativo es lo normal en Chile"}
+  dscr_esperado_90ltv: {v: 0.70, evidence: E, rango: [0.55, 0.80], nota: "flujo negativo es lo normal en Chile"}
   horizontes_tir_anios: [10, 20, 30]
