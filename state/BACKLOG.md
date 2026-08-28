@@ -70,13 +70,20 @@ deuda_pendiente: >
   cierra el ultimo cabo. Ver T-909.
 
 ## T-011 · OAuth MercadoLibre + verificación de categorías
-estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: []
+estado: en_curso · agente: fuente-scout · fase: 1 · depende_de: []
 paraleliza_con: [T-010, T-012]
 criterio_de_aceptacion:
-  - App registrada, flujo OAuth funcionando, refresh token persistido
-  - **Resueltas las brechas 1–4 de `docs/01-fuentes.md §G`**: ID real de categoría inmuebles/departamentos
-    en `MLC`, si `/sites/MLC/search` exige Bearer, tope real de resultados, rate limit medido
-  - ADR con las mediciones
+  - [x] App registrada, flujo OAuth funcionando, refresh token persistido (28-ago-2026)
+  - [x] Modulo `sources/meli.py` con renovacion de token que **persiste el nuevo ANTES de
+        usarlo** — el refresh token de MELI es de un solo uso
+  - [x] `cli medir-meli` implementado: mide las cuatro brechas contra la API real
+  - [ ] **Brechas 1-4 del §G medidas** — requiere ejecutar `cli medir-meli` con red
+  - [ ] ADR con las mediciones
+bloqueo: >
+  Solo falta ejecutar. El comando esta escrito y probado con transporte simulado (15 tests);
+  necesita salida a internet y las credenciales, o sea la maquina del usuario:
+  `uv run python -m flujocero.cli medir-meli`
+  OJO: ese comando reescribe MELI_REFRESH_TOKEN en el .env, porque el canje mata el anterior.
 
 ## T-012 · Colector CMF tasas hipotecarias por banco
 estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]

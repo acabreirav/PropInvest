@@ -515,3 +515,32 @@ Si no hay serie cargada, `uf_desde_la_base()` devuelve `None` y el `demo` cae al
 | 6 | `pytz` ausente | **pagada** |
 | 7 | `tests/integration/` vacío | pendiente, declarada |
 | 8 | Fixture derivada de documentación | T-909, necesita el archivo del usuario |
+
+## 2026-08-28 · iteración 14 — T-011: el módulo de MercadoLibre y sus mediciones
+gates: **VERDE** · `pytest`: **199 passed** (eran 184)
+
+`sources/meli.py`. Dos cosas, y ninguna es recolectar todavía:
+
+**1 · Autenticación.** El `refresh_token` de MercadoLibre dura seis meses pero es de **un
+solo uso**: cada canje devuelve uno nuevo y mata el anterior. Por eso `desde_entorno()`
+**persiste el token nuevo ANTES de usar el access token**. Si el proceso muriera entre el
+canje y el guardado, el viejo ya estaría muerto y el nuevo perdido: habría que rehacer la
+autorización por navegador. El orden importa y está fijado con test.
+
+**2 · Medición.** `cli medir-meli` responde las cuatro brechas del §G de
+`docs/01-fuentes.md` con evidencia:
+
+- **G1 · categoría.** Recorre `/sites/MLC/categories`, baja a los hijos de Inmuebles y
+  **contrasta contra el `MLC1459` que `fuentes.yml` da por supuesto**, gritando si no
+  coincide. El RUNBOOK es explícito en no aceptar ese ID sin verificarlo.
+- **G2 · bearer.** Prueba la misma búsqueda **con y sin token** y compara los códigos.
+- **G3 · tope.** Pagina con offsets crecientes hasta que la API rechaza.
+- **G4 · rate limit.** Ráfaga corta leyendo las cabeceras de límite y `Retry-After`.
+
+Si una medición no se puede hacer, se reporta `ND` con el motivo. Ninguna adivina (§3.2).
+
+15 tests con transporte simulado, ninguno toca la red. Dos fallaron al principio por una
+razón que valía la pena: httpx normaliza los nombres de cabecera a minúsculas, así que
+`X-RateLimit-Limit` llega como `x-ratelimit-limit`. El test estaba mal, no el código.
+
+**Falta ejecutarlo.** Necesita red y credenciales, o sea la máquina del usuario.

@@ -426,6 +426,48 @@ def probe() -> None:
 
 
 @app.command()
+def medir_meli() -> None:
+    """T-011 · mide las cuatro brechas del §G de docs/01-fuentes.md contra la API real.
+
+    Necesita red y las credenciales de MercadoLibre en `.env`. NO recolecta datos: solo
+    responde preguntas que hoy son supuestos, para no comprometer arquitectura a ciegas.
+
+    OJO: renueva el token y **reescribe `MELI_REFRESH_TOKEN` en el .env**. El refresh token
+    de MercadoLibre es de un solo uso.
+    """
+    import os
+
+    from dotenv import load_dotenv
+
+    from flujocero.sources.meli import ErrorDeFuente as ErrorMeli
+    from flujocero.sources.meli import TokenInvalido
+    from flujocero.sources.meli import desde_entorno as meli_desde_entorno
+
+    ruta_env = RAIZ / ".env"
+    load_dotenv(ruta_env)
+    try:
+        cliente = meli_desde_entorno(dict(os.environ), ruta_env)
+    except TokenInvalido as exc:
+        typer.echo(f"✗ {exc}")
+        typer.echo(
+            "\n  Pideme un link de autorizacion nuevo en el chat y repetimos el paso del"
+            "\n  navegador. Son dos minutos."
+        )
+        raise typer.Exit(2) from exc
+    except ErrorMeli as exc:
+        typer.echo(f"✗ {exc}")
+        raise typer.Exit(2) from exc
+
+    typer.echo("✓ token renovado y MELI_REFRESH_TOKEN actualizado en .env\n")
+    try:
+        rep = cliente.medir()
+    finally:
+        cliente.cerrar()
+    typer.echo(str(rep))
+    typer.echo("\nPegame esta salida completa en el chat: con ella cierro T-011 y escribo el ADR.")
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []
