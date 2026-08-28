@@ -1,0 +1,144 @@
+# ============================================================
+# Fuente única de supuestos del modelo. NINGÚN número mágico en el código.
+# Convención: TODOS los flujos en UF (términos reales).
+# evidence: V verificado | C fuentes en conflicto | E estimado
+# Calibración: 28-ago-2026
+# ============================================================
+
+macro:
+  valor_uf_clp: {v: 40804, evidence: V, fuente: "indicadoreschile.cl 28-ago-2026"}
+  inflacion_anual_esperada: {v: 0.030, evidence: V, fuente: "meta BCCh", rango: [0.02, 0.04]}
+  tpm: {v: 0.045, evidence: V}
+  tasa_descuento_real: {v: 0.060, evidence: E, rango: [0.05, 0.07]}
+
+financiamiento:
+  ltv_con_fogaes: {v: 0.90, evidence: V}
+  ltv_sin_fogaes: {v: 0.80, evidence: V}
+  plazo_anios: {v: 30, evidence: V}
+  tasa_anual_sin_subsidio: {v: 0.0397, evidence: V, fuente: "BCCh F022.VIV.TIP.MA03.UF.Z.M jul-2026"}
+  tasa_anual_con_subsidio_fogaes: {v: 0.0340, evidence: V, fuente: "licitación FOGAES jun-2025"}
+  tasa_mejor_caso_fogaes: {v: 0.0330, evidence: V, fuente: "Santander / Bco de Chile ago-2026"}
+  tasa_mejor_sin_subsidio: {v: 0.0339, evidence: V, fuente: "Itaú ago-2026"}
+  subsidio_tasa_pb: {v: 60, evidence: V, fuente: "Decreto 180 exento arts. 1 y 13"}
+  sistema_amortizacion: frances
+  dividendo_max_pct_ingreso: {v: 0.25, evidence: V}
+  carga_financiera_max_pct: {v: 0.45, evidence: V}
+  pies_a_evaluar: [0.10, 0.15, 0.20]
+
+subsidio_ley_21748:
+  tope_valor_vivienda_uf: {v: 6000, evidence: V}
+  tope_tramo_especial_uf: {v: 3000, evidence: V}
+  cupos_totales: {v: 80000, evidence: V}
+  cupos_tramo_especial: {v: 6000, evidence: V}
+  formalizados_al_21ago2026: {v: 34917, evidence: V}
+  solicitudes_al_21ago2026: {v: 43278, evidence: V}
+  plazo_solicitud_hasta: "2028-05-31"
+  plazo_escritura_extra_meses: 3
+  promesa_debe_ser_posterior_a: "2024-12-31"
+  exige_primera_vivienda: {v: null, evidence: C, nota: "DISPUTADO. Ver CLAUDE.md §2.2. Modelar ambos escenarios."}
+  limite_subsidios_por_persona: {v: null, evidence: C}
+  aplica_a_renegociados: {v: false, evidence: V}
+
+fogaes:
+  cobertura_pct_saldo_insoluto: {v: 0.50, evidence: V}
+  ltv_habilitado: {v: 0.90, evidence: V}
+  vigencia_programa_hasta: "2030-12-31"
+  costo_directo_al_deudor: {v: 0, evidence: C, nota: "se internaliza en la tasa ofertada; verificar con el banco"}
+
+gastos_de_cierre:
+  pct_total_sobre_precio: {v: 0.018, evidence: V, rango: [0.013, 0.022]}
+  impuesto_timbres_pct_credito: {v: 0.008, evidence: V}
+  impuesto_timbres_dfl2_pct: {v: 0.008, evidence: C, nota: "fuentes dan 0.002/0.005/exento; conservador"}
+  tasacion_uf: {v: 3.5, evidence: V, rango: [2, 5]}
+  estudio_titulos_uf: {v: 3.0, evidence: V}
+  notaria_escritura_cv_uf: {v: 4.0, evidence: V}
+  notaria_escritura_mutuo_uf: {v: 3.0, evidence: V}
+  inscripcion_cbr_clp: {v: 165000, evidence: V, rango: [80000, 250000]}
+  certificados_clp: {v: 50000, evidence: V}
+
+iva_vivienda:
+  exencion_vigente: {v: null, evidence: C, nota: "aprobada por Congreso 04-ago-2026; publicación en DO NO confirmada al 28-ago-2026"}
+  tasa_iva: {v: 0.19, evidence: V}
+  tope_valor_uf: {v: 4000, evidence: C}
+  ahorro_estimado_pct_precio: {v: 0.16, evidence: V}
+  ceec_65_iva_vigente: {v: false, evidence: V, nota: "factor 0.1625 en 2025-26, extinto 01-ene-2027"}
+
+ingresos:
+  reajuste_arriendo: anual_ipc
+  factor_erosion_intra_anual: {v: 0.985, evidence: V, nota: "= 1/(1+pi/2). APLICAR SIEMPRE."}
+  rentabilidad_bruta_referencia: {v: 0.045, evidence: V, rango: [0.036, 0.060]}
+  min_comparables_por_microzona: 8
+
+vacancia_y_riesgo:
+  vacancia_gestion_individual: {v: 0.08, evidence: V, rango: [0.08, 0.10]}
+  vacancia_gestion_profesional: {v: 0.045, evidence: V}
+  incobrabilidad: {v: 0.02, evidence: E}
+  permanencia_arrendatario_anios: {v: 2, evidence: E}
+
+gastos_operativos:
+  gastos_comunes_clp_m2_mes:
+    default: {v: 3000, evidence: E}
+    por_comuna:
+      santiago: 2200
+      estacion-central: 2200
+      nunoa: 3000
+      san-miguel: 2800
+      la-florida: 2600
+      providencia: 4200
+      las-condes: 5500
+  contribuciones_tasa_anual: {v: 0.00893, evidence: V}
+  contribuciones_tasa_tramo_alto: {v: 0.01042, evidence: V}
+  contribuciones_avaluo_corte_clp: {v: 220398431, evidence: V}
+  avaluo_exento_clp: {v: 61711570, evidence: C, nota: "SII 01.07.2026; otra fuente da 58.040.000"}
+  ratio_avaluo_fiscal_sobre_mercado: {v: 0.55, evidence: E, rango: [0.40, 0.70], nota: "HACER SENSIBILIDAD"}
+  rebaja_dfl2_contribuciones: {v: 0.50, evidence: V}
+  rebaja_dfl2_anios: {hasta_70m2: 20, hasta_100m2: 15, hasta_140m2: 10}
+  reavaluo_no_agricola_proximo: "2027-01-01"
+  mantencion_pct_pgi: {v: 0.05, evidence: E}
+  seguro_desgravamen_pct_mensual_saldo: {v: 0.00035, evidence: E, rango: [0.0002, 0.0005]}
+  seguro_incendio_sismo_pct_mensual_tasacion: {v: 0.00028, evidence: E, rango: [0.0002, 0.00035]}
+
+comisiones:
+  corretaje_arriendo_meses: {v: 0.5, evidence: V}
+  corretaje_arriendo_efectivo_meses: {v: 0.595, evidence: V, nota: "0.5 x 1.19 IVA"}
+  administracion_pct_arriendo: {v: 0.07, evidence: E, rango: [0.05, 0.10]}
+  corretaje_venta_pct: {v: 0.03, evidence: V, rango: [0.02, 0.05]}
+
+tributacion:
+  limite_dfl2_por_persona_natural: {v: 2, evidence: V}
+  dfl2_persona_juridica: {v: false, evidence: V}
+  dfl2_max_m2_utiles: {v: 140, evidence: V}
+  impuesto_renta_arriendo_dfl2: {v: 0.0, evidence: V}
+  iva_arriendo_amoblado: {v: 0.19, evidence: V, nota: "EVITAR AMOBLAR"}
+  igc_tramo_exento_clp: {v: 11270000, evidence: V}
+  igc_tasa_marginal_default: {v: 0.23, evidence: E, nota: "ajustar al tramo real del inversionista"}
+  ganancia_capital_exencion_uf: {v: 8000, evidence: V, nota: "acumulativa DE POR VIDA"}
+  ganancia_capital_tasa_unica: {v: 0.10, evidence: V}
+
+activo:
+  plusvalia_real_anual: {v: 0.025, evidence: V, rango: [0.02, 0.04]}
+  premio_cercania_metro: {v: 0.20, evidence: V, rango: [0.15, 0.30]}
+  radio_metro_metros: 600
+
+score:
+  pesos:
+    deficit_flujo_mensual_uf: 0.30
+    pie_minimo_flujo_cero: 0.20
+    tir_real_apalancada_10a: 0.20
+    riesgo_microzona: 0.15
+    catalizador: 0.10
+    descuento_vs_microzona: 0.05
+  exclusiones_duras:
+    precio_max_uf: 6000
+    solo_vivienda_nueva: true
+    m2_utiles_max: 140
+    min_comparables_arriendo: 8
+    excluir_microzonas_saturadas: true
+    excluir_precio_estimado: true
+
+indicadores_objetivo:
+  cap_rate_neto_aceptable: 0.035
+  cap_rate_neto_bueno: 0.045
+  cap_rate_neto_excelente: 0.060
+  dscr_esperado_90ltv: {v: 0.70, evidence: E, nota: "flujo negativo es lo normal en Chile"}
+  horizontes_tir_anios: [10, 20, 30]

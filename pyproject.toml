@@ -1,0 +1,27 @@
+[project]
+name = "flujocero"
+version = "0.1.0"
+description = "Inteligencia de inversión inmobiliaria residencial en Chile"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx[http2]>=0.27", "tenacity>=8.2", "selectolax>=0.3", "beautifulsoup4>=4.12",
+  "lxml>=5.0", "pydantic>=2.7", "pyyaml>=6.0", "duckdb>=1.0", "pandas>=2.2",
+  "pyarrow>=16.0", "geopandas>=1.0", "shapely>=2.0", "pdfplumber>=0.11",
+  "openpyxl>=3.1", "fastapi>=0.111", "uvicorn[standard]>=0.30", "playwright>=1.44",
+  "python-dotenv>=1.0", "rich>=13.7", "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2", "pytest-asyncio>=0.23", "hypothesis>=6.100", "ruff>=0.5", "mypy>=1.10"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: usa fixtures grabadas, nunca la red viva"]

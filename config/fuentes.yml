@@ -1,0 +1,155 @@
+# Registro de fuentes. Un módulo en src/flujocero/sources/<id>.py por cada entrada habilitada.
+# legal_tier: api_oficial > json_publico > html_permitido > html_prohibido (requiere aprobación humana)
+
+fuentes:
+
+  - id: cmf_indicadores
+    capa: 6
+    legal_tier: api_oficial
+    enabled: true
+    base: "https://api.cmfchile.cl/api-sbifv3/recursos_api/"
+    series: [uf, utm, ipc, tmc]
+    auth: apikey_query
+    cadencia: diaria
+    fallback: gael_indicadores
+    notas: "formato=json obligatorio; default es xml"
+
+  - id: gael_indicadores
+    capa: 6
+    legal_tier: api_oficial
+    enabled: true
+    base: "https://api.gael.cloud/general/public/monedas"
+    auth: ninguna
+    rate_limit_duro: "máx 9 req / 10 s — se excede y la IP queda baneada 1 hora"
+    cadencia: diaria
+
+  - id: cmf_tasas_hipotecarias
+    capa: 6
+    legal_tier: json_publico
+    enabled: true
+    url: "https://www.cmfchile.cl/portal/estadisticas/617/articles-46417_recurso_1.xls"
+    cadencia: mensual
+
+  - id: meli_locations
+    capa: 2
+    legal_tier: api_oficial
+    enabled: true
+    base: "https://api.mercadolibre.com/classified_locations/countries/CL"
+    auth: oauth2
+    cadencia: mensual
+    produce: dim_microzona
+
+  - id: meli_venta
+    capa: 3
+    legal_tier: api_oficial
+    enabled: true
+    base: "https://api.mercadolibre.com/sites/MLC/search"
+    auth: oauth2
+    categoria: "MLC1459  # ⚠️ a verificar contra /sites/MLC/categories"
+    paginacion: "offset+limit; search_type=scan para >1000"
+    cadencia: diaria
+
+  - id: meli_arriendo
+    capa: 4
+    legal_tier: api_oficial
+    enabled: true
+    base: "https://api.mercadolibre.com/sites/MLC/search"
+    auth: oauth2
+    cadencia: diaria
+
+  - id: assetplan_arriendo
+    capa: 4
+    legal_tier: html_permitido
+    enabled: true
+    sitemap: "https://www.assetplan.cl/edificios.xml"
+    robots_nota: "permite EXPLÍCITAMENTE ClaudeBot y Claude-User"
+    js_render: true
+    cadencia: diaria
+    notas: "175 edificios, lastmod diario. Mejor proxy de arriendo efectivo y vacancia multifamily"
+
+  - id: planok_cotizador
+    capa: 3
+    legal_tier: json_publico
+    enabled: true
+    base: "https://cotizador.saladeventasdigital.com/cotizador/"
+    descubrimiento: "enumerar key={slug_inmobiliaria} x id_subagrupaciones={etapa}"
+    produce: "precio POR UNIDAD + estacionamiento + bodega"
+    a_verificar: "método y payload de datos.php; universo de valores key"
+    cadencia: semanal
+
+  - id: inmobiliarias_wpjson
+    capa: 3
+    legal_tier: json_publico
+    enabled: true
+    procedimiento: "GET /wp-json/wp/v2/types -> CPT proyecto -> ?per_page=100&_embed -> si acf vacío, JSON-LD"
+    dominios_verificados: [socovesa.cl, fundamenta.cl, exxacon.cl, rvc.cl, py.cl, imagina.cl]
+    dominios_por_verificar: [almagro.cl, pazcorp.com, isinergia.cl, simonetti.cl, ecomac.cl, ictinos.cl, hogares.cl, aconcagua.cl, manquehue.cl]
+    cadencia: semanal
+
+  - id: pabellon
+    capa: 3
+    legal_tier: html_permitido
+    enabled: true
+    base: "https://pabellon.cl/proyectos-inmobiliarios"
+    notas: "muestra unidad + precio UF + dividendo estimado. Sin anti-bot observado"
+    cadencia: semanal
+
+  - id: enlace_inmobiliario
+    capa: 3
+    legal_tier: html_permitido
+    enabled: true
+    base: "https://www.enlaceinmobiliario.cl/"
+    notas: "589 proyectos / 19.433 propiedades solo en RM. White-labels bancarios con la misma data"
+    cadencia: semanal
+
+  - id: chilepropiedades_arriendo
+    capa: 4
+    legal_tier: html_permitido
+    enabled: true
+    base: "https://chilepropiedades.cl/propiedades/arriendo-mensual/departamento/{comuna}/{pagina}"
+    crawl_delay_s: 2
+    sitemap: "https://chilepropiedades.cl/sitemaps/sitemapindex.xml"
+    cadencia: diaria
+
+  - id: sii_catastro
+    capa: 1
+    legal_tier: json_publico
+    enabled: false
+    layout: "docs/01-fuentes.md §D — BRORGA2441N_NAC / BRORGA2441NL_NAC, TAB, sin headers"
+    cadencia: anual
+
+  - id: ine_censo_manzanas
+    capa: 1
+    legal_tier: json_publico
+    enabled: false
+    formato: geoparquet
+    notas: "189 variables por manzana; unidad atómica de la microzonificación"
+    cadencia: unica
+
+  - id: data_inmobiliaria
+    capa: 5
+    legal_tier: api_oficial
+    enabled: false
+    plan: "tier gratuito: mapa + export Excel, 346 comunas"
+    requiere_decision_humana: true
+
+  - id: databam
+    capa: 5
+    legal_tier: api_oficial
+    enabled: false
+    costo: "desde $50.000/mes"
+    requiere_decision_humana: true
+
+  # ---- BLOQUEADAS: requieren aprobación humana explícita en docs/05-decisiones.md ----
+  - id: portalinmobiliario_html
+    legal_tier: html_prohibido
+    enabled: false
+    razon_bloqueo: "robots.txt bloquea /propiedades/; T&C de MELI prohíben scrapers; WAF con 403. USA meli_venta"
+  - id: toctoc_api_interna
+    legal_tier: html_prohibido
+    enabled: false
+    razon_bloqueo: "API no pública, requiere interceptar sesión de navegador. Riesgo medio"
+  - id: goplaceit_mapa
+    legal_tier: html_prohibido
+    enabled: false
+    razon_bloqueo: "robots.txt prohíbe explícitamente /cl/mapa?*"

@@ -1,0 +1,86 @@
+# Alcance geográfico por fases. Ver CLAUDE.md §10 y docs/00-hallazgos.md §10.
+# saturadas: microzonas EXCLUIDAS del ranking (evidencia Tattersall abr-2026)
+
+fase_1:
+  - comuna: san-miguel
+    region: metropolitana
+    razon: "yield 4,06% + vacancia MF 3,2% (la más baja de la RM) + normativa restrictiva que impide sobreoferta"
+    yield_bruto_esperado: 0.0406
+    riesgo: bajo
+    microzonas_prioritarias: [gran-avenida, el-llano, primera-transversal]
+    saturadas: []
+  - comuna: la-florida
+    region: metropolitana
+    razon: "yield 4,06-4,22%, mercado profundo (835 ventas 1T-2026), ocupación +13%"
+    yield_bruto_esperado: 0.0406
+    riesgo: alto
+    alerta: "19 proyectos multifamily = 4.810 unidades entrando; Sur-Oriente tiene la vacancia promedio más alta de la RM"
+    microzonas_prioritarias: [rojas-magallanes, trinidad, walker-martinez]
+    saturadas: [vicuna-mackenna-vespucio]
+  - comuna: nunoa
+    region: metropolitana
+    razon: "demanda de arriendo más profunda de la RM fuera del sector oriente; plusvalía 5,5% anual"
+    yield_bruto_esperado: 0.0407
+    riesgo: medio
+    alerta: "vacancia MF 12,2%; ticket alto (88,4 UF/m²) deja poco margen bajo UF 6.000"
+    microzonas_prioritarias: [irarrazaval, chile-espana, villa-frei, plaza-egana]
+    saturadas: [estadio-nacional]
+
+fase_2:
+  - comuna: cerrillos
+    razon: "ÚNICO catalizador cercano: extensión L6 a Lo Errázuriz, 46% avance físico, apertura 2027. Precio +4,4% a/a. No aparece en el mapa de saturación"
+    riesgo: bajo
+    gap_dato: "sin arriendo UF/m² publicado — PRIORIDAD #1 del pipeline"
+    saturadas: []
+  - comuna: la-cisterna
+    razon: "ticket bajo (66,1 UF/m²) con conectividad intermodal L2+L4A; ventas +37% a/a"
+    saturadas: [jm-carrera-briones-luco]
+  - comuna: macul
+    razon: "comuna líder en preferencia de arriendo multifamily; plusvalía 3-4% anual; catalizador L8 (2032)"
+    gap_dato: "sin arriendo UF/m² publicado"
+    saturadas: [quilin-av-macul]
+  - comuna: santiago
+    razon: "máxima liquidez: ~1.000 ventas en 1T-2026, la #1 de la región; stock cayó 30% desde jun-2025"
+    riesgo: alto
+    alerta: "cap rate neto 2,8% (el peor del país); 10.900 unidades con permiso SIN INICIAR obras; capital en pausa por seguridad"
+    saturadas: [teatinos, parque-almagro, santiago-norte]
+    microzonas_prioritarias: [morande, plaza-de-armas, lastarria, parque-forestal]
+  - comuna: independencia
+    razon: "ticket de los más bajos con stock nuevo real; ocupación +19% a/a; demanda cautiva universitaria/hospitalaria; L7 en 2028"
+    riesgo: alto
+    alerta: "una de las 3 comunas donde el capital institucional se retiró por seguridad; sector Norte deteriorándose"
+    saturadas: []
+  - comuna: recoleta
+    razon: "mayor alza de precio de la RM: +9,6% a/a; estaciones de L7 (2028, 42% de avance)"
+    riesgo: alto
+    alerta: "sector Norte con precios deteriorándose y vacancias al alza"
+    gap_dato: "sin arriendo UF/m² publicado"
+    saturadas: []
+  - comuna: estacion-central
+    razon: "ticket MÁS BAJO de la RM (UF 2.112). Tesis normativa: el nuevo PRC limita a 12 pisos y corta la oferta futura de raíz. Oferta de arriendo cayó 43%, ocupación +36% (la mejor de la RM)"
+    riesgo: alto
+    alerta: "hoy es la zona más saturada del Gran Santiago; 3.647 unidades MF adicionales en carpeta"
+    saturadas: [santa-isabel]
+    microzonas_prioritarias: [cinco-de-abril, alameda-poniente]
+
+fase_3:
+  - ciudad: gran-concepcion
+    razon: "cap rate neto 4,0% vs 2,8% de Santiago (+120 pb con el mismo ticket). 82% de las ventas bajo UF 4.000. EL ÚNICO MERCADO DEL ALCANCE DONDE EL PIE DE EQUILIBRIO BAJA A ~32%"
+    microzonas_prioritarias: [concepcion-centro, barrio-universitario]
+    alerta: "ocupación 93%, 5 pp bajo la RM; mercado menos líquido para salir"
+  - ciudad: la-serena
+    razon: "cap rate neto 1D1B 4,2%"
+  - ciudad: antofagasta
+    razon: "cap rate neto 1D1B 4,5%, el más alto del país"
+
+excluidas:
+  - {zona: vina-del-mar, razon: "absorción 24,6 meses (la peor del Gran Valparaíso); ventas -6,4% s/s; cap 2D2B 3,1%; mercado estacional"}
+  - {zona: valparaiso, razon: "mediana 23,7 UF/m² con p25 de 9,5 = deterioro estructural, no oportunidad. Casi sin producto nuevo"}
+  - {zona: san-joaquin, razon: "vacancia multifamily 42,1%. Revisar en 2029 con L9 a la vista"}
+  - {zona: las-condes, razon: "ticket sobre el tope; vacancia MF 19,6%"}
+  - {zona: vitacura, razon: "133 UF/m², fuera del tope UF 6.000"}
+  - {zona: lo-barnechea, razon: "fuera del tope"}
+  - {zona: providencia, razon: "2D2B en UF 8.921, sobre el tope; yield 3,0-3,5%"}
+  - {zona: cerro-navia, razon: "los '13,3% de rentabilidad' son stock USADO de UF 700-1.400. No existe producto nuevo ahí"}
+  - {zona: lo-prado, razon: "ídem cerro-navia"}
+  - {zona: la-pintana, razon: "ídem cerro-navia"}

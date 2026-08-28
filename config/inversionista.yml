@@ -1,0 +1,48 @@
+# Perfil del inversionista. El motor lee esto junto con params.yml.
+# Cambiar acá y volver a correr `make score` recalcula todo el ranking.
+
+perfil:
+  nombre: "Alvaro"
+  tipo: persona_natural            # CRÍTICO: la persona jurídica NO accede a DFL2
+  propiedades_actuales: 0
+  viviendas_dfl2_actuales: 0
+
+elegibilidad:
+  # Resuelto: al no ser propietario, califica bajo CUALQUIERA de las dos lecturas
+  # del requisito en disputa (D-001). El escenario base pasa a ser `con_subsidio`.
+  califica_subsidio_tasa: true
+  califica_tramo_general_uf6000: true
+  califica_tramo_especial_uf3000: probable   # 6.000 cupos reservados que EXIGEN primera vivienda
+  nota_tramo_especial: >
+    El Decreto 180 art. 4 reserva 6.000 cupos a viviendas <= UF 3.000 exigiendo primera
+    vivienda del solicitante. Otras fuentes lo describen atado a subsidios DS1/DS19.
+    VERIFICAR CON EL BANCO: si la tasa del tramo especial es mejor que la del general,
+    apuntar a tickets <= UF 3.000 es la jugada dominante para este perfil.
+  califica_fogaes_90ltv: true
+
+estrategia_dfl2:
+  objetivo_unidades: 2             # el máximo por persona natural (Ley 20.455)
+  max_m2_utiles: 140               # sobre esto se pierde DFL2. Exclusión dura del ranking.
+  exigir_dfl2: true                # solo se rankean unidades acogidas a DFL2
+  nota_escalamiento: >
+    La 3a propiedad pierde arriendo exento de renta, la rebaja de 50% de contribuciones
+    y la exencion de IVA de arriendo: su economia es estructuralmente peor. Antes de
+    llegar ahi, evaluar una segunda persona natural (conyuge con separacion de bienes),
+    NUNCA una sociedad.
+  exencion_ganancia_capital_uf: 8000   # acumulativa de por vida, por persona
+
+restricciones:
+  # Completar con datos reales antes de correr `make score`.
+  renta_liquida_mensual_clp: null      # el banco exige dividendo <= 25% de esto
+  ahorro_disponible_pie_clp: null
+  otros_creditos_cuota_mensual_clp: 0  # carga financiera total <= 45% de la renta
+  pie_objetivo_pct: 0.10
+  ticket_max_uf: 6000                  # se recalcula = min(6000, capacidad de credito)
+
+preferencias:
+  prioridad_1: flujo_no_negativo
+  prioridad_2: plusvalia
+  prioridad_3: liquidez_de_salida
+  acepta_compra_en_verde: true         # precio congelado + pie en cuotas durante la obra
+  acepta_regiones: true                # Concepcion/La Serena/Antofagasta: donde el flujo cierra
+  amoblar: false                       # amoblado paga 19% de IVA sobre el arriendo
