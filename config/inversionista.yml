@@ -33,11 +33,14 @@ estrategia_dfl2:
 
 restricciones:
   # Completar con datos reales antes de correr `make score`.
-  renta_liquida_mensual_clp: null      # el banco exige dividendo <= 25% de esto
-  ahorro_disponible_pie_clp: null
+  renta_liquida_mensual_clp: 2250000   # el banco exige dividendo <= 25% de esto
+  ahorro_disponible_pie_clp: 40000000  # techo, no objetivo: prefiere usar bastante menos
   otros_creditos_cuota_mensual_clp: 0  # carga financiera total <= 45% de la renta
-  pie_objetivo_pct: 0.10
-  ticket_max_uf: 6000                  # se recalcula = min(6000, capacidad de credito)
+  pie_objetivo_pct: 0.10               # no es una meta: es el escenario de contraste.
+                                       # El ranking reporta el pie minimo de flujo cero por unidad.
+  ticket_max_uf: 6000                  # tope legal. La restriccion real es la capacidad de credito:
+                                       # UF 3.497 con subsidio / UF 3.220 sin subsidio (28-ago-2026).
+                                       # Correr `cli capacidad` tras cualquier cambio de renta o tasa.
 
 preferencias:
   prioridad_1: flujo_no_negativo
