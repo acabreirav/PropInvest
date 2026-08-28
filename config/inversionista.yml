@@ -50,8 +50,11 @@ restricciones:
   renta_liquida_mensual_clp: 2250000   # el banco exige dividendo <= 25% de esto
   ahorro_disponible_pie_clp: 40000000  # techo, no objetivo: prefiere usar bastante menos
   otros_creditos_cuota_mensual_clp: 0  # carga financiera total <= 45% de la renta
-  ahorro_mensual_clp: null             # PENDIENTE. Determina cuanto deficit mensual es
-                                       # sostenible, que es el criterio #1 del ranking (§12).
+  ahorro_mensual_clp: 400000           # capacidad de ahorro mensual holgada
+  deficit_mensual_tolerado_clp: 0      # PREFERENCIA declarada: no quiere deficit.
+                                       # La capacidad (400.000) es el techo duro; la
+                                       # tolerancia (0) es lo que quiere. Son distintos:
+                                       # el ranking usa la tolerancia, no la capacidad.
   pie_objetivo_pct: 0.10               # no es una meta: es el escenario de contraste.
                                        # El ranking reporta el pie minimo de flujo cero por unidad.
   ticket_max_uf: 6000                  # tope legal. La restriccion real es la capacidad de credito:
@@ -62,6 +65,12 @@ preferencias:
   prioridad_1: flujo_no_negativo
   prioridad_2: plusvalia
   prioridad_3: liquidez_de_salida
+  # Declarado 28-ago-2026: acepta que "pie <=20% + flujo no negativo" es inalcanzable en
+  # la RM (hallazgo §2.3) y pide optimizar sobre otros indicadores. Dos objetivos que
+  # compiten entre si con ahorro fijo: minimizar el pie exige subir el ticket, y subir el
+  # ticket sube el deficit. Ver D-012.
+  minimizar_pie: true
+  evitar_deficit: true
   acepta_compra_en_verde: true         # precio congelado + pie en cuotas durante la obra
   acepta_regiones: true                # Concepcion/La Serena/Antofagasta: donde el flujo cierra
   amoblar: false                       # amoblado paga 19% de IVA sobre el arriendo

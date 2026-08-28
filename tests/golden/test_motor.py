@@ -73,3 +73,57 @@ def test_saldo_insoluto_final() -> None:
 def test_egi_nunca_supera_pgi(arriendo: D, vacancia: D, incob: D) -> None:
     e = f.egi(arriendo, vacancia, incob, D("0.03"))
     assert D(0) <= e <= f.pgi(arriendo)
+
+
+# ------------------------------------------------------------- amortización y costo real
+
+
+def test_amortizacion_del_primer_anio_es_la_diferencia_de_saldos() -> None:
+    """Identidad contable: lo amortizado en 12 meses = saldo(0) - saldo(12)."""
+    credito, tasa, plazo = D(3000), D("0.033"), 30
+    esperado = f.saldo_insoluto(credito, tasa, plazo, 0) - f.saldo_insoluto(
+        credito, tasa, plazo, 12
+    )
+    assert f.amortizacion_periodo(credito, tasa, plazo, 0, 12) == esperado
+    assert f.amortizacion_mensual_promedio(credito, tasa, plazo, 1) == esperado / D(12)
+
+
+def test_la_amortizacion_mas_el_interes_es_exactamente_el_dividendo() -> None:
+    """El dividendo francés se parte en dos y no sobra nada: capital + interés."""
+    credito, tasa, plazo = D(2500), D("0.033"), 30
+    div = f.dividendo_frances(credito, tasa, plazo)
+    i = f.tasa_mensual(tasa)
+    interes_mes_1 = credito * i
+    amort_mes_1 = f.amortizacion_periodo(credito, tasa, plazo, 0, 1)
+    assert abs((interes_mes_1 + amort_mes_1) - div) < D("1e-18")
+
+
+def test_la_amortizacion_crece_con_los_anios() -> None:
+    """En el sistema francés la parte de capital sube y la de interés baja."""
+    credito, tasa, plazo = D(3000), D("0.033"), 30
+    a1 = f.amortizacion_mensual_promedio(credito, tasa, plazo, 1)
+    a10 = f.amortizacion_mensual_promedio(credito, tasa, plazo, 10)
+    a30 = f.amortizacion_mensual_promedio(credito, tasa, plazo, 30)
+    assert D(0) < a1 < a10 < a30
+
+
+def test_el_costo_de_tenencia_es_el_deficit_neto_de_amortizacion() -> None:
+    """Un déficit de caja de 5 UF con 3 UF de amortización cuesta 2 UF, no 5."""
+    assert f.costo_tenencia_mensual(D("-5"), D("3")) == D("-2")
+    # Si la amortización supera el déficit, la tenencia construye patrimonio neto.
+    assert f.costo_tenencia_mensual(D("-2"), D("3")) == D("1")
+
+
+def test_la_amortizacion_nunca_supera_al_dividendo() -> None:
+    """Invariante: si lo hiciera, el interés sería negativo."""
+    for tasa in (D("0.025"), D("0.033"), D("0.05")):
+        credito, plazo = D(3000), 30
+        div = f.dividendo_frances(credito, tasa, plazo)
+        for anio in (1, 15, 30):
+            amort = f.amortizacion_mensual_promedio(credito, tasa, plazo, anio)
+            assert D(0) < amort <= div
+
+
+def test_amortizacion_con_rango_invertido_es_error() -> None:
+    with pytest.raises(ValueError, match="posterior"):
+        f.amortizacion_periodo(D(1000), D("0.03"), 30, 12, 12)

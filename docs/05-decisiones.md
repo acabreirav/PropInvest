@@ -226,3 +226,60 @@ condicionado a la respuesta 1.
 los gananciales la propiedad adquirida es individual para efectos de DFL2 — trámite de
 minutos al escriturar; (b) la respuesta del banco a la pregunta 4, que sólo importa si se
 vuelve a considerar la Estructura A.
+
+
+---
+
+## D-012 · ¿El ranking debe ordenar por déficit de caja o por costo real de tenencia?
+**Estado:** abierta · **Dueño:** humano · **Abierta:** 28-ago-2026
+**§8.4:** cambiar esto mueve el ranking en bastante más del 10% de las posiciones, así que
+no se decide sin aprobación explícita.
+
+### El hallazgo
+
+El inversionista declara capacidad de ahorro de $400.000 mensuales y preferencia por **no
+tener déficit**, y pide optimizar sobre otros indicadores dado que "pie ≤20% + flujo no
+negativo" es inalcanzable en la RM (hallazgo §2.3).
+
+Al descomponer el déficit mensual entre gasto y amortización aparece esto (unidades de
+demostración, valores sintéticos — la forma del hallazgo es lo que importa, no las cifras):
+
+| unidad | sale del bolsillo | de eso, es ahorro | costo real | % que es ahorro |
+|---|---|---|---|---|
+| SM-1D-35 | $225.485 | $157.966 | **$67.518** | 70% |
+| CO-1D-40 | $198.895 | $167.748 | **$31.146** | 84% |
+| NU-2D-55 | $432.372 | $297.706 | **$134.665** | 69% |
+
+**Entre el 69% y el 84% del "déficit" no es una pérdida: es compra de patrimonio**, pagada
+en parte por el arrendatario. El costo económico real es entre 3 y 6 veces menor que la cifra
+de caja que hoy encabeza el score con 30% de peso.
+
+### La decisión
+
+`config/params.yml` pondera hoy `deficit_flujo_mensual_uf` con 30%. La pregunta es si ese
+componente debe pasar a `costo_tenencia_mensual_uf`.
+
+| | **Mantener déficit de caja** | **Cambiar a costo real de tenencia** |
+|---|---|---|
+| Qué optimiza | liquidez mensual | rentabilidad económica |
+| Riesgo | descarta unidades buenas por una cifra que exagera el costo entre 3 y 6 veces | premia unidades que exigen más caja de la que el inversionista quiere comprometer |
+| Encaja con | "no quiero tener déficit" | "capacidad de ahorro $400.000" |
+
+**Las dos preferencias declaradas apuntan a lados opuestos**, y por eso la decisión es suya
+y no del modelo.
+
+**Recomendación:** **mostrar ambas columnas y ordenar por costo real, con un filtro duro por
+déficit de caja máximo.** Así el ranking premia la economía real y el filtro respeta el
+límite de liquidez. El filtro se fija en `deficit_mensual_tolerado_clp`, hoy 0.
+
+**Advertencia que debe quedar en la UI si se adopta:** la amortización **no es líquida**.
+Construye patrimonio, pero para convertirlo en plata hay que vender o refinanciar, y ambas
+cosas cuestan y toman meses. Un inversionista con déficit sostenido y sin colchón puede ser
+solvente y estar ilíquido a la vez.
+
+### Un dato incómodo que conviene decir junto con esto
+
+El modelo corre en UF, términos reales. El arriendo real no crece y el dividendo en UF
+tampoco baja. **El déficit mensual no mejora con el tiempo por sí solo** — no hay un año en
+que la unidad "empiece a rendir". Lo único que lo mueve es más pie, mejor tasa, o un mercado
+con mejor yield. Esperar no es una estrategia.

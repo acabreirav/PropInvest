@@ -58,6 +58,43 @@ def saldo_insoluto(
     return credito_uf * ((D(1) + i) ** n - (D(1) + i) ** meses_pagados) / ((D(1) + i) ** n - D(1))
 
 
+def amortizacion_periodo(
+    credito_uf: Decimal, tasa_anual: Decimal, plazo_anios: int, mes_inicio: int, mes_fin: int
+) -> Decimal:
+    """Capital amortizado entre dos meses: la diferencia de saldos insolutos.
+
+    Es la parte del dividendo que NO es gasto: vuelve al patrimonio del deudor.
+    Distinguirla importa porque un déficit mensual de caja no equivale a una pérdida
+    económica del mismo tamaño — parte de ese déficit es ahorro forzoso.
+    """
+    if mes_fin <= mes_inicio:
+        raise ValueError("mes_fin debe ser posterior a mes_inicio")
+    return saldo_insoluto(credito_uf, tasa_anual, plazo_anios, mes_inicio) - saldo_insoluto(
+        credito_uf, tasa_anual, plazo_anios, mes_fin
+    )
+
+
+def amortizacion_mensual_promedio(
+    credito_uf: Decimal, tasa_anual: Decimal, plazo_anios: int, anio: int = 1
+) -> Decimal:
+    """Amortización mensual promedio durante el año `anio` (1 = primer año)."""
+    if anio < 1:
+        raise ValueError("anio debe ser >= 1")
+    desde, hasta = (anio - 1) * 12, anio * 12
+    return amortizacion_periodo(credito_uf, tasa_anual, plazo_anios, desde, hasta) / D(12)
+
+
+def costo_tenencia_mensual(btcf_mensual_uf: Decimal, amortizacion_mensual_uf: Decimal) -> Decimal:
+    """Costo económico real de sostener la unidad, neto de la amortización.
+
+    `btcf` es flujo de caja: lo que sale del bolsillo. Pero una fracción de ese egreso
+    compra patrimonio en vez de perderse. Este número es el egreso menos esa fracción.
+
+    Convención de signo: negativo = cuesta plata; cero o positivo = se paga solo.
+    """
+    return btcf_mensual_uf + amortizacion_mensual_uf
+
+
 # --------------------------------------------------------------------------- ingresos
 
 

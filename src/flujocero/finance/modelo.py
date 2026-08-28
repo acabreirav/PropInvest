@@ -60,6 +60,10 @@ class Evaluacion:
     dscr: Decimal = D(0)
     btcf_mensual_uf: Decimal = D(0)
     atcf_mensual_uf: Decimal = D(0)
+    # Descomposición del déficit: cuánto es gasto y cuánto es compra de patrimonio.
+    amortizacion_mensual_uf: Decimal = D(0)
+    costo_tenencia_mensual_uf: Decimal = D(0)
+    fraccion_deficit_que_es_ahorro: Decimal = D(0)
     cash_on_cash: Decimal = D(0)
     capital_invertido_uf: Decimal = D(0)
     arriendo_equilibrio_uf: Decimal = D(0)
@@ -200,6 +204,18 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
     ev.dscr = f.dscr(ev.noi_uf, servicio_anual)
     ev.btcf_mensual_uf = f.btcf_mensual(ev.noi_uf, ev.dividendo_total_uf)
     ev.atcf_mensual_uf = ev.btcf_mensual_uf  # el impuesto ya está dentro del NOI
+
+    ev.amortizacion_mensual_uf = f.amortizacion_mensual_promedio(
+        ev.credito_uf, e.tasa_anual, plazo, anio=1
+    )
+    ev.costo_tenencia_mensual_uf = f.costo_tenencia_mensual(
+        ev.btcf_mensual_uf, ev.amortizacion_mensual_uf
+    )
+    if ev.btcf_mensual_uf < 0:
+        # Qué fracción del egreso mensual es, en realidad, ahorro forzoso.
+        ev.fraccion_deficit_que_es_ahorro = min(
+            D(1), ev.amortizacion_mensual_uf / -ev.btcf_mensual_uf
+        )
 
     ev.capital_invertido_uf = u.precio_uf * e.pie_pct + cierre
     ev.cash_on_cash = ev.btcf_mensual_uf * D(12) / ev.capital_invertido_uf

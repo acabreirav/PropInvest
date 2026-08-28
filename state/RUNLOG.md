@@ -141,3 +141,39 @@ sobre régimen patrimonial, propiedades previas, cupos DFL2 y co-deudor sin co-p
 
 siguiente: T-012 (tasas hipotecarias por banco, XLS de la CMF). No depende de red para
 escribirse. Y ejecutar `cli ingest` desde una máquina con internet para cerrar T-010.
+
+## 2026-08-28 · iteración 4 — descomposición del déficit
+tareas: motor financiero (cambio en serie, §8.3) · D-011 corregida · D-012 abierta
+gates: **VERDE** · `pytest`: **73 passed**
+
+qué se agregó al motor:
+- `core.amortizacion_periodo()` y `amortizacion_mensual_promedio()` — capital amortizado
+  como diferencia de saldos insolutos.
+- `core.costo_tenencia_mensual()` — el déficit de caja neto de la amortización.
+- `Evaluacion.amortizacion_mensual_uf`, `costo_tenencia_mensual_uf`,
+  `fraccion_deficit_que_es_ahorro`.
+- 6 casos de oro nuevos, incluida la identidad `capital + interés == dividendo` a 1e-18.
+
+hallazgo:
+**Entre el 69% y el 84% del "déficit mensual" no es gasto: es amortización.** Sobre las
+unidades de demostración, un egreso de $225.485 esconde un costo económico real de $67.518;
+en Concepción, $198.895 esconde $31.146. El componente que hoy pesa 30% del score exagera el
+costo entre 3 y 6 veces.
+
+**No se cambiaron los pesos del score.** El §8.4 obliga a detenerse cuando un cambio mueve el
+ranking en más del 10% de las posiciones. Queda como **D-012**, con recomendación explícita
+(ordenar por costo real + filtro duro por déficit de caja) y con la advertencia de que la
+amortización no es líquida.
+
+Segundo hallazgo, menos agradable: **el déficit no mejora solo con el tiempo.** El modelo
+corre en UF reales; el arriendo real no crece y el dividendo en UF no baja. No existe el año
+en que la unidad "empieza a rendir". Sólo lo mueven más pie, mejor tasa o mejor mercado.
+
+perfil: capacidad de ahorro $400.000/mes, tolerancia declarada al déficit = 0. Son cosas
+distintas y el ranking usa la tolerancia, no la capacidad.
+
+corrección de la iteración anterior: la Estructura B de D-011 (una unidad por comprador)
+suponía que la cónyuge financiaba su propio pie. Los $40.000.000 son de él. Caso base vuelve
+a compra individual; la cónyuge entra sólo como codeudora solidaria sin co-propiedad.
+
+siguiente: T-012, tasas hipotecarias por banco.
