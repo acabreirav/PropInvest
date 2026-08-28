@@ -250,3 +250,35 @@ Efecto sobre la demo: Ñuñoa se cae por liquidez ($432.372 > $400.000) y San Mi
 55,4 a 40,5 puntos al medirse por costo real. Concepción sigue primera.
 
 siguiente: T-907 (fuente vigente de tasas). El resto de fase 1 depende de red.
+
+## 2026-08-28 · iteración 7 — el script de instalacion, y un fallo de codificacion
+gates: **VERDE** · `pytest`: **126 passed** (eran 117)
+
+`scripts/setup.ps1` y `scripts/setup.sh`: instalacion en un paso. Verifican e instalan git
+y uv, clonan o actualizan el repo, instalan dependencias, crean el `.env` desde la plantilla
+avisando cuales de las cuatro credenciales siguen vacias, y corren tests, gates y demo.
+Ninguno contiene credenciales: estan versionados.
+
+**Fallo real en la primera entrega, reportado por el usuario.** El script reventaba con
+"Falta la cadena en el terminador" apuntando a la linea 138, que no tenia nada malo. La
+causa estaba 70 lineas mas arriba: un guion largo (U+2014) dentro de una cadena.
+
+Windows PowerShell 5.1 lee los `.ps1` en **Windows-1252**, no en UTF-8. El guion largo son
+tres bytes en UTF-8 (E2 80 94); leidos como cp1252 dan `â€"`, y ese tercer caracter **es una
+comilla de cierre**. La cadena se cerraba antes de tiempo y todo el parseo se desalineaba
+hasta morir al final del archivo.
+
+Aprendizaje que vale mas alla de este script: **el error se reporta donde el parser se
+rinde, no donde esta la causa.** Con un fallo de codificacion, la linea que acusa el mensaje
+es casi siempre inocente.
+
+Correccion: `setup.ps1` pasa a **ASCII puro**, verificado byte a byte — el archivo se decodifica
+identico como cp1252 y como UTF-8. Y `tests/unit/test_scripts.py` lo fija con 9 guardias:
+ASCII puro, sin BOM, llaves y parentesis balanceados, comillas pares por linea, sin
+credenciales versionadas y apuntando a la rama correcta.
+
+Ensayado antes de entregar desde un clon limpio: 78 archivos, `uv sync` desde cero, tests y
+gates en verde. Lo unico que no se pudo ensayar es la ejecucion en Windows, porque este
+entorno es Linux — y ahi es exactamente donde estaba el fallo.
+
+siguiente: que el usuario corra `cli ingest` para cerrar T-010.

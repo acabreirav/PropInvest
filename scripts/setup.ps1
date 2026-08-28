@@ -1,4 +1,4 @@
-# Flujo Cero — instalacion y primera corrida. Windows / PowerShell.
+# Flujo Cero - instalacion y primera corrida. Windows / PowerShell.
 #
 # Como correrlo la PRIMERA vez: guarda este archivo en Descargas y ejecuta
 #
@@ -18,19 +18,25 @@
 #
 # NO contiene ninguna credencial. El .env se llena aparte, a proposito: este archivo
 # esta versionado en GitHub y los secretos nunca entran a un archivo versionado.
+#
+# ASCII PURO, A PROPOSITO. Windows PowerShell 5.1 lee los .ps1 en Windows-1252, no en
+# UTF-8. Un guion largo o un caracter acentuado se decodifica como varios bytes basura,
+# y uno de ellos es una comilla que CIERRA la cadena antes de tiempo: el script revienta
+# con "Falta la cadena en el terminador" en una linea que no tiene nada malo.
+# Lo fija `tests/unit/test_scripts.py`. No agregues acentos aqui.
 
 $ErrorActionPreference = "Stop"
 
-$Repo   = "https://github.com/acabreirav/PropInvest.git"
-$Rama   = "claude/flujo-cero-subsidio-0j4hc6"
+$Repo    = "https://github.com/acabreirav/PropInvest.git"
+$Rama    = "claude/flujo-cero-subsidio-0j4hc6"
 $Carpeta = Join-Path $HOME "PropInvest"
 
-function Titulo($t) { Write-Host "`n=== $t ===" -ForegroundColor Cyan }
+function Titulo($t) { Write-Host "" ; Write-Host "=== $t ===" -ForegroundColor Cyan }
 function Ok($t)     { Write-Host "  OK  $t" -ForegroundColor Green }
 function Aviso($t)  { Write-Host "  !!  $t" -ForegroundColor Yellow }
 function Existe($c) { $null -ne (Get-Command $c -ErrorAction SilentlyContinue) }
 
-# ---------------------------------------------------------------- 1 · herramientas
+# ---------------------------------------------------------------- 1 - herramientas
 
 Titulo "1/5  Herramientas"
 
@@ -39,8 +45,7 @@ if (Existe git) {
 } else {
   Aviso "git no esta. Instalando con winget..."
   winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements
-  $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-              [Environment]::GetEnvironmentVariable("Path","User")
+  $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
   if (-not (Existe git)) {
     throw "git quedo instalado pero PowerShell no lo ve. Cierra esta ventana, abre una nueva y vuelve a correr el script."
   }
@@ -59,31 +64,33 @@ if (Existe uv) {
   Ok "uv instalado"
 }
 
-# ---------------------------------------------------------------- 2 · repositorio
+# ---------------------------------------------------------------- 2 - repositorio
 
 Titulo "2/5  Repositorio"
 
 if (Test-Path (Join-Path $Carpeta ".git")) {
   Set-Location $Carpeta
-  Ok "ya existe en $Carpeta — actualizando"
+  Ok "ya existe en $Carpeta, actualizando"
   git fetch origin $Rama
   git checkout $Rama
   git pull origin $Rama
 } else {
   Write-Host "  Clonando en $Carpeta"
-  Write-Host "  Si es privado, se va a abrir el navegador para que autorices a GitHub." -ForegroundColor DarkGray
+  Write-Host "  El repositorio es privado: se va a abrir el navegador para que autorices a GitHub." -ForegroundColor DarkGray
   git clone --branch $Rama $Repo $Carpeta
   Set-Location $Carpeta
 }
-Ok "en la rama $(git rev-parse --abbrev-ref HEAD), commit $(git rev-parse --short HEAD)"
+$rama_actual = git rev-parse --abbrev-ref HEAD
+$commit      = git rev-parse --short HEAD
+Ok "en la rama $rama_actual, commit $commit"
 
-# ---------------------------------------------------------------- 3 · dependencias
+# ---------------------------------------------------------------- 3 - dependencias
 
 Titulo "3/5  Dependencias de Python"
 uv sync
 Ok "instaladas"
 
-# ---------------------------------------------------------------- 4 · credenciales
+# ---------------------------------------------------------------- 4 - credenciales
 
 Titulo "4/5  Credenciales"
 
@@ -103,12 +110,13 @@ foreach ($linea in Get-Content $EnvFile) {
   }
 }
 if ($faltan.Count -gt 0) {
-  Aviso "faltan credenciales en .env: $($faltan -join ', ')"
+  $lista = $faltan -join ", "
+  Aviso "faltan credenciales en .env: $lista"
 } else {
   Ok "las cuatro credenciales estan puestas"
 }
 
-# ---------------------------------------------------------------- 5 · verificacion
+# ---------------------------------------------------------------- 5 - verificacion
 
 Titulo "5/5  Verificacion"
 
@@ -126,13 +134,14 @@ uv run python -m flujocero.cli demo
 # ---------------------------------------------------------------- listo
 
 Titulo "Listo"
-Write-Host "Carpeta: $Carpeta`n"
+Write-Host "Carpeta: $Carpeta"
+Write-Host ""
 if ($faltan.Count -gt 0) {
   Write-Host "SIGUIENTE: llena el .env con las credenciales y vuelve a correr este script." -ForegroundColor Yellow
 } else {
-  Write-Host "SIGUIENTE: trae el valor de la UF de los ultimos dos anos con" -ForegroundColor Green
+  Write-Host "SIGUIENTE: trae el valor de la UF de los ultimos dos anos." -ForegroundColor Green
   Write-Host ""
-  Write-Host "    cd $Carpeta" -ForegroundColor White
+  Write-Host "    cd `"$Carpeta`"" -ForegroundColor White
   Write-Host "    uv run python -m flujocero.cli ingest --desde 2024-01 --hasta 2026-08" -ForegroundColor White
   Write-Host ""
   Write-Host "Copia toda la salida de ese comando y pegamela en el chat." -ForegroundColor Green
