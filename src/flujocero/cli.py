@@ -22,12 +22,72 @@ def build() -> None:
 
 
 @app.command()
-def rebuild(from_raw: bool = typer.Option(False, "--from-raw")) -> None:
-    """Reconstruye la base desde cero."""
+def rebuild(
+    from_raw: bool = typer.Option(False, "--from-raw", help="reparsea la zona cruda"),
+) -> None:
+    """Reconstruye la base. Con `--from-raw`, reparsea todo `data/raw/` (§3.6).
+
+    La zona cruda es la fuente de verdad: si el parseo de una fuente mejora, se corre esto
+    y las tablas quedan al dia SIN volver a pedirle nada a nadie. Un blob que no se puede
+    reconstruir se reporta y se conserva; nunca se descarta.
+    """
+    import duckdb
+
+    from flujocero.sources import registro
+    from flujocero.sources.base import MetadatoAusente, blobs_crudos, leer_crudo
+
     r = db.ruta_db()
     if r.exists():
         r.unlink()
-    typer.echo(f"base reconstruida: {db.crear()}")
+    ruta = db.crear()
+    typer.echo(f"esquema aplicado: {ruta.name}")
+
+    if not from_raw:
+        typer.echo("base vacia. Usa --from-raw para reconstruir desde data/raw/.")
+        return
+
+    blobs = [b for b in blobs_crudos() if b.name != "robots.txt.json.gz"]
+    if not blobs:
+        typer.echo("no hay nada en data/raw/ que reconstruir.")
+        return
+    typer.echo(f"{len(blobs)} blobs en la zona cruda\n")
+
+    por_fuente: dict[str, list] = {}
+    for b in blobs:
+        por_fuente.setdefault(b.parts[-5], []).append(b)
+
+    con = duckdb.connect(str(ruta))
+    total, sin_meta, desconocidas = 0, [], []
+    try:
+        for source_id, rutas in sorted(por_fuente.items()):
+            ent = registro.entrada(source_id)
+            if ent is None:
+                desconocidas.append(f"{source_id} ({len(rutas)} blobs)")
+                continue
+            filas = []
+            for ruta_blob in rutas:
+                try:
+                    filas.extend(ent.parse(leer_crudo(ruta_blob)))
+                except MetadatoAusente as exc:
+                    sin_meta.append(f"{ruta_blob.name}: {exc}".split(".")[0])
+            n = ent.cargar(con, filas) if filas else 0
+            total += n
+            typer.echo(f"  {source_id:<26} {n:>6} filas -> {ent.tabla}")
+    finally:
+        con.close()
+
+    typer.echo(f"\n{total} filas reconstruidas desde la zona cruda")
+    if desconocidas:
+        typer.echo(
+            f"\n! sin reconstruir, no hay parser registrado: {', '.join(desconocidas)}"
+            f"\n  Los blobs se conservan. Fuentes conocidas: {registro.fuentes_conocidas()}"
+        )
+    if sin_meta:
+        typer.echo(
+            f"\n! {len(sin_meta)} blobs sin su .meta.json y por eso sin procedencia "
+            "reconstruible.\n  Se recolectaron con una version anterior. Vuelve a "
+            "recolectar esa fuente; los blobs viejos NO se borran."
+        )
 
 
 @app.command()

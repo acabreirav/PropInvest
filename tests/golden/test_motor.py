@@ -54,7 +54,9 @@ def test_factor_dividendo_anual(tasa: D, esperado: D) -> None:
 # 5 · TIR real de una operación sin flujo ni apreciación real = 0
 def test_tir_neutra() -> None:
     flujos = [D(-1000)] + [D(0)] * 9 + [D(1000)]
-    assert abs(f.tir(flujos)) < D("1e-6")
+    # §7.2 punto 5 pide 1e-9, no 1e-6. La diferencia importa: es la tolerancia que
+    # distingue un cero real de un cero que quedo cerca por casualidad del solver.
+    assert abs(f.tir(flujos)) < D("1e-9")
 
 
 # 6 · el saldo insoluto llega a cero al final del plazo

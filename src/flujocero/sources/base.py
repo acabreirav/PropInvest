@@ -159,6 +159,15 @@ def ruta_cruda(source_id: str, momento: datetime, nombre: str, raiz: Path | None
     return base / f"{seguro}.json.gz"
 
 
+class MetadatoAusente(ValueError):
+    """Un blob crudo sin su `.meta.json`. No se puede reconstruir su procedencia."""
+
+
+def ruta_meta(blob: Path) -> Path:
+    """El sidecar de metadatos que acompaña a cada blob crudo."""
+    return blob.with_suffix("").with_suffix(".meta.json")
+
+
 def escribir_crudo(
     source_id: str,
     url: str,
@@ -167,14 +176,39 @@ def escribir_crudo(
     robots_snapshot_sha: str,
     nombre: str | None = None,
     raiz: Path | None = None,
+    parser_version: str = "",
 ) -> RawDoc:
-    """Persiste el documento ANTES de parsearlo. Re-ejecutar el mismo día sobrescribe
-    el mismo archivo en vez de acumular duplicados (§3.6)."""
+    """Persiste el documento ANTES de parsearlo (§3.6), junto a sus metadatos.
+
+    El blob por si solo NO alcanza: de las seis columnas de procedencia del §3.1, la ruta
+    permite deducir `source_id`, `fetched_at` y `raw_blob_path`, pero `source_url`,
+    `robots_snapshot_sha` y `parser_version` se perderian. Sin ellas `make rebuild` no
+    puede reconstruir una fila legal — no es que sea dificil, es que seria ilegal.
+    Por eso cada blob va con un `.meta.json` al lado.
+
+    Re-ejecutar el mismo día sobrescribe los mismos dos archivos, sin acumular duplicados.
+    """
     etiqueta = nombre or _nombre_desde_url(url)
     destino = ruta_cruda(source_id, momento, etiqueta, raiz)
     destino.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(destino, "wb") as fh:
         fh.write(contenido)
+    ruta_meta(destino).write_text(
+        json.dumps(
+            {
+                "source_id": source_id,
+                "source_url": url,
+                "fetched_at": momento.isoformat(),
+                "robots_snapshot_sha": robots_snapshot_sha,
+                "parser_version": parser_version,
+                "sha_contenido": sha_de(contenido),
+                "bytes": len(contenido),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return RawDoc(
         source_id=source_id,
         url=url,
@@ -185,11 +219,36 @@ def escribir_crudo(
     )
 
 
-def leer_crudo(ruta: Path, source_id: str, url: str, momento: datetime, sha: str) -> RawDoc:
-    """Relee un documento de la zona cruda. Es lo que hace posible `make rebuild`."""
+def leer_crudo(ruta: Path) -> RawDoc:
+    """Relee un documento de la zona cruda con su procedencia. Habilita `make rebuild`.
+
+    Falla si falta el `.meta.json`: inventar una procedencia seria peor que no reconstruir.
+    """
+    meta_p = ruta_meta(ruta)
+    if not meta_p.is_file():
+        raise MetadatoAusente(
+            f"{ruta.name} no tiene su {meta_p.name} al lado. Se recolectó con una versión "
+            "anterior que no guardaba metadatos; vuelve a recolectar esa fuente. "
+            "CLAUDE.md §3.1: sin las seis columnas, la fila no se inserta."
+        )
+    meta = json.loads(meta_p.read_text(encoding="utf-8"))
     with gzip.open(ruta, "rb") as fh:
         contenido = fh.read()
-    return RawDoc(source_id, url, momento, ruta, contenido, sha)
+    return RawDoc(
+        source_id=meta["source_id"],
+        url=meta["source_url"],
+        fetched_at=datetime.fromisoformat(meta["fetched_at"]),
+        ruta=ruta,
+        contenido=contenido,
+        robots_snapshot_sha=meta["robots_snapshot_sha"],
+    )
+
+
+def blobs_crudos(source_id: str | None = None, raiz: Path | None = None) -> list[Path]:
+    """Todos los blobs de la zona cruda, del mas nuevo al mas viejo."""
+    base = raiz or ZONA_CRUDA
+    patron = f"{source_id}/*/*/*/*.json.gz" if source_id else "*/*/*/*/*.json.gz"
+    return sorted(base.glob(patron), reverse=True) if base.is_dir() else []
 
 
 def _nombre_desde_url(url: str) -> str:

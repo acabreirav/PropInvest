@@ -212,6 +212,7 @@ class CmfTasasHipotecarias:
                 veredicto.snapshot_sha,
                 "tasas_hipotecarias.xls",
                 self.raiz_cruda,
+                self.parser_version,
             )
         finally:
             if propio:

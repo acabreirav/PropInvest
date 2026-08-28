@@ -413,3 +413,54 @@ caído debe detener una API oficial con credencial a nombre del inversionista, c
 protocolo está pensado para crawlers anónimos. **Recomendación: mantener como está** — el
 respaldo por snapshot ya cubre el caso real, y una excepción por `legal_tier` es la clase de
 puerta que después se usa para otra cosa.
+
+## 2026-08-28 · iteración 12 — T-010 CERRADA, y auditoría de deuda técnica
+tareas: **T-010 → hecha** · T-908, T-909 abiertas
+gates: **VERDE** · `pytest`: **165 passed** (eran 160)
+
+**T-010 cerrada con datos reales**, desde la máquina del usuario:
+
+    ✓ 9 documentos en la zona cruda
+    ✓ contrato de fuente: 1037 filas con procedencia completa
+    ✓ selftest: {..., 'robots': True, 'forma_verificada': True}
+    uf         974 filas   2024-01-01 → 2026-08-31
+    utm         32 filas
+    ipc_var_m   31 filas
+
+`forma_verificada: true` es lo que importa: la estructura deducida de la documentación
+resultó ser la real. Se dedujo bien, pero recién ahora está **verificada**.
+
+---
+
+## Auditoría de deuda técnica
+
+El usuario planteó la sospecha de que estábamos saltándonos cosas. **Tenía razón.** Se
+auditó con evidencia, no con tranquilidad. Seis hallazgos:
+
+1. **`make rebuild --from-raw` era una mentira.** Borraba la base y aplicaba el esquema
+   vacío; el flag `--from-raw` se ignoraba por completo. El §3.6 lo exige explícitamente.
+2. **Y era IMPOSIBLE de implementar**, que es peor. La zona cruda guardaba solo el cuerpo
+   del documento. De las seis columnas del §3.1, la ruta permite deducir tres —`source_id`,
+   `fetched_at`, `raw_blob_path`— y las otras tres **se perdían**. Reconstruir una fila
+   habría exigido inventarle procedencia: no es que fuera difícil, es que era ilegal.
+   Corregido: cada blob va con un `.meta.json` al lado. Y un blob sin sidecar **no se
+   reconstruye**, se reporta y se conserva.
+3. **El caso de oro de la TIR usaba tolerancia 1e-6 y el §7.2 punto 5 pide 1e-9.** Apretado.
+   Pasa: el motor era más preciso de lo que su propio test exigía.
+4. `tests/integration/` está vacío pese a que el §7.1 habla de fixtures grabadas. Los tests
+   de fuentes viven en `unit/` y no llevan el marcador `integration`.
+5. **La UF sigue siendo un parámetro fijo** (`valor_uf_clp: 40804`) aunque ahora hay 974
+   valores reales cargados. El motor no lee de la base. → deuda declarada, no cerrada.
+6. La fixture de la CMF sigue siendo la derivada de documentación. → T-909.
+
+**Lo pagado en esta iteración: 1, 2 y 3.** La 2 es la que justificaba la sospecha del
+usuario: se habría descubierto al final, con meses de datos recolectados y sin forma de
+reconstruirlos. Las 4, 5 y 6 quedan **declaradas en el backlog**, no escondidas.
+
+Prueba de fuego del §3.6, ahora con test: recolectar → borrar la base entera → reconstruir
+desde la zona cruda → **las filas salen idénticas**, incluidas `source_url` y
+`robots_snapshot_sha`.
+
+Se agrega `sources/registro.py`: el mapa de qué colector reconstruye qué `source_id`. Una
+fuente sin entrada no se reconstruye y se reporta; nunca se descarta un blob por no saber
+leerlo.

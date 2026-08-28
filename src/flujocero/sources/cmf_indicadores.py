@@ -297,6 +297,7 @@ class CmfIndicadores:
                         robots_snapshot_sha=veredicto.snapshot_sha,
                         nombre=f"{serie}_{desde or 'hoy'}_{hasta or ''}",
                         raiz=self.raiz_cruda,
+                        parser_version=self.parser_version,
                     )
         finally:
             if propio:

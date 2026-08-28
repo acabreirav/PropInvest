@@ -168,9 +168,11 @@ def test_reescribir_el_mismo_dia_no_duplica(tmp_path: Path) -> None:
     """§3.6: re-ejecutar un colector el mismo día no acumula archivos."""
     for _ in range(3):
         escribir_crudo("cmf_indicadores", "u", b'{"UFs":[]}', AHORA, "sha", "uf", tmp_path)
-    archivos = list((tmp_path / "cmf_indicadores" / "2026" / "08" / "28").iterdir())
-    assert len(archivos) == 1
-    with gzip.open(archivos[0], "rb") as fh:
+    archivos = sorted(
+        p.name for p in (tmp_path / "cmf_indicadores" / "2026" / "08" / "28").iterdir()
+    )
+    assert archivos == ["uf.json.gz", "uf.meta.json"], "el blob y su sidecar, sin duplicar"
+    with gzip.open(tmp_path / "cmf_indicadores/2026/08/28/uf.json.gz", "rb") as fh:
         assert fh.read() == b'{"UFs":[]}'
 
 
@@ -477,3 +479,119 @@ def test_un_401_no_se_reintenta_nunca(tmp_path: Path) -> None:
     with pytest.raises(ErrorDeFuente, match="401"):
         list(c.collect(Scope(desde="2026-08", hasta="2026-08", ahora=AHORA)))
     assert intentos["n"] == 1, "un 401 no se reintenta"
+
+
+# --------------------------------------------------------------------- zona cruda y rebuild
+
+
+def test_el_blob_crudo_viaja_con_su_procedencia(tmp_path: Path) -> None:
+    """LA DEUDA QUE ENCONTRO LA AUDITORIA.
+
+    De las seis columnas del §3.1, la ruta permite deducir `source_id`, `fetched_at` y
+    `raw_blob_path`. Las otras tres se perdian, y con ellas la posibilidad de que
+    `make rebuild --from-raw` produjera una fila legal. No era dificil: era ilegal.
+    """
+    from flujocero.sources.base import leer_crudo, ruta_meta
+
+    doc = escribir_crudo(
+        "cmf_indicadores",
+        "https://api.cmfchile.cl/uf?apikey=OCULTA",
+        b'{"UFs":[]}',
+        AHORA,
+        "sha-robots-abc",
+        "uf",
+        tmp_path,
+        "cmf_indicadores/1.1.0",
+    )
+    assert ruta_meta(doc.ruta).is_file()
+
+    releido = leer_crudo(doc.ruta)
+    assert releido.url == "https://api.cmfchile.cl/uf?apikey=OCULTA"
+    assert releido.robots_snapshot_sha == "sha-robots-abc"
+    assert releido.fetched_at == AHORA
+    assert releido.contenido == b'{"UFs":[]}'
+
+
+def test_la_apikey_no_queda_en_el_sidecar(tmp_path: Path) -> None:
+    """El .meta.json se versiona en ningun lado, pero vive en disco: sin secretos."""
+    from flujocero.sources.base import ruta_meta
+
+    doc = escribir_crudo(
+        "cmf_indicadores",
+        ocultar_secreto("https://api.cmfchile.cl/uf?apikey=SECRETA123"),
+        b"{}",
+        AHORA,
+        "sha",
+        "uf",
+        tmp_path,
+        "v1",
+    )
+    assert "SECRETA123" not in ruta_meta(doc.ruta).read_text()
+
+
+def test_un_blob_sin_sidecar_no_se_reconstruye_inventando_procedencia(tmp_path: Path) -> None:
+    """§3.1 es regla dura: antes que inventar una procedencia, no se reconstruye."""
+    from flujocero.sources.base import MetadatoAusente, leer_crudo, ruta_meta
+
+    doc = escribir_crudo("cmf_indicadores", "u", b"{}", AHORA, "sha", "uf", tmp_path, "v1")
+    ruta_meta(doc.ruta).unlink()
+    with pytest.raises(MetadatoAusente, match="§3.1"):
+        leer_crudo(doc.ruta)
+
+
+def test_rebuild_reconstruye_las_mismas_filas_desde_la_zona_cruda(tmp_path: Path) -> None:
+    """§3.6 · la prueba de fuego: recolectar, borrar la base, reconstruir, comparar."""
+    import duckdb
+
+    from flujocero import db
+    from flujocero.sources.base import blobs_crudos, leer_crudo
+    from flujocero.sources.registro import entrada
+
+    cliente = transporte(
+        {
+            "robots.txt": (200, b"User-agent: *\nAllow: /\n"),
+            "/uf": (200, (FIXTURES / "uf_periodo_2026_08.json").read_bytes()),
+        }
+    )
+    c = colector(series=("uf",), cliente=cliente, raiz_cruda=tmp_path, pausa_s=0)
+
+    con = duckdb.connect(str(tmp_path / "a.duckdb"))
+    db.aplicar_esquema(con)
+    filas_originales = []
+    for doc in c.collect(Scope(desde="2026-08", hasta="2026-08", ahora=AHORA)):
+        filas_originales.extend(c.parse(doc))
+    cargar_en_duckdb(con, filas_originales)
+    antes = con.execute(
+        "SELECT fecha, serie, valor, source_url, robots_snapshot_sha "
+        "FROM dim_tiempo_financiero ORDER BY fecha"
+    ).fetchall()
+    con.close()
+
+    # La base se pierde entera. Solo queda la zona cruda.
+    (tmp_path / "a.duckdb").unlink()
+
+    con2 = duckdb.connect(str(tmp_path / "b.duckdb"))
+    db.aplicar_esquema(con2)
+    ent = entrada("cmf_indicadores")
+    assert ent is not None
+    filas = []
+    for b in blobs_crudos("cmf_indicadores", tmp_path):
+        if b.name == "robots.txt.json.gz":
+            continue
+        filas.extend(ent.parse(leer_crudo(b)))
+    ent.cargar(con2, filas)
+    despues = con2.execute(
+        "SELECT fecha, serie, valor, source_url, robots_snapshot_sha "
+        "FROM dim_tiempo_financiero ORDER BY fecha"
+    ).fetchall()
+    con2.close()
+
+    assert despues == antes, "la reconstruccion no reprodujo las filas originales"
+    assert antes, "la prueba no vale si no habia filas que reconstruir"
+
+
+def test_el_registro_conoce_las_fuentes_que_tienen_colector() -> None:
+    from flujocero.sources.registro import entrada, fuentes_conocidas
+
+    assert "cmf_indicadores" in fuentes_conocidas()
+    assert entrada("una_fuente_que_no_existe") is None, "no se inventa un parser"

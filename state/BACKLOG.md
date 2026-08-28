@@ -52,22 +52,22 @@ criterio_de_aceptacion:
 # FASE 1 · Un extremo a otro sobre 3 comunas (San Miguel, La Florida, Ñuñoa)
 
 ## T-010 · Colector CMF + Gael (UF, UTM, IPC, TMC)
-estado: en_curso · agente: colector · fase: 1 · depende_de: [T-002]
+estado: hecha · agente: colector · fase: 1 · depende_de: [T-002]
 paraleliza_con: [T-011, T-012]
 criterio_de_aceptacion:
   - [x] Modulo `sources/cmf_indicadores.py` con el contrato Source del §7.1
   - [x] `dim_tiempo_financiero` con las seis columnas de procedencia (requirio cambio de esquema)
   - [x] Carga idempotente por clave natural `(fecha, serie)`
   - [x] ADR escrito: `docs/adr/001-cmf-indicadores.md`
-  - [ ] **Serie de UF completa 2024-2026 cargada** — requiere ejecutar contra la API real
-  - [ ] **`selftest()` contra muestra viva** — hoy `forma_verificada: false`
-  - [ ] Fallback a Gael respetando su limite duro (>9 req/10 s = ban de 1 h)
-bloqueo: >
-  El proxy de red de este entorno bloquea `api.cmfchile.cl`, asi que no se pudo grabar
-  una respuesta real ni cargar la serie. El codigo, sus tests y los gates estan verdes;
-  lo unico que falta es ejecutarlo desde una maquina con salida a internet:
-  `uv run python -m flujocero.cli ingest --desde 2024-01 --hasta 2026-08`
-  NO se marca `hecha` hasta que eso corra: el §7.1 exige selftest contra muestra viva.
+  - [x] **Serie completa cargada** — 1.037 filas el 28-ago-2026 desde la maquina del usuario:
+        uf 974 (2024-01-01 -> 2026-08-31), utm 32, ipc_var_m 31
+  - [x] **`selftest()` contra muestra viva: `forma_verificada: true`.** La estructura deducida
+        de la documentacion resulto ser la real, ahora confirmada contra la API.
+  - [ ] Fallback a Gael respetando su limite duro (>9 req/10 s = ban de 1 h) -> T-908
+deuda_pendiente: >
+  La fixture de tests sigue siendo la derivada de documentacion. Ahora existe la respuesta
+  real en `data/raw/cmf_indicadores/2026/08/28/` de la maquina del usuario; reemplazarla
+  cierra el ultimo cabo. Ver T-909.
 
 ## T-011 · OAuth MercadoLibre + verificación de categorías
 estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: []
@@ -256,6 +256,27 @@ nota: >
   Mientras tanto `params.yml` sigue usando sus cuatro tasas fijas con fuente citada
   (BCCh jul-2026, licitacion FOGAES, Santander/Bco de Chile e Itau ago-2026). No es ideal
   pero esta fechado y es de este ciclo, a diferencia de la planilla.
+
+## T-908 · Fallback a Gael Cloud para indicadores
+estado: pendiente · agente: colector · fase: 1 · depende_de: [T-010]
+prioridad: baja
+motivo: >
+  La API de la CMF corta la conexion al azar (medido: la misma URL fallo y minutos despues
+  devolvio 974 registros). Los reintentos con backoff lo absorben, pero un fallback a
+  api.gael.cloud daria una segunda fuente. Limite duro de Gael: mas de 9 peticiones en
+  10 segundos = IP baneada 1 hora.
+
+## T-909 · Reemplazar la fixture derivada de documentacion por la respuesta grabada
+estado: pendiente · agente: colector · fase: 1 · depende_de: [T-010]
+prioridad: media
+motivo: >
+  `tests/fixtures/cmf/` contiene una fixture construida a partir de la documentacion, con
+  valores sinteticos. La corrida real del 28-ago-2026 dejo la respuesta autentica en
+  `data/raw/cmf_indicadores/2026/08/28/` de la maquina del usuario. Los tests deben correr
+  contra bytes reales, no contra una reconstruccion — aunque esta haya resultado correcta.
+criterio_de_aceptacion:
+  - fixture reemplazada por la respuesta grabada, con su `.meta.json`
+  - `PROCEDENCIA.md` actualizado: deja de decir que los valores son sinteticos
 
 ## T-903 · Vigilar parsers rotos
 El gate de caída >30% dispara esta tarea automáticamente.
