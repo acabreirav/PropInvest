@@ -544,3 +544,50 @@ razón que valía la pena: httpx normaliza los nombres de cabecera a minúsculas
 `X-RateLimit-Limit` llega como `x-ratelimit-limit`. El test estaba mal, no el código.
 
 **Falta ejecutarlo.** Necesita red y credenciales, o sea la máquina del usuario.
+
+---
+
+## 2026-08-28 · T-011 · La puerta oficial de MercadoLibre devolvio 403
+
+**Que corrio.** El usuario ejecuto `cli medir-meli` en su maquina (IP residencial chilena,
+21:57 UTC). Cuatro brechas del §G medidas contra la API real.
+
+**Que salio.**
+
+| Brecha | Resultado | Nivel |
+|---|---|---|
+| G1 · categoria | `MLC1459` = **raiz** Inmuebles; departamentos = **`MLC1472`** | V |
+| G2 · bearer | `/sites/MLC/search` -> **403 con token y 403 sin token** | ND |
+| G3 · tope | bloqueada por el mismo 403 | ND |
+| G4 · rate limit | 12 peticiones en 3,3 s sin 429; sin cabeceras `X-RateLimit-*` | D |
+
+**Que se aprendio.**
+
+1. **`fuentes.yml` apuntaba al nodo equivocado del arbol de categorias.** No era un ID falso:
+   era la raiz. Corregido a `categoria_raiz: MLC1459` + `categoria: MLC1472`, ya medido.
+2. **El 403 no se explica por nada comodo.** El mismo token leyo `/sites/MLC/categories` en
+   la misma corrida: no es la app, no es el token, no es la IP de datacenter (corrio en casa
+   del usuario). Queda una hipotesis viva —que MELI cerro la busqueda abierta— respaldada
+   solo por evidencia secundaria, y asi quedo escrita en el ADR-003. No pude confirmarla
+   contra la documentacion oficial: los tres dominios de developers de MELI estan bloqueados
+   por el proxy de egreso del contenedor.
+3. **Defecto propio de instrumentacion.** La medicion registraba `HTTP 403` y tiraba el
+   cuerpo. Un 403 pelado no distingue "el recurso murio" de "te falta un scope", y MELI manda
+   esa diferencia en `message`/`error`/`cause`. Costo una corrida del usuario. Corregido:
+   ahora el cuerpo entra a la evidencia, con el access token enmascarado.
+4. **Un test mio pasaba con la respuesta contraria.** `assert "COINCIDE" in m.evidencia` daba
+   verde tambien cuando el texto decia `"NO COINCIDE"` — es subcadena. Reescrito, y agregado
+   el caso positivo real con `monkeypatch`.
+
+**Que se hizo.**
+- `meli_venta` y `meli_arriendo` -> `enabled: false`, con la razon en `fuentes.yml`.
+  `meli_locations` sigue habilitada: pega contra otro recurso y T-013 no esta bloqueada.
+- Brecha **G5** nueva: prueba `category=`, `category=`+`scan`, `seller_id=`, `/highlights/`,
+  `/trends/` y, si alguna devuelve IDs, el multiget `/items?ids=` — porque una lista de IDs
+  sin precio ni m2 no alimenta ninguna tabla.
+- `docs/adr/003-meli.md` con las mediciones y las hipotesis separadas de los hechos.
+- **D-014** abierta en `docs/05-decisiones.md`: si G5 confirma el cierre, se cae la premisa
+  del §13.6 y eso lo decide el usuario, no el agente. Scrapear Portal Inmobiliario queda
+  descartado de entrada.
+
+**Estado.** 206 tests verdes (+7). T-011 sigue `en_curso`: falta una corrida mas del usuario.

@@ -48,6 +48,9 @@ TRANSITORIOS = (
 # El RUNBOOK es explicito: no aceptar que el agente lo asuma sin medirlo.
 CATEGORIA_SUPUESTA = "MLC1459"
 
+# Medido el 28-ago-2026 contra /categories/MLC1459 (brecha G1). Ya no es un supuesto.
+CATEGORIA_DEPARTAMENTOS = "MLC1472"
+
 
 class ErrorDeFuente(RuntimeError):
     """La API respondió algo que no podemos interpretar. Nunca se traga en silencio (§11)."""
@@ -194,6 +197,29 @@ class Meli:
     def cerrar(self) -> None:
         self._cliente.close()
 
+    @staticmethod
+    def motivo(r: httpx.Response) -> str:
+        """El texto que MercadoLibre pone en el cuerpo cuando rechaza.
+
+        Un codigo HTTP solo no distingue "este recurso ya no existe para nadie" de
+        "a tu app le falta un scope". MercadoLibre manda esa diferencia en el cuerpo
+        (`message`, `error`, `cause`) y la primera version de esta medicion la tiraba a
+        la basura: registraba el 403 y nada mas. Sin el cuerpo, la decision de arquitectura
+        que sigue se tomaria a ciegas.
+        """
+        try:
+            cuerpo = r.json()
+        except ValueError:
+            return ocultar_token(r.text[:200].replace("\n", " ").strip()) or "(cuerpo vacio)"
+        if not isinstance(cuerpo, dict):
+            return ocultar_token(str(cuerpo)[:200])
+        partes = [
+            f"{k}={cuerpo[k]}"
+            for k in ("error", "message", "status", "cause")
+            if cuerpo.get(k) not in (None, "", [], {})
+        ]
+        return ocultar_token(" · ".join(partes)[:300]) or "(sin campos de error)"
+
     # ------------------------------------------------------------------ mediciones §G
 
     def medir(self, ahora: datetime | None = None) -> ReporteMedicion:
@@ -203,6 +229,7 @@ class Meli:
         rep.mediciones.append(self._brecha_2_bearer())
         rep.mediciones.append(self._brecha_3_tope())
         rep.mediciones.append(self._brecha_4_rate_limit())
+        rep.mediciones.append(self._brecha_5_rutas())
         return rep
 
     def _brecha_1_categoria(self) -> Medicion:
@@ -244,9 +271,15 @@ class Meli:
                 )
             ),
             (
-                f"supuesto en fuentes.yml: {CATEGORIA_SUPUESTA} -> "
-                f"{'COINCIDE' if coincide else 'NO COINCIDE, corregir fuentes.yml'}"
-                f" · hijos: {[(h['id'], h['name']) for h in hijos][:8]}"
+                f"fuentes.yml traia {CATEGORIA_SUPUESTA} como la categoria a usar; "
+                + (
+                    "es la correcta"
+                    if coincide
+                    else f"es la raiz Inmuebles, no departamentos. Usar {elegido['id']}"
+                    if elegido
+                    else "y no se encontro hijo 'departamento'"
+                )
+                + f" · hijos: {[(h['id'], h['name']) for h in hijos][:8]}"
             ),
         )
 
@@ -264,7 +297,12 @@ class Meli:
                 if sin.status_code == 200
                 else "indeterminado"
             ),
-            f"con token: HTTP {con.status_code} · sin token: HTTP {sin.status_code}",
+            (
+                f"con token: HTTP {con.status_code}"
+                + (f" [{self.motivo(con)}]" if con.status_code >= 400 else "")
+                + f" · sin token: HTTP {sin.status_code}"
+                + (f" [{self.motivo(sin)}]" if sin.status_code >= 400 else "")
+            ),
             "V" if con.status_code == 200 or sin.status_code == 200 else "ND",
         )
 
@@ -273,7 +311,11 @@ class Meli:
         r = self.get(f"/sites/{SITIO}/search", q="departamento", limit=1)
         if r.status_code != 200:
             return Medicion(
-                "G3 · tope", "tope real de resultados", "ND", f"HTTP {r.status_code}", "ND"
+                "G3 · tope",
+                "tope real de resultados",
+                "ND",
+                f"HTTP {r.status_code} [{self.motivo(r)}]",
+                "ND",
             )
         total = r.json().get("paging", {}).get("total")
         topes = []
@@ -319,6 +361,114 @@ class Meli:
             ),
             "V" if cabeceras or golpeado else "D",
         )
+
+    def _brecha_5_rutas(self, pausa: float = 0.3) -> Medicion:
+        """¿Queda ALGUNA ruta oficial hacia el universo de avisos? (T-011, tras el 403 de G2)
+
+        `/sites/MLC/search` es la base declarada de `meli_venta` y `meli_arriendo`: si de
+        verdad se cerro, se cae el nucleo de la Fase 1 y el §13.6 del contrato pierde su
+        alternativa ("usa la API oficial, es la misma data por la puerta"). Antes de dar eso
+        por hecho hay que probar las formas que la documentacion todavia describe, una por
+        una, y quedarse con lo que responda el servidor.
+
+        No concluye nada que no haya medido: si todas fallan, lo dice; si alguna vive, la
+        nombra.
+        """
+        pruebas: list[tuple[str, str, dict[str, Any]]] = [
+            (
+                "q libre (base declarada)",
+                f"/sites/{SITIO}/search",
+                {"q": "departamento", "limit": 1},
+            ),
+            (
+                "category",
+                f"/sites/{SITIO}/search",
+                {"category": CATEGORIA_DEPARTAMENTOS, "limit": 1},
+            ),
+            (
+                "category + scan",
+                f"/sites/{SITIO}/search",
+                {"category": CATEGORIA_DEPARTAMENTOS, "search_type": "scan", "limit": 1},
+            ),
+            ("highlights", f"/highlights/{SITIO}/category/{CATEGORIA_DEPARTAMENTOS}", {}),
+            ("trends", f"/trends/{SITIO}/{CATEGORIA_DEPARTAMENTOS}", {}),
+        ]
+
+        # seller_id es la forma "privada" que la documentacion sigue describiendo. Necesita
+        # un user_id: usamos el propio, que es el unico que tenemos derecho a consultar.
+        yo = self.get("/users/me")
+        if yo.status_code == 200:
+            mi_id = yo.json().get("id")
+            pruebas.append(
+                (
+                    "seller_id propio",
+                    f"/sites/{SITIO}/search",
+                    {"seller_id": mi_id, "limit": 1},
+                )
+            )
+
+        lineas, vivas = [], []
+        primer_item: str | None = None
+        for etiqueta, ruta, params in pruebas:
+            r = self.get(ruta, **params)
+            if r.status_code == 200:
+                vivas.append(etiqueta)
+                lineas.append(f"{etiqueta}: 200 · {self._resumen_ok(r)}")
+                primer_item = primer_item or self._primer_item(r)
+            else:
+                lineas.append(f"{etiqueta}: {r.status_code} [{self.motivo(r)}]")
+            time.sleep(pausa)
+
+        # Si algo devolvio IDs, el multiget decide si esa ruta sirve de verdad: sin detalle
+        # (precio, m2, ubicacion) una lista de IDs no alimenta ninguna tabla.
+        if primer_item:
+            m = self.get("/items", ids=primer_item)
+            ok = m.status_code == 200
+            lineas.append(
+                f"multiget /items?ids={primer_item}: {m.status_code}"
+                + ("" if ok else f" [{self.motivo(m)}]")
+            )
+            if ok:
+                vivas.append("multiget")
+
+        return Medicion(
+            "G5 · rutas",
+            "¿queda alguna ruta oficial a los avisos?",
+            (
+                f"SI: {', '.join(vivas)}"
+                if vivas
+                else "NO: ninguna de las formas probadas respondio 200"
+            ),
+            " · ".join(lineas),
+            "V",
+        )
+
+    @staticmethod
+    def _resumen_ok(r: httpx.Response) -> str:
+        try:
+            cuerpo = r.json()
+        except ValueError:
+            return f"{len(r.content)} bytes"
+        if isinstance(cuerpo, dict):
+            total = cuerpo.get("paging", {}).get("total") if "paging" in cuerpo else None
+            n = len(cuerpo.get("results", []) or cuerpo.get("content", []) or [])
+            return f"total={total} resultados={n}" if total is not None else f"resultados={n}"
+        return f"lista de {len(cuerpo)}"
+
+    @staticmethod
+    def _primer_item(r: httpx.Response) -> str | None:
+        """Extrae un item_id de cualquiera de las formas en que la API los devuelve."""
+        try:
+            cuerpo = r.json()
+        except ValueError:
+            return None
+        if not isinstance(cuerpo, dict):
+            return None
+        for clave in ("results", "content"):
+            for elem in cuerpo.get(clave) or []:
+                if isinstance(elem, dict) and isinstance(elem.get("id"), str):
+                    return elem["id"]
+        return None
 
 
 def desde_entorno(

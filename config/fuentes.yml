@@ -58,20 +58,30 @@ fuentes:
   - id: meli_venta
     capa: 3
     legal_tier: api_oficial
-    enabled: true
+    enabled: false          # <- BLOQUEADA. Ver razon.
     base: "https://api.mercadolibre.com/sites/MLC/search"
     auth: oauth2
-    categoria: "MLC1459  # ⚠️ a verificar contra /sites/MLC/categories"
+    categoria_raiz: "MLC1459"      # Inmuebles  — medido 28-ago-2026 (T-011, brecha G1)
+    categoria: "MLC1472"           # Departamentos — medido, no supuesto
     paginacion: "offset+limit; search_type=scan para >1000"
     cadencia: diaria
+    adr: "docs/adr/003-meli.md"
+    razon_deshabilitada: >
+      /sites/MLC/search devolvio HTTP 403 el 28-ago-2026 desde IP chilena residencial,
+      CON token valido y SIN token. El mismo token leyo /sites/MLC/categories sin problema,
+      asi que no es la app ni la credencial: es ese recurso. Falta medir si queda alguna
+      forma admitida (category=, seller_id=, highlights, trends). Ver T-011 y docs/adr/003-meli.md.
 
   - id: meli_arriendo
     capa: 4
     legal_tier: api_oficial
-    enabled: true
+    enabled: false          # <- BLOQUEADA por la misma razon que meli_venta
     base: "https://api.mercadolibre.com/sites/MLC/search"
     auth: oauth2
+    categoria: "MLC1472"
     cadencia: diaria
+    adr: "docs/adr/003-meli.md"
+    razon_deshabilitada: "misma que meli_venta: HTTP 403 en /sites/MLC/search"
 
   - id: assetplan_arriendo
     capa: 4

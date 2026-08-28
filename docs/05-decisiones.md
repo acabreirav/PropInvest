@@ -316,3 +316,45 @@ snapshot real es mejor evidencia que cualquier suposición, y si ese snapshot de
 **Recomendación: mantener como está.** El respaldo por snapshot ya cubre el caso real, y la
 excepción por tier es exactamente la clase de puerta que después se usa para otra cosa. Si
 en la práctica vuelve a bloquear, se reabre con evidencia.
+
+---
+
+## D-014 · MercadoLibre cerró la búsqueda: ¿de dónde sale la oferta ahora?
+**Estado:** abierta, a la espera de la medición G5 · **Dueño:** humano · **Abierta:** 28-ago-2026
+
+`/sites/MLC/search` devolvió **HTTP 403 con token válido y sin token**, el 28-ago-2026, desde
+la máquina del usuario con IP residencial chilena. El mismo token, en la misma corrida, leyó
+`/sites/MLC/categories` sin problema: no es la app, no es el token, no es la IP. Es ese recurso.
+Detalle completo en `docs/adr/003-meli.md`.
+
+**Por qué esto es una decisión y no un bug.** El §13.6 del contrato prohíbe scrapear Portal
+Inmobiliario en HTML y da una razón concreta: *"Usa la API oficial de MercadoLibre (site MLC).
+Es la misma data, por la puerta."* Si esa puerta se cerró, el §13.6 pierde su alternativa —y
+el §8.4 manda detenerse y preguntar cuando un hallazgo del contrato deja de ser cierto.
+
+**Lo que falta antes de decidir.** La medición G5, ya escrita, prueba las formas que la
+documentación todavía describe (`category=`, `seller_id=`, `/highlights/`, `/trends/`, multiget)
+y dice si queda alguna. No tiene sentido decidir sobre una hipótesis cuando la medición cuesta
+un comando.
+
+**Si G5 confirma que no queda ruta**, las opciones son:
+
+| | **A · Capa 3 por las inmobiliarias** | **B · Comprar el dato** | **C · Scrapear Portal Inmobiliario** |
+|---|---|---|---|
+| Qué es | `planok_cotizador`, `inmobiliarias_wpjson`, `pabellon`, `enlace_inmobiliario` — todas `json_publico` o `html_permitido` | Data Inmobiliaria plan pago, DataBAM | HTML prohibido por su `robots.txt`, con WAF |
+| Dato que da | **precio por unidad**, estacionamiento y bodega aparte: mejor que un aviso | transacciones reales (CBR), no oferta | avisos, igual que MELI |
+| Costo | trabajo de colectores, ya presupuestado en el backlog | plata, y requiere tu aprobación (§8.4) | — |
+| Riesgo | cobertura desigual entre inmobiliarias | ninguno legal | **viola el §3.5 y el §13.6** |
+
+**Recomendación: A, y B solo para calibrar el gap lista→cierre.** La opción A no es un plan de
+contingencia peor: el cotizador PlanOK entrega precio **por unidad** con estacionamiento y
+bodega separados, que es exactamente lo que el §7.4 pide y lo que un aviso de portal no tiene.
+MELI servía para amplitud, no para calidad.
+
+**C queda descartada de entrada, pase lo que pase.** Que la alternativa oficial se cierre no
+convierte en permitido lo que un `robots.txt` prohíbe. Si esa es la única salida, el alcance se
+recorta antes que la regla.
+
+**Efecto colateral, ya aplicado:** `assetplan_arriendo` sube a fuente **primaria** de la capa 4.
+Su `robots.txt` permite explícitamente ClaudeBot, cubre 175 edificios con `lastmod` diario, y es
+arriendo **efectivo** —no precio pedido—, que es lo que el §4 exige como numerador del yield.

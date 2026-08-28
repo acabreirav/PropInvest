@@ -76,14 +76,35 @@ criterio_de_aceptacion:
   - [x] App registrada, flujo OAuth funcionando, refresh token persistido (28-ago-2026)
   - [x] Modulo `sources/meli.py` con renovacion de token que **persiste el nuevo ANTES de
         usarlo** — el refresh token de MELI es de un solo uso
-  - [x] `cli medir-meli` implementado: mide las cuatro brechas contra la API real
-  - [ ] **Brechas 1-4 del §G medidas** — requiere ejecutar `cli medir-meli` con red
-  - [ ] ADR con las mediciones
+  - [x] `cli medir-meli` implementado: mide las brechas contra la API real
+  - [x] **G1 medida**: MLC1459 es la RAIZ Inmuebles; departamentos es **MLC1472**.
+        `fuentes.yml` corregido con las dos, ya no como supuesto.
+  - [x] **G4 medida** [D]: 12 peticiones en 3,3 s sin 429; la API no publica cabeceras
+        `X-RateLimit-*`, asi que es cota inferior, no limite.
+  - [x] ADR escrito: `docs/adr/003-meli.md`
+  - [ ] **G2 y G3 siguen ND**: `/sites/MLC/search` devolvio **HTTP 403 con token y sin token**
+  - [ ] **G5 medida** — brecha nueva: ¿queda alguna ruta oficial a los avisos?
+hallazgo: >
+  /sites/MLC/search dio 403 desde IP residencial chilena, con token valido. El MISMO token
+  leyo /sites/MLC/categories en la misma corrida, asi que no es la app, ni el token, ni la IP:
+  es ese recurso. `meli_venta` y `meli_arriendo` quedan enabled:false. `meli_locations` NO
+  esta afectada (otro recurso), asi que T-013 sigue viva.
 bloqueo: >
-  Solo falta ejecutar. El comando esta escrito y probado con transporte simulado (15 tests);
-  necesita salida a internet y las credenciales, o sea la maquina del usuario:
+  Necesita una corrida mas en la maquina del usuario, ya con G5 y con el cuerpo del rechazo
+  capturado (antes se registraba solo el codigo HTTP, que no distingue "recurso cerrado" de
+  "falta un scope"):
   `uv run python -m flujocero.cli medir-meli`
   OJO: ese comando reescribe MELI_REFRESH_TOKEN en el .env, porque el canje mata el anterior.
+
+## T-910 · Decidir la fuente de oferta y arriendo si MELI quedo cerrada
+estado: bloqueada · agente: fuente-scout · fase: 1 · depende_de: [T-011]
+criterio_de_aceptacion:
+  - [ ] G5 ejecutada y su salida pegada en el ADR-003
+  - [ ] Si no queda ruta: D-014 escrita en docs/05-decisiones.md y aprobada por el usuario
+  - [ ] Prioridad de T-022 (Assetplan) y de las fuentes de capa 3 recalculada
+nota: >
+  NO se resuelve scrapeando Portal Inmobiliario. Que la puerta oficial se cierre no vuelve
+  permitido lo que su robots.txt prohibe (§3.5, §13.6).
 
 ## T-012 · Colector CMF tasas hipotecarias por banco
 estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]

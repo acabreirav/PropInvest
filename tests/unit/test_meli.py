@@ -99,23 +99,23 @@ def test_mide_la_categoria_real_y_la_contrasta_con_el_supuesto() -> None:
     )
     m = c._brecha_1_categoria()
     assert "MLC1459" in m.respuesta and "MLC1472" in m.respuesta
-    assert "COINCIDE" in m.evidencia
+    # MLC1459 es la RAIZ Inmuebles, no departamentos: el supuesto de fuentes.yml era el
+    # nodo equivocado del arbol, y la evidencia tiene que decir cual usar.
+    assert "es la raiz Inmuebles" in m.evidencia
+    assert "MLC1472" in m.evidencia
     assert m.evidence_level == "V"
 
 
-def test_si_la_categoria_supuesta_no_coincide_lo_grita() -> None:
-    otras = [{"id": "MLC9999", "name": "Inmuebles"}]
+def test_si_el_supuesto_era_el_correcto_lo_dice_sin_ambiguedad(monkeypatch) -> None:
+    """La primera version decia "NO COINCIDE" y el test lo daba por bueno buscando
+    "COINCIDE" — que es subcadena. Un test que pasa con la respuesta contraria no es test."""
+    monkeypatch.setattr(meli, "CATEGORIA_SUPUESTA", "MLC1472")
     c = cliente(
-        {
-            "/sites/MLC/categories": (200, otras),
-            "/categories/MLC9999": (
-                200,
-                {"children_categories": [{"id": "MLC1", "name": "Departamentos"}]},
-            ),
-        }
+        {"/sites/MLC/categories": (200, CATEGORIAS), "/categories/MLC1459": (200, INMUEBLES)}
     )
     m = c._brecha_1_categoria()
-    assert "NO COINCIDE" in m.evidencia
+    assert "es la correcta" in m.evidencia
+    assert "raiz" not in m.evidencia
 
 
 def test_sin_categoria_de_inmuebles_reporta_nd_y_no_inventa() -> None:
@@ -192,15 +192,102 @@ def test_si_llega_un_429_lo_reporta_con_el_conteo() -> None:
     assert "retry-after" in m.evidencia.lower()
 
 
-def test_el_reporte_completo_cubre_las_cuatro_brechas() -> None:
+def test_el_reporte_completo_cubre_las_cinco_brechas() -> None:
     c = cliente(
         {
             "/sites/MLC/categories": (200, CATEGORIAS),
             "/categories/MLC1459": (200, INMUEBLES),
             "/sites/MLC/search": (200, {"paging": {"total": 100}}),
+            "/users/me": (200, {"id": 258494802}),
+            "/highlights/": (200, {"content": []}),
+            "/trends/": (200, []),
         }
     )
     rep = c.medir(ahora=AHORA)
-    assert len(rep.mediciones) == 4
-    assert [m.brecha.split(" ")[0] for m in rep.mediciones] == ["G1", "G2", "G3", "G4"]
+    assert len(rep.mediciones) == 5
+    assert [m.brecha.split(" ")[0] for m in rep.mediciones] == ["G1", "G2", "G3", "G4", "G5"]
     assert "2026-08-28" in str(rep)
+
+
+# --------------------------------------------------------------------- cuerpo del rechazo
+
+
+def test_el_motivo_del_rechazo_se_lee_del_cuerpo_no_solo_del_codigo() -> None:
+    """Un 403 pelado no distingue "el recurso murio" de "te falta un scope"; el cuerpo si."""
+    r = httpx.Response(
+        403,
+        content=json.dumps(
+            {"message": "Forbidden resource", "error": "forbidden", "status": 403, "cause": []}
+        ).encode(),
+    )
+    motivo = meli.Meli.motivo(r)
+    assert "forbidden" in motivo and "Forbidden resource" in motivo
+    assert "cause" not in motivo, "una causa vacia no aporta y ensucia la salida"
+
+
+def test_el_motivo_tolera_un_cuerpo_que_no_es_json() -> None:
+    assert "<html>" in meli.Meli.motivo(httpx.Response(403, content=b"<html>bloqueado</html>"))
+
+
+def test_el_motivo_no_filtra_el_access_token() -> None:
+    r = httpx.Response(401, content=b'{"message":"bad token APP_USR-123-abc"}')
+    assert "APP_USR-123-abc" not in meli.Meli.motivo(r)
+
+
+def test_el_403_de_la_busqueda_llega_con_su_motivo_a_la_medicion() -> None:
+    c = cliente({"/sites/MLC/search": (403, {"message": "Forbidden", "error": "forbidden"})})
+    m = c._brecha_2_bearer()
+    assert m.respuesta == "indeterminado"
+    assert m.evidence_level == "ND"
+    assert "forbidden" in m.evidencia, "sin el cuerpo la medicion no sirve para decidir nada"
+
+
+# --------------------------------------------------------------------- brecha 5
+
+
+def test_si_ninguna_ruta_responde_lo_dice_sin_adornos() -> None:
+    """El caso que importa: /sites/MLC/search cerrado. La medicion no debe suavizarlo."""
+    c = cliente(
+        {
+            "/sites/MLC/search": (403, {"error": "forbidden"}),
+            "/highlights/": (403, {"error": "forbidden"}),
+            "/trends/": (403, {"error": "forbidden"}),
+            "/users/me": (200, {"id": 1}),
+        }
+    )
+    m = c._brecha_5_rutas(pausa=0)
+    assert m.respuesta.startswith("NO:")
+    assert m.evidencia.count("403") >= 5
+    assert m.evidence_level == "V", "medir que nada funciona sigue siendo una medicion"
+
+
+def test_una_ruta_viva_se_nombra_y_se_verifica_con_el_multiget() -> None:
+    """Una lista de IDs no alimenta ninguna tabla: sin detalle no hay precio ni m2."""
+
+    def manejar(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "/highlights/" in url:
+            return httpx.Response(200, content=b'{"content":[{"id":"MLC123"}]}')
+        if url.startswith("https://api.mercadolibre.com/items?"):
+            return httpx.Response(200, content=b'[{"code":200,"body":{"id":"MLC123"}}]')
+        if "/users/me" in url:
+            return httpx.Response(200, content=b'{"id":1}')
+        return httpx.Response(403, content=b'{"error":"forbidden"}')
+
+    c = meli.Meli("APP_USR-x", UA, httpx.Client(transport=httpx.MockTransport(manejar)))
+    m = c._brecha_5_rutas(pausa=0)
+    assert "highlights" in m.respuesta and "multiget" in m.respuesta
+    assert "MLC123" in m.evidencia
+
+
+def test_sin_users_me_no_se_inventa_un_seller_id() -> None:
+    c = cliente(
+        {
+            "/sites/MLC/search": (403, {"error": "forbidden"}),
+            "/highlights/": (403, {"error": "forbidden"}),
+            "/trends/": (403, {"error": "forbidden"}),
+            "/users/me": (401, {"error": "invalid_token"}),
+        }
+    )
+    m = c._brecha_5_rutas(pausa=0)
+    assert "seller_id" not in m.evidencia
