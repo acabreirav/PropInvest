@@ -81,15 +81,18 @@ criterio_de_aceptacion:
 ## T-012 · Colector CMF tasas hipotecarias por banco
 estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]
 paraleliza_con: [T-010, T-011]
-estado_real: bloqueada
+estado_real: en_curso
 criterio_de_aceptacion:
-  - `dim_tasa_banco` poblada; brecha 13 de §G resuelta o marcada `ND` con evidencia del intento
-bloqueo: >
-  El proxy de red bloquea `www.cmfchile.cl`, asi que no se pudo inspeccionar
-  `articles-46417_recurso_1.xls` y no hay forma de saber su estructura. NO se escribio un
-  parser a ciegas: seria codigo especulativo. Se necesita que el humano descargue el archivo
-  desde el navegador y lo adjunte. URL verificada:
-  https://www.cmfchile.cl/portal/estadisticas/617/articles-46417_recurso_1.xls
+  - [x] Parser escrito contra la estructura REAL del archivo (117 filas, 17 bancos, 3 montos)
+  - [x] Localizacion por etiqueta y no por indice de fila (se comprobo que los indices se corren)
+  - [x] Deteccion de obsolescencia dentro del parser
+  - [x] `n/o` se trata como ND y no como cero (§3.2)
+  - [ ] **`dim_tasa_banco` poblada con datos vigentes** — imposible con la fuente actual
+hallazgo: >
+  La URL que este mismo archivo declaraba como fuente sirve una planilla de MAYO DE 2006.
+  Lo dice su celda "Fecha de la consulta", la firma la SBIF (disuelta en 2019) y lista
+  bancos que ya no existen. La fuente queda `enabled: false` con la razon registrada,
+  segun manda el §7.1. El dato viejo no se borra: se conserva como fixture de estructura.
 
 ## T-013 · dim_microzona desde MELI classified_locations
 estado: pendiente · agente: geo-microzonas · fase: 1 · depende_de: [T-011]
@@ -234,6 +237,25 @@ Vale ~800 UF en un departamento de UF 5.000.
 Depende de la respuesta del banco. Si el tramo especial exige solo primera vivienda (y no DS1/DS19)
 y su tasa es mejor, **reenfocar el ticket objetivo a <= UF 3.000**: domina en yield y en costo de
 fondos a la vez para este perfil.
+
+## T-907 · Encontrar la fuente VIGENTE de tasas hipotecarias por banco
+estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: []
+prioridad: alta
+motivo: >
+  `articles-46417_recurso_1.xls` sirve datos de 2006 (ver T-012). El parser ya existe y
+  funciona; lo que falta es una fuente con datos de este ciclo.
+pistas_a_revisar:
+  - articles-46416_recurso_1.xls — el archivo hermano, puede estar vigente
+  - cmfchile.cl/portal/estadisticas/617/w3-propertyvalue-29487.html — indice de "Tasas de Interes"
+  - BCCh serie F022.VIV.TIP.MA03.UF.Z.M, que `params.yml` ya cita como fuente de la tasa base
+  - las cotizaciones formales con CAE que el inversionista pida en los tres bancos (PASO 9)
+criterio_de_aceptacion:
+  - Fuente con `Fecha de la consulta` de menos de 12 meses
+  - `selftest()` verde incluido el check de frescura
+nota: >
+  Mientras tanto `params.yml` sigue usando sus cuatro tasas fijas con fuente citada
+  (BCCh jul-2026, licitacion FOGAES, Santander/Bco de Chile e Itau ago-2026). No es ideal
+  pero esta fechado y es de este ciclo, a diferencia de la planilla.
 
 ## T-903 · Vigilar parsers rotos
 El gate de caída >30% dispara esta tarea automáticamente.

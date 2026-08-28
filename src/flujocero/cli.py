@@ -153,10 +153,20 @@ def demo() -> None:
             f"{ev.tir_real.get(10, D(0)):>9.2%}{ev.score:>7.1f}"
         )
     uf = p.d("macro.valor_uf_clp")
-    peor = min((e for e in evals if not e.excluido), key=lambda x: x.btcf_mensual_uf)
+    vivos = [e for e in evals if not e.excluido]
+    if not vivos:
+        typer.echo(
+            "\nNinguna unidad sobrevivió a las exclusiones duras. Si todas se cayeron por "
+            "déficit de caja, revisa `deficit_mensual_tolerado_clp` en config/inversionista.yml."
+        )
+        return
+    peor = min(vivos, key=lambda x: x.btcf_mensual_uf)
     typer.echo(
-        f"\nDéficit mensual en pesos, peor caso: ${int(-peor.btcf_mensual_uf * uf):,}. "
-        "La TIR está en términos REALES: para compararla con un depósito a plazo, súmale la inflación."
+        f"\nDéficit mensual en pesos, peor caso: ${int(-peor.btcf_mensual_uf * uf):,}, "
+        f"de los cuales ${int(peor.amortizacion_mensual_uf * uf):,} son amortización — "
+        f"costo real ${int(-peor.costo_tenencia_mensual_uf * uf):,}."
+        "\nLa TIR está en términos REALES: para compararla con un depósito a plazo, "
+        "súmale la inflación."
     )
 
 

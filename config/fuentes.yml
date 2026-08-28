@@ -31,9 +31,20 @@ fuentes:
   - id: cmf_tasas_hipotecarias
     capa: 6
     legal_tier: json_publico
-    enabled: true
+    enabled: false          # <- DESHABILITADA. Ver razon.
     url: "https://www.cmfchile.cl/portal/estadisticas/617/articles-46417_recurso_1.xls"
     cadencia: mensual
+    modulo: "src/flujocero/sources/cmf_tasas_hipotecarias.py"
+    adr: "docs/adr/002-cmf-tasas-hipotecarias.md"
+    parser_version: "cmf_tasas_hipotecarias/1.0.0"
+    produce: dim_tasa_banco
+    razon_deshabilitada: >
+      El archivo que esa URL sirve HOY es de mayo de 2006: lo declara su celda
+      "Fecha de la consulta: 22 al 26 de mayo de 2006", lo firma la SBIF (disuelta en 2019)
+      y lista bancos que ya no existen (BankBoston, Banco del Desarrollo, Banco Paris).
+      El parser lo lee entero (117 filas, 17 bancos) y luego lo RECHAZA por antiguedad.
+      Verificado contra el archivo real el 28-ago-2026. Ver T-907.
+    selftest: "parseo verde; frescura ROJA (243 meses de antiguedad)"
 
   - id: meli_locations
     capa: 2

@@ -213,3 +213,40 @@ un parser para una planilla cuya estructura no se ha visto sería código a cieg
 avance. Se pide el archivo al usuario: es una descarga de navegador, sin terminal.
 
 siguiente: T-012 en cuanto llegue el XLS. Mientras, el resto de fase 1 depende de red.
+
+## 2026-08-28 · iteración 6 — T-012 y D-012 aprobada
+gates: **VERDE** · `pytest`: **117 passed** (eran 101)
+
+**Hallazgo mayor: la fuente de tasas por banco sirve datos de 2006.**
+El inversionista adjuntó `articles-46417_recurso_1.xls`. Su propia celda dice "Fecha de la
+consulta: 22 al 26 de mayo de 2006", lo firma la SBIF (disuelta en 2019) y lista BankBoston,
+Banco del Desarrollo, Banco Paris y Citibank NA. Tasas de 4,8% a 7,5%.
+
+Se escribió el parser igual —la estructura es real y verificada: 117 filas, 17 bancos, 3
+montos, 3 productos— con la **detección de obsolescencia adentro**: `parse()` lanza
+`PlanillaObsoleta` sobre los 12 meses. La fuente queda `enabled: false` con la razón escrita
+(§7.1) y el archivo se conserva como fixture de estructura, con un PROCEDENCIA.md que
+prohíbe usar sus números. Se abre **T-907** con cuatro pistas para la fuente vigente.
+
+Tres decisiones que el archivo obligó:
+1. **Localización por etiqueta, nunca por índice.** Entre hojas del mismo archivo el
+   contenido se corre una fila: índices fijos habrían leído la hoja 1 bien y las otras dos
+   mal, en silencio.
+2. **`n/o` es ND, no cero.** Convertirlo a 0,0% habría hecho aparecer a ese banco como el
+   más barato del mercado.
+3. **Una tasa por banco al cargar, la mínima**, explícita y no un promedio silencioso.
+
+**D-012 aprobada por el inversionista y aplicada.** El componente de 30% del score pasa de
+`deficit_flujo_mensual_uf` a `costo_tenencia_mensual_uf`, y la liquidez se protege con una
+exclusión dura por déficit de caja máximo, leída de `inversionista.yml`.
+
+Hallazgo al aplicarla: **con `deficit_mensual_tolerado_clp: 0` el filtro excluye el 100% del
+universo** y el ranking queda vacío. No es un bug: es el §2.3 hecho carne. Se separó el
+concepto — el filtro es el TECHO de liquidez ($400.000, su capacidad declarada) y el deseo de
+cero déficit se expresa en el ORDEN del ranking, no en el filtro. Filtro = cuánto puede;
+orden = cuánto quiere.
+
+Efecto sobre la demo: Ñuñoa se cae por liquidez ($432.372 > $400.000) y San Miguel baja de
+55,4 a 40,5 puntos al medirse por costo real. Concepción sigue primera.
+
+siguiente: T-907 (fuente vigente de tasas). El resto de fase 1 depende de red.

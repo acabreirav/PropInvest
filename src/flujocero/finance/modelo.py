@@ -77,6 +77,21 @@ class Evaluacion:
     score_desglose: dict[str, Decimal] = field(default_factory=dict)
 
 
+def deficit_caja_max_uf(params: Config, inv: Config) -> Decimal | None:
+    """Techo de deficit mensual de caja, en UF. `None` = sin filtro.
+
+    Sale de `inversionista.yml`, no de `params.yml`: es una restriccion de la persona,
+    no un supuesto del modelo. D-012 lo usa como EXCLUSION dura, no como penalizacion:
+    el score ordena por costo economico y este filtro protege la liquidez por separado.
+    """
+    if not params.crudo("score.exclusiones_duras").get("aplicar_deficit_caja_max"):
+        return None
+    tope = inv.crudo("restricciones").get("deficit_mensual_tolerado_clp")
+    if tope is None:
+        return None
+    return D(str(tope)) / params.d("macro.valor_uf_clp")
+
+
 # ----------------------------------------------------------------------- exclusiones duras
 
 
@@ -249,4 +264,15 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
             ev.tir_real[n] = D("-1")
         if n == 10:
             ev.van_uf = f.van(flujos, r)
+
+    # D-012 · filtro de liquidez, DESPUES de calcular: la unidad se excluye del ranking
+    # pero conserva todas sus metricas, para que el informe pueda mostrar por que se cayo.
+    tope = deficit_caja_max_uf(p, inv)
+    if tope is not None and -ev.btcf_mensual_uf > tope:
+        ev.excluido = True
+        uf = p.d("macro.valor_uf_clp")
+        ev.motivo_exclusion = (
+            f"deficit de caja {-ev.btcf_mensual_uf * uf:,.0f} CLP/mes sobre el tope "
+            f"tolerado de {tope * uf:,.0f} CLP/mes"
+        )
     return ev

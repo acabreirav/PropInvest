@@ -121,8 +121,13 @@ activo:
   radio_metro_metros: 600
 
 score:
+  # D-012 (28-ago-2026, aprobada por el inversionista): el componente de mayor peso pasa
+  # de deficit de CAJA a COSTO REAL de tenencia, o sea el deficit neto de amortizacion.
+  # Entre 69% y 84% del deficit mensual no es gasto: compra patrimonio. Ordenar por caja
+  # exageraba el costo entre 3 y 6 veces. La liquidez queda protegida por la exclusion
+  # dura `deficit_caja_max_clp`, no por el puntaje.
   pesos:
-    deficit_flujo_mensual_uf: 0.30
+    costo_tenencia_mensual_uf: 0.30
     pie_minimo_flujo_cero: 0.20
     tir_real_apalancada_10a: 0.20
     riesgo_microzona: 0.15
@@ -130,6 +135,10 @@ score:
     descuento_vs_microzona: 0.05
   exclusiones_duras:
     precio_max_uf: 6000
+    # Filtro de liquidez: se lee de `inversionista.yml:restricciones.deficit_mensual_tolerado_clp`.
+    # null = sin filtro. Es exclusion dura, no penalizacion: una unidad que exige mas caja
+    # de la que el inversionista quiere comprometer no compite, se cae.
+    aplicar_deficit_caja_max: true
     solo_vivienda_nueva: true
     m2_utiles_max: 140
     min_comparables_arriendo: 8

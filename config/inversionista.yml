@@ -51,10 +51,13 @@ restricciones:
   ahorro_disponible_pie_clp: 40000000  # techo, no objetivo: prefiere usar bastante menos
   otros_creditos_cuota_mensual_clp: 0  # carga financiera total <= 45% de la renta
   ahorro_mensual_clp: 400000           # capacidad de ahorro mensual holgada
-  deficit_mensual_tolerado_clp: 0      # PREFERENCIA declarada: no quiere deficit.
-                                       # La capacidad (400.000) es el techo duro; la
-                                       # tolerancia (0) es lo que quiere. Son distintos:
-                                       # el ranking usa la tolerancia, no la capacidad.
+  deficit_mensual_tolerado_clp: 400000 # TECHO DE LIQUIDEZ, no meta. Es su capacidad de
+                                       # ahorro declarada. Con 0 el filtro excluye el 100%
+                                       # del universo y el ranking queda vacio: el deseo de
+                                       # "cero deficit" se expresa en el ORDEN del ranking
+                                       # (D-012: ordena por costo real, menos es mejor),
+                                       # no en el filtro. Filtro = cuanto puede; orden =
+                                       # cuanto quiere.
   pie_objetivo_pct: 0.10               # no es una meta: es el escenario de contraste.
                                        # El ranking reporta el pie minimo de flujo cero por unidad.
   ticket_max_uf: 6000                  # tope legal. La restriccion real es la capacidad de credito:

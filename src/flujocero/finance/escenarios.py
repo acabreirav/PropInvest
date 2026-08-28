@@ -72,7 +72,9 @@ def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
         return
 
     comps = {
-        "deficit_flujo_mensual_uf": _normalizar([e.btcf_mensual_uf for _, e in vivos], True),
+        "costo_tenencia_mensual_uf": _normalizar(
+            [e.costo_tenencia_mensual_uf for _, e in vivos], True
+        ),
         "pie_minimo_flujo_cero": _normalizar([e.pie_minimo_flujo_cero for _, e in vivos], False),
         "tir_real_apalancada_10a": _normalizar([e.tir_real.get(10, D(-1)) for _, e in vivos], True),
         "riesgo_microzona": _normalizar([u.riesgo_microzona for u, _ in vivos], False),
