@@ -119,3 +119,105 @@ def test_el_snapshot_queda_en_la_zona_cruda(tmp_path: Path) -> None:
     )
     guardado = tmp_path / "cmf_indicadores" / "2026" / "08" / "28" / "robots.txt.json.gz"
     assert guardado.exists()
+
+
+# --------------------------------------------------------------------- cache del snapshot
+
+
+def _sembrar_snapshot(tmp_path: Path, cuerpo: bytes, dia: str = "28") -> None:
+    """Deja un snapshot en la zona cruda como lo haria una verificacion exitosa."""
+    import gzip
+
+    d = tmp_path / "cmf_indicadores" / "2026" / "08" / dia
+    d.mkdir(parents=True, exist_ok=True)
+    with gzip.open(d / "robots.txt.json.gz", "wb") as fh:
+        fh.write(cuerpo)
+
+
+def test_con_el_servidor_caido_se_usa_el_snapshot_guardado(tmp_path: Path) -> None:
+    """EL BLOQUEO REAL: la API de datos responde, robots.txt lleva rato en 500, y ya
+    teniamos un snapshot de una corrida anterior. RFC 9309 §2.3.1.3 admite apoyarse en el."""
+    _sembrar_snapshot(tmp_path, b"User-agent: *\nAllow: /\n")
+    v = rc.verificar(
+        URL,
+        UA,
+        cliente=cliente_que([500]),
+        momento=AHORA,
+        source_id="cmf_indicadores",
+        raiz_cruda=tmp_path,
+    )
+    assert v.allowed
+    assert "snapshot guardado" in v.motivo
+    assert v.snapshot_sha, "la procedencia sigue completa: hay sha del cuerpo cacheado"
+
+
+def test_un_snapshot_vacio_significa_que_no_habia_robots_txt(tmp_path: Path) -> None:
+    """Es el caso de la CMF: robots.txt daba 404 y se guardo el snapshot vacio."""
+    _sembrar_snapshot(tmp_path, b"")
+    v = rc.verificar(
+        URL,
+        UA,
+        cliente=cliente_que([500]),
+        momento=AHORA,
+        source_id="cmf_indicadores",
+        raiz_cruda=tmp_path,
+    )
+    assert v.allowed
+
+
+def test_un_snapshot_que_prohibia_sigue_prohibiendo(tmp_path: Path) -> None:
+    """La cache no es una puerta trasera: si el sitio prohibia, la copia tambien prohibe."""
+    _sembrar_snapshot(tmp_path, b"User-agent: *\nDisallow: /\n")
+    v = rc.verificar(
+        URL,
+        UA,
+        cliente=cliente_que([500]),
+        momento=AHORA,
+        source_id="cmf_indicadores",
+        raiz_cruda=tmp_path,
+    )
+    assert not v.allowed
+    assert "PROHIBIDO" in v.motivo
+
+
+def test_un_snapshot_demasiado_viejo_no_se_usa(tmp_path: Path) -> None:
+    """Pasados 30 dias el RFC ya no respalda apoyarse en la copia."""
+    _sembrar_snapshot(tmp_path, b"User-agent: *\nAllow: /\n")
+    muy_despues = datetime(2026, 11, 30, tzinfo=UTC)
+    v = rc.verificar(
+        URL,
+        UA,
+        cliente=cliente_que([500]),
+        momento=muy_despues,
+        source_id="cmf_indicadores",
+        raiz_cruda=tmp_path,
+    )
+    assert not v.allowed
+    assert "sin snapshot" in v.motivo
+
+
+def test_sin_snapshot_y_servidor_caido_no_se_recolecta(tmp_path: Path) -> None:
+    v = rc.verificar(
+        URL,
+        UA,
+        cliente=cliente_que([500]),
+        momento=AHORA,
+        source_id="cmf_indicadores",
+        raiz_cruda=tmp_path,
+    )
+    assert not v.allowed
+    assert "sin snapshot guardado" in v.motivo
+
+
+def test_el_servidor_vivo_siempre_gana_sobre_la_cache(tmp_path: Path) -> None:
+    """La cache es un respaldo, no un atajo: si el servidor responde, manda el servidor."""
+    _sembrar_snapshot(tmp_path, b"User-agent: *\nAllow: /\n")
+    v = rc.verificar(
+        URL,
+        UA,
+        cliente=cliente_que([200], b"User-agent: *\nDisallow: /\n"),
+        momento=AHORA,
+        source_id="cmf_indicadores",
+        raiz_cruda=tmp_path,
+    )
+    assert not v.allowed, "la respuesta viva prohibe, aunque la cache permitiera"

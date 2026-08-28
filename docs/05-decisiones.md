@@ -283,3 +283,36 @@ El modelo corre en UF, términos reales. El arriendo real no crece y el dividend
 tampoco baja. **El déficit mensual no mejora con el tiempo por sí solo** — no hay un año en
 que la unidad "empiece a rendir". Lo único que lo mueve es más pie, mejor tasa, o un mercado
 con mejor yield. Esperar no es una estrategia.
+
+
+---
+
+## D-013 · ¿Debe un `robots.txt` caído detener una API oficial con credencial?
+**Estado:** abierta · **Dueño:** humano · **Abierta:** 28-ago-2026
+
+`api.cmfchile.cl` devolvió `robots.txt` con 404 en una corrida y con 500 veinte minutos
+después, mientras sus endpoints de datos respondían HTTP 200 sin problema. El colector se
+detuvo, correctamente según el RFC 9309, pero la situación deja una pregunta de fondo.
+
+**El caso.** La CMF es `legal_tier: api_oficial`: API pública documentada, con apikey bajo
+registro gratuito a nombre del inversionista. `robots.txt` es un protocolo para **crawlers
+anónimos**; el acceso a una API con credencial lo gobiernan sus términos de servicio, no un
+archivo pensado para buscadores. Aun así el §3.1 exige un `robots_snapshot_sha` en cada
+fila, y para tenerlo hay que consultarlo.
+
+**Lo que ya se hizo, sin cambiar política:** cuando el servidor está caído se reutiliza el
+snapshot guardado en una corrida anterior, que es lo que el RFC 9309 §2.3.1.3 admite. Un
+snapshot real es mejor evidencia que cualquier suposición, y si ese snapshot decía
+`Disallow`, sigue prohibiendo. Eso resuelve el caso práctico sin relajar nada.
+
+**Lo que queda por decidir**, y no lo decide el modelo:
+
+| | **Mantener como está** | **Eximir a `api_oficial`** |
+|---|---|---|
+| Qué pasa | sin snapshot y con el servidor caído, no se recolecta | se recolecta igual, registrando el intento fallido en la procedencia |
+| A favor | una sola regla para todas las fuentes; imposible relajarla por accidente | robots.txt no gobierna una API con credencial, y un servidor caído bloquea un acceso legítimo |
+| En contra | la primera corrida en una máquina nueva puede quedar bloqueada por una caída ajena | abre una excepción por `legal_tier`, y las excepciones se erosionan |
+
+**Recomendación: mantener como está.** El respaldo por snapshot ya cubre el caso real, y la
+excepción por tier es exactamente la clase de puerta que después se usa para otra cosa. Si
+en la práctica vuelve a bloquear, se reabre con evidencia.

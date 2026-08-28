@@ -388,3 +388,28 @@ prohibiendo (un `Disallow: /` de verdad).
 
 Tambien se corrigio la pista de error de la CLI, que solo hablaba de proxy y 403 y no servia
 para este caso. Ahora distingue tres sintomas y menciona `cli probe`.
+
+## 2026-08-28 · iteración 11 — respaldo por snapshot cuando el servidor se cae
+gates: **VERDE** · `pytest`: **160 passed** (eran 154)
+
+Tercera corrida: `robots.txt respondio 500 tras 4 intentos`. Los reintentos hicieron su
+trabajo y el servidor sigue caído, mientras los endpoints de datos responden HTTP 200.
+
+**Lo que faltaba: usar el snapshot que ya teníamos.** El §3.1 obliga a guardar un
+`robots_snapshot_sha` en cada verificación exitosa, así que la zona cruda ya contenía el
+robots.txt de la primera corrida del usuario. El RFC 9309 §2.3.1.3 admite apoyarse en una
+copia cacheada cuando el archivo es inalcanzable. **Un snapshot real es mejor evidencia que
+una suposición**, en cualquiera de las dos direcciones.
+
+Reglas del respaldo, todas con test:
+- El servidor vivo **siempre** gana sobre la cache: es un respaldo, no un atajo.
+- Un snapshot que decía `Disallow` **sigue prohibiendo**. No es una puerta trasera.
+- Un snapshot vacío (de un 4xx) significa que no había robots.txt: permite.
+- Pasados **30 días** ya no se usa: es el límite que da el RFC.
+- Sin snapshot y con el servidor caído, no se recolecta.
+
+Se abre **D-013**, que es la pregunta de fondo y no la decide el modelo: si un `robots.txt`
+caído debe detener una API oficial con credencial a nombre del inversionista, cuando ese
+protocolo está pensado para crawlers anónimos. **Recomendación: mantener como está** — el
+respaldo por snapshot ya cubre el caso real, y una excepción por `legal_tier` es la clase de
+puerta que después se usa para otra cosa.
