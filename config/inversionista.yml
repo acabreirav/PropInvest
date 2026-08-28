@@ -30,24 +30,28 @@ estrategia_dfl2:
     llegar ahi, evaluar una segunda persona natural (conyuge con separacion de bienes),
     NUNCA una sociedad.
   exencion_ganancia_capital_uf: 8000   # acumulativa de por vida, por persona
-  # D-011 resuelta en lo esencial: conyuge bajo PARTICIPACION EN LOS GANANCIALES
-  # (patrimonios separados durante el matrimonio), sin propiedades y con 0 cupos DFL2.
-  # El hogar dispone de 4 cupos, no de 2, y de DOS solicitantes elegibles al subsidio.
-  # Estructura preferida: una unidad por comprador, cada quien dueno de la suya.
+  # D-011: conyuge bajo PARTICIPACION EN LOS GANANCIALES (patrimonios separados durante
+  # el matrimonio), sin propiedades y con 0 cupos DFL2. El hogar tiene 4 cupos, no 2.
+  # PERO: el ahorro de $40.000.000 es de EL, no del hogar. La compra es INDIVIDUAL.
+  # La conyuge entra, si acaso, como codeudora solidaria para respaldar la solicitud,
+  # NUNCA como co-propietaria: figurar en la escritura le gastaria un cupo DFL2.
   segunda_persona_natural:
     regimen: participacion_en_los_gananciales
     propiedades_actuales: 0
     viviendas_dfl2_actuales: 0
     califica_subsidio_tasa: true
     renta_liquida_mensual_clp: 2500000
-    ticket_max_uf: 3886                # capacidad propia, calculada con `cli capacidad`
-    verificar_en_escritura: "que la propiedad quede a nombre de un solo titular"
+    rol: codeudora_solidaria_sin_copropiedad   # a confirmar con el banco (D-011 pregunta 1)
+    aporta_pie: false
+    prohibido: "figurar como propietaria en la escritura mientras tenga cupos DFL2 libres"
 
 restricciones:
   # Completar con datos reales antes de correr `make score`.
   renta_liquida_mensual_clp: 2250000   # el banco exige dividendo <= 25% de esto
   ahorro_disponible_pie_clp: 40000000  # techo, no objetivo: prefiere usar bastante menos
   otros_creditos_cuota_mensual_clp: 0  # carga financiera total <= 45% de la renta
+  ahorro_mensual_clp: null             # PENDIENTE. Determina cuanto deficit mensual es
+                                       # sostenible, que es el criterio #1 del ranking (§12).
   pie_objetivo_pct: 0.10               # no es una meta: es el escenario de contraste.
                                        # El ranking reporta el pie minimo de flujo cero por unidad.
   ticket_max_uf: 6000                  # tope legal. La restriccion real es la capacidad de credito:

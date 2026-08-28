@@ -179,9 +179,48 @@ tramo especial de D-009.
 de los dos consume **dos cupos DFL2 en una sola propiedad**, la peor asignación posible de un
 recurso del que sólo hay cuatro en toda la vida del hogar.
 
-**Decisión operativa:** el ranking se calcula sobre **UF 3.497** (capacidad individual de él)
-como caso base, y se agrega un escenario **B** con dos unidades, una por comprador. La
-Estructura A se conserva como contraste, no como plan.
+### CORRECCIÓN 28-ago-2026 · la Estructura B no aplica
+
+El inversionista aclara que **los $40.000.000 son suyos, no del hogar**, y que su intención
+nunca fue una compra conjunta: la idea de sumar la renta era para **respaldar su propia
+solicitud ante el banco**, incurriendo él en la deuda y quedando él como dueño.
+
+Eso invalida la Estructura B tal como estaba planteada: suponía que cada comprador financiaba
+su propio pie. Sin ahorro propio de la cónyuge, la segunda unidad no tiene con qué escriturarse.
+**La comparación anterior era correcta en la aritmética y equivocada en el supuesto.**
+
+### La estructura que sí corresponde
+
+**C · compra individual, cónyuge como codeudora solidaria sin co-propiedad.**
+Él pone el pie, él escritura, él usa 1 de sus 2 cupos DFL2. Ella respalda la solicitud.
+
+Lo que hay que separar con cuidado, porque el lenguaje del banco los mezcla:
+
+| Figura | ¿Responde por la deuda? | ¿Queda como dueña? | ¿Gasta su cupo DFL2? |
+|---|---|---|---|
+| **Codeudora solidaria** | sí | **no** | **no** |
+| **Co-propietaria** | sí | sí | **sí — se pierde un cupo** |
+
+**Si el banco exige co-propiedad para aceptar la renta, la operación pasa a costar un cupo
+DFL2 del hogar.** Ahí hay que decidir si el mayor monto aprobado lo vale. Con 4 cupos
+disponibles y ninguno usado, probablemente no.
+
+### Preguntas al banco, en orden de importancia
+
+1. **¿Aceptan codeudor solidario sin exigir que figure en la escritura como propietario?**
+   Es LA pregunta. Si la respuesta es no, la ganancia de monto cuesta un cupo DFL2.
+2. **¿Ser codeudora consume su condición de "primera vivienda" para un subsidio futuro?**
+   Si la consume, hoy no cuesta nada pero cierra una puerta que hoy está abierta.
+3. ¿Cuánto sube efectivamente el monto aprobado al sumarla? Puede ser menos de lo que sugiere
+   la aritmética: varios bancos ponderan la renta del codeudor, no la suman entera.
+
+**Y algo que no es financiero:** una codeudora solidaria responde por el 100% de la deuda,
+no por la mitad. No es un trámite, es una obligación real de ella. Conviene que lo sepa antes
+de firmar, no después.
+
+**Decisión operativa:** el caso base es **compra individual, UF 3.497**, con el pie saliendo
+de los $40.000.000 propios. La renta conjunta se modela sólo como escenario de contraste,
+condicionado a la respuesta 1.
 
 **Qué falta para cerrar del todo:** (a) confirmación del notario de que bajo participación en
 los gananciales la propiedad adquirida es individual para efectos de DFL2 — trámite de
