@@ -247,6 +247,66 @@ def ingest(
 
 
 @app.command()
+def probe() -> None:
+    """Diagnostico de una fuente: prueba URLs de complejidad creciente y reporta cual pasa.
+
+    Existe porque un `Server disconnected` no dice DONDE esta el limite. En vez de adivinar,
+    se mide: hoy, un mes, un ano, y el rango completo. La primera que falle acota el
+    problema a un tamano de ventana concreto.
+    """
+    import os
+    import time as _t
+
+    import httpx
+    from dotenv import load_dotenv
+
+    from flujocero.sources.base import ocultar_secreto
+    from flujocero.sources.cmf_indicadores import BASE
+
+    load_dotenv(RAIZ / ".env")
+    apikey = os.environ.get("CMF_APIKEY", "").strip()
+    if not apikey:
+        typer.echo("✗ falta CMF_APIKEY en .env")
+        raise typer.Exit(2)
+    ua = os.environ.get("USER_AGENT", "").strip() or "FlujoCero-ResearchBot/1.0"
+
+    pruebas = [
+        ("robots.txt", "https://api.cmfchile.cl/robots.txt"),
+        ("hoy", f"{BASE}/uf?apikey={apikey}&formato=json"),
+        ("1 mes", f"{BASE}/uf/periodo/2026/08/2026/08?apikey={apikey}&formato=json"),
+        ("8 meses", f"{BASE}/uf/periodo/2026/01/2026/08?apikey={apikey}&formato=json"),
+        ("1 ano", f"{BASE}/uf/periodo/2025/01/2025/12?apikey={apikey}&formato=json"),
+        ("32 meses", f"{BASE}/uf/periodo/2024/01/2026/08?apikey={apikey}&formato=json"),
+    ]
+    typer.echo(f"user-agent: {ua}\n")
+    typer.echo(f"{'prueba':<12}{'resultado':<30}{'bytes':>8}  registros")
+    typer.echo("-" * 68)
+    with httpx.Client(timeout=45.0, follow_redirects=True) as c:
+        for i, (etiqueta, url) in enumerate(pruebas):
+            if i:
+                _t.sleep(0.5)
+            try:
+                r = c.get(url, headers={"User-Agent": ua})
+                n = ""
+                if r.status_code == 200 and "json" in url:
+                    try:
+                        d = r.json()
+                        clave = next(iter(d)) if isinstance(d, dict) else "?"
+                        n = f"{len(d[clave])} en {clave}" if isinstance(d, dict) else "?"
+                    except (ValueError, KeyError, TypeError):
+                        n = "respuesta no es el JSON esperado"
+                estado = f"HTTP {r.status_code}"
+                typer.echo(f"{etiqueta:<12}{estado:<30}{len(r.content):>8}  {n}")
+            except httpx.HTTPError as exc:
+                typer.echo(f"{etiqueta:<12}{type(exc).__name__ + ': ' + str(exc)[:26]:<30}{'—':>8}")
+    typer.echo(
+        "\nLa primera prueba que falle acota el limite. Si 'hoy' pasa y '32 meses' no,"
+        "\nel problema es el tamano de la ventana y el troceado por ano ya lo resuelve."
+    )
+    typer.echo(f"\n(URL de ejemplo, sin la clave: {ocultar_secreto(pruebas[-1][1])})")
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []

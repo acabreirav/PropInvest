@@ -34,6 +34,12 @@ from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field, field_validator
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 from flujocero.sources.base import (
     LegalTier,
@@ -48,8 +54,24 @@ from flujocero.sources.base import (
 )
 
 BASE = "https://api.cmfchile.cl/api-sbifv3/recursos_api"
-PARSER_VERSION = "cmf_indicadores/1.0.0"
+PARSER_VERSION = "cmf_indicadores/1.1.0"
 TIMEOUT = 30.0
+
+# §5 del contrato: backoff exponencial con jitter. Estos son los fallos que SI vale
+# reintentar — la conexion se corto o expiro. Un 401 o un 404 no se reintentan nunca:
+# reintentar un error de credencial solo consigue que te bloqueen.
+TRANSITORIOS = (
+    httpx.RemoteProtocolError,
+    httpx.ConnectError,
+    httpx.ReadTimeout,
+    httpx.ConnectTimeout,
+    httpx.ReadError,
+)
+INTENTOS = 4
+
+# La API corta la conexion con rangos largos. Se pide de a un ano calendario y se une
+# despues: mas peticiones chicas, pero cada una responde. Ver `ventanas()`.
+MESES_POR_PETICION = 12
 
 # serie interna -> (ruta del recurso, clave del envoltorio JSON, unidad)
 SERIES: dict[str, tuple[str, str, str]] = {
@@ -93,6 +115,31 @@ class Indicador(BaseModel):
         if v not in {"V", "D", "E", "ND"}:
             raise ValueError(f"evidence_level inválido: {v}")
         return v
+
+
+def ventanas(desde: str, hasta: str, meses: int = MESES_POR_PETICION) -> list[tuple[str, str]]:
+    """Parte un rango AAAA-MM en tramos de a lo mas `meses`, alineados al ano calendario.
+
+    Existe porque la API de la CMF cierra la conexion sin responder cuando el periodo es
+    largo: 32 meses de una sola vez fallan, un ano a la vez funciona. Es puro y testeable.
+    """
+    a1, m1 = (int(x) for x in desde.split("-"))
+    a2, m2 = (int(x) for x in hasta.split("-"))
+    if (a1, m1) > (a2, m2):
+        raise ValueError(f"el rango {desde}..{hasta} esta invertido")
+    salida: list[tuple[str, str]] = []
+    ay, am = a1, m1
+    while (ay, am) <= (a2, m2):
+        total = (ay * 12 + am - 1) + meses - 1
+        by, bm = divmod(total, 12)
+        bm += 1
+        if (by, bm) > (a2, m2):
+            by, bm = a2, m2
+        salida.append((f"{ay:04d}-{am:02d}", f"{by:04d}-{bm:02d}"))
+        total = by * 12 + bm  # mes siguiente
+        ay, am = divmod(total, 12)
+        am += 1
+    return salida
 
 
 def a_decimal(texto: str) -> Decimal:
@@ -169,8 +216,26 @@ class CmfIndicadores:
             ruta = f"{BASE}/{recurso}"
         return f"{ruta}?apikey={self.apikey}&formato=json"
 
+    def _pedir(self, cliente: httpx.Client, destino: str) -> httpx.Response:
+        """GET con backoff exponencial y jitter (§5). Solo reintenta fallos transitorios."""
+
+        @retry(
+            retry=retry_if_exception_type(TRANSITORIOS),
+            stop=stop_after_attempt(INTENTOS),
+            wait=wait_exponential_jitter(initial=1, max=20),
+            reraise=True,
+        )
+        def _intento() -> httpx.Response:
+            return cliente.get(destino, headers={"User-Agent": self.user_agent})
+
+        return _intento()
+
     def collect(self, scope: Scope) -> Iterator[RawDoc]:
-        """Descarga y persiste en la zona cruda ANTES de parsear (§3.6)."""
+        """Descarga y persiste en la zona cruda ANTES de parsear (§3.6).
+
+        El periodo se trocea en ventanas de a lo mas un ano: la API cierra la conexion
+        sin responder cuando el rango es largo.
+        """
         veredicto = self.robots_ok()
         if not veredicto.allowed or not veredicto.snapshot_sha:
             # §3.5: la verificación de robots pasa ANTES de recolectar. Y sin snapshot_sha
@@ -178,36 +243,45 @@ class CmfIndicadores:
             raise ErrorDeFuente(
                 f"no se recolecta: verificación de robots.txt no superada — {veredicto.motivo}"
             )
+        tramos: list[tuple[str | None, str | None]]
+        if scope.desde and scope.hasta:
+            tramos = list(ventanas(scope.desde, scope.hasta))  # type: ignore[arg-type]
+        else:
+            tramos = [(None, None)]
+
         cliente = self._cliente or httpx.Client(timeout=TIMEOUT, follow_redirects=True)
         propio = self._cliente is None
+        enviadas = 0
         try:
-            for i, serie in enumerate(self.series):
-                if scope.limite_docs is not None and i >= scope.limite_docs:
-                    break
-                destino = self.url(serie, scope.desde, scope.hasta)
-                if i and self.pausa_s:
-                    time.sleep(self.pausa_s)
-                try:
-                    resp = cliente.get(destino, headers={"User-Agent": self.user_agent})
-                except httpx.HTTPError as exc:
-                    raise ErrorDeFuente(
-                        f"no se pudo alcanzar {ocultar_secreto(destino)}: "
-                        f"{type(exc).__name__}: {exc}"
-                    ) from exc
-                if resp.status_code != 200:
-                    raise ErrorDeFuente(
-                        f"{ocultar_secreto(destino)} respondió {resp.status_code}: "
-                        f"{resp.text[:200]}"
+            for serie in self.series:
+                for desde, hasta in tramos:
+                    if scope.limite_docs is not None and enviadas >= scope.limite_docs:
+                        return
+                    destino = self.url(serie, desde, hasta)
+                    if enviadas and self.pausa_s:
+                        time.sleep(self.pausa_s)
+                    try:
+                        resp = self._pedir(cliente, destino)
+                    except httpx.HTTPError as exc:
+                        raise ErrorDeFuente(
+                            f"no se pudo alcanzar {ocultar_secreto(destino)} tras "
+                            f"{INTENTOS} intentos: {type(exc).__name__}: {exc}"
+                        ) from exc
+                    if resp.status_code != 200:
+                        raise ErrorDeFuente(
+                            f"{ocultar_secreto(destino)} respondió {resp.status_code}: "
+                            f"{resp.text[:200]}"
+                        )
+                    enviadas += 1
+                    yield escribir_crudo(
+                        source_id=self.id,
+                        url=ocultar_secreto(destino),
+                        contenido=resp.content,
+                        momento=scope.ahora,
+                        robots_snapshot_sha=veredicto.snapshot_sha,
+                        nombre=f"{serie}_{desde or 'hoy'}_{hasta or ''}",
+                        raiz=self.raiz_cruda,
                     )
-                yield escribir_crudo(
-                    source_id=self.id,
-                    url=ocultar_secreto(destino),
-                    contenido=resp.content,
-                    momento=scope.ahora,
-                    robots_snapshot_sha=veredicto.snapshot_sha,
-                    nombre=f"{serie}_{scope.desde or 'hoy'}_{scope.hasta or ''}",
-                    raiz=self.raiz_cruda,
-                )
         finally:
             if propio:
                 cliente.close()

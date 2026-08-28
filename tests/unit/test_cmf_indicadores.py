@@ -26,11 +26,13 @@ from flujocero.sources.base import (
     ruta_cruda,
 )
 from flujocero.sources.cmf_indicadores import (
+    INTENTOS,
     CmfIndicadores,
     ErrorDeFuente,
     a_decimal,
     cargar_en_duckdb,
     desde_entorno,
+    ventanas,
 )
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "cmf"
@@ -346,3 +348,132 @@ def test_una_caida_de_red_es_error_de_fuente_no_traceback(tmp_path: Path) -> Non
     c = colector(series=("uf",), cliente=cliente, raiz_cruda=tmp_path, pausa_s=0)
     with pytest.raises(ErrorDeFuente, match="no se pudo alcanzar"):
         list(c.collect(Scope(ahora=AHORA)))
+
+
+# --------------------------------------------------------------------- troceado del periodo
+
+
+@pytest.mark.parametrize(
+    ("desde", "hasta", "esperado"),
+    [
+        (
+            "2024-01",
+            "2026-08",
+            [("2024-01", "2024-12"), ("2025-01", "2025-12"), ("2026-01", "2026-08")],
+        ),
+        ("2026-08", "2026-08", [("2026-08", "2026-08")]),
+        ("2025-06", "2026-03", [("2025-06", "2026-03")]),
+        ("2024-01", "2024-12", [("2024-01", "2024-12")]),
+        (
+            "2024-06",
+            "2026-06",
+            [("2024-06", "2025-05"), ("2025-06", "2026-05"), ("2026-06", "2026-06")],
+        ),
+    ],
+)
+def test_el_periodo_se_trocea_en_ventanas_de_un_ano(desde, hasta, esperado) -> None:
+    """La API cierra la conexion con rangos largos. 32 meses fallan; un ano responde."""
+    assert ventanas(desde, hasta) == esperado
+
+
+def test_las_ventanas_cubren_el_rango_completo_sin_huecos_ni_solapes() -> None:
+    tramos = ventanas("2024-01", "2026-08")
+    assert tramos[0][0] == "2024-01"
+    assert tramos[-1][1] == "2026-08"
+    for (_, fin), (inicio, _) in zip(tramos[:-1], tramos[1:], strict=True):
+        fy, fm = (int(x) for x in fin.split("-"))
+        iy, im = (int(x) for x in inicio.split("-"))
+        assert iy * 12 + im == fy * 12 + fm + 1, f"hueco o solape entre {fin} y {inicio}"
+
+
+def test_un_rango_invertido_es_error() -> None:
+    with pytest.raises(ValueError, match="invertido"):
+        ventanas("2026-08", "2024-01")
+
+
+def test_collect_pide_una_ventana_por_ano_y_por_serie(tmp_path: Path) -> None:
+    pedidas: list[str] = []
+
+    def manejar(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if "robots.txt" in url:
+            return httpx.Response(200, content=b"User-agent: *\nAllow: /\n")
+        pedidas.append(url)
+        return httpx.Response(200, content=(FIXTURES / "uf_periodo_2026_08.json").read_bytes())
+
+    c = colector(
+        series=("uf",),
+        cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+        raiz_cruda=tmp_path,
+        pausa_s=0,
+    )
+    docs = list(c.collect(Scope(desde="2024-01", hasta="2026-08", ahora=AHORA)))
+    assert len(docs) == 3, "un documento por ano calendario"
+    assert any("2024/01/2024/12" in u for u in pedidas)
+    assert any("2025/01/2025/12" in u for u in pedidas)
+    assert any("2026/01/2026/08" in u for u in pedidas)
+    assert len({d.ruta for d in docs}) == 3, "cada ventana en su propio archivo crudo"
+
+
+# --------------------------------------------------------------------- reintentos
+
+
+def test_un_corte_de_conexion_se_reintenta_y_termina_pasando(tmp_path: Path) -> None:
+    """§5 del contrato: backoff exponencial con jitter. Es EL fallo que vio el usuario:
+    `RemoteProtocolError: Server disconnected without sending a response`."""
+    intentos = {"n": 0}
+
+    def manejar(request: httpx.Request) -> httpx.Response:
+        if "robots.txt" in str(request.url):
+            return httpx.Response(200, content=b"User-agent: *\nAllow: /\n")
+        intentos["n"] += 1
+        if intentos["n"] < 3:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return httpx.Response(200, content=(FIXTURES / "uf_periodo_2026_08.json").read_bytes())
+
+    c = colector(
+        series=("uf",),
+        cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+        raiz_cruda=tmp_path,
+        pausa_s=0,
+    )
+    docs = list(c.collect(Scope(desde="2026-08", hasta="2026-08", ahora=AHORA)))
+    assert len(docs) == 1
+    assert intentos["n"] == 3, "reintento hasta que respondio"
+
+
+def test_si_el_corte_persiste_se_rinde_con_un_mensaje_util(tmp_path: Path) -> None:
+    def manejar(request: httpx.Request) -> httpx.Response:
+        if "robots.txt" in str(request.url):
+            return httpx.Response(200, content=b"User-agent: *\nAllow: /\n")
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+    c = colector(
+        series=("uf",),
+        cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+        raiz_cruda=tmp_path,
+        pausa_s=0,
+    )
+    with pytest.raises(ErrorDeFuente, match=f"tras {INTENTOS} intentos"):
+        list(c.collect(Scope(desde="2026-08", hasta="2026-08", ahora=AHORA)))
+
+
+def test_un_401_no_se_reintenta_nunca(tmp_path: Path) -> None:
+    """Reintentar un error de credencial solo consigue que te bloqueen."""
+    intentos = {"n": 0}
+
+    def manejar(request: httpx.Request) -> httpx.Response:
+        if "robots.txt" in str(request.url):
+            return httpx.Response(200, content=b"User-agent: *\nAllow: /\n")
+        intentos["n"] += 1
+        return httpx.Response(401, content=b"apikey invalida")
+
+    c = colector(
+        series=("uf",),
+        cliente=httpx.Client(transport=httpx.MockTransport(manejar)),
+        raiz_cruda=tmp_path,
+        pausa_s=0,
+    )
+    with pytest.raises(ErrorDeFuente, match="401"):
+        list(c.collect(Scope(desde="2026-08", hasta="2026-08", ahora=AHORA)))
+    assert intentos["n"] == 1, "un 401 no se reintenta"

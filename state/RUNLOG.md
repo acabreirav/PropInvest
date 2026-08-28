@@ -282,3 +282,37 @@ gates en verde. Lo unico que no se pudo ensayar es la ejecucion en Windows, porq
 entorno es Linux — y ahi es exactamente donde estaba el fallo.
 
 siguiente: que el usuario corra `cli ingest` para cerrar T-010.
+
+## 2026-08-28 · iteración 8 — reintentos, troceado del periodo y diagnostico
+gates: **VERDE** · `pytest`: **141 passed** (eran 130)
+
+**Primera ejecucion real del colector, en la maquina del usuario.** El setup funciono, la
+verificacion de robots.txt paso, y el colector llego a hacer la peticion. Fallo asi:
+
+    RemoteProtocolError: Server disconnected without sending a response.
+    .../uf/periodo/2024/01/2026/08
+
+O sea: la conexion y el TLS funcionan (robots.txt se descargo bien contra el mismo host),
+y lo que falla es la peticion de 32 meses de serie diaria.
+
+**Hallazgo sobre mi propio trabajo:** el §5 del contrato exige `httpx` **+ `tenacity` con
+backoff exponencial y jitter**, y el colector no lo implementaba. Un corte de conexion
+mataba la corrida completa sin un solo reintento.
+
+qué se agregó:
+1. **Reintentos con backoff exponencial y jitter** sobre los fallos transitorios
+   (`RemoteProtocolError`, `ConnectError`, `ReadTimeout`, `ConnectTimeout`, `ReadError`),
+   4 intentos. **Un 401 o un 404 no se reintentan nunca**: reintentar un error de
+   credencial solo consigue que te bloqueen.
+2. **`ventanas()`**: trocea el periodo en tramos de a lo mas un ano calendario. Funcion
+   pura, con test de que los tramos cubren el rango sin huecos ni solapes. `parser_version`
+   sube a 1.1.0.
+3. **`cli probe`**: diagnostico que prueba URLs de complejidad creciente — robots.txt, hoy,
+   1 mes, 8 meses, 1 ano, 32 meses — y reporta cual pasa. Existe para no adivinar donde
+   esta el limite. La primera prueba que falla lo acota.
+
+Un test propio salio mal: `zip(tramos, tramos[1:], strict=True)` exige listas del mismo
+largo y la segunda es una mas corta por construccion. Corregido a `tramos[:-1]`.
+
+siguiente: que el usuario corra `cli probe` y despues `cli ingest`. Si el troceado por ano
+resuelve el corte, T-010 se cierra.
