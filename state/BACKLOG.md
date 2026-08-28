@@ -327,7 +327,8 @@ nota: >
 estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: [T-011]
 criterio_de_aceptacion:
   - [ ] ADR por fuente candidata con robots + legal_tier: chilepropiedades, catastro SII, CBR
-  - [ ] Ninguna fuente `html_prohibido` sin aprobacion humana explicita
+  - [x] Aprobacion humana para `html_prohibido`: **D-016, 28-ago-2026**. Cada colector de esa
+        categoria debe citarla en su ADR y en fuentes.yml, o no se habilita.
   - [ ] Estimacion de cobertura por comuna de Fase 1
 nota: >
   El 403 de MercadoLibre golpea mas fuerte al usado que al nuevo: la obra nueva tiene caminos
@@ -372,3 +373,14 @@ nota: >
   params.yml sin que nadie lo usara. Los datos del usuario mostraron que son dos beneficios
   separables: 60 pb del Decreto 180 mas el efecto FOGAES sobre el spread. Bloqueada hasta
   saber si FOGAES cubre usadas (T-913): la respuesta define si el usado va a 90% o a 80%.
+
+## T-916 · Auditar el codigo heredado del proyecto anterior del usuario
+estado: bloqueada · agente: fuente-scout · fase: 1 · depende_de: []
+bloqueo: "esperando el codigo. El zip no sube: se acordo pasarlo por repo de GitHub."
+criterio_de_aceptacion:
+  - [ ] Inventario: que scrapea cada modulo, contra que endpoint, y si sigue vivo tras el 403
+  - [ ] Que se puede reusar tal cual, que hay que reescribir para cumplir el contrato
+        (seis columnas de procedencia, zona cruda, idempotencia, cero datos personales)
+  - [ ] Revision critica: que se le escapo al trabajo anterior (lo pidio el usuario explicitamente)
+  - [ ] Inventario de la data historica: que vale (series irreproducibles, fixtures) y que es basura
+  - [ ] Purga de datos personales ANTES de que nada toque la base analitica

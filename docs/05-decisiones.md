@@ -459,3 +459,55 @@ individuales todavía. Esa capa pasa de ancla a fuente de atributos.
 [T13 — Fogaes ampliado](https://www.t13.cl/noticia/te-puede-servir/para-viviendas-hasta-6000-uf-como-funciona-fogaes-ampliado-desde-cuando-estara-26-8-2026) ·
 [UsaTuSubsidio — prohibiciones de las viviendas con subsidio habitacional](https://usatusubsidio.cl/noticias/prohibiciones-de-las-viviendas-con-subsidio-habitacional/) ·
 [BioBioChile — razones por las que te pueden quitar el subsidio](https://www.biobiochile.cl/noticias/servicios/explicado/2023/11/29/las-6-razones-por-las-que-te-pueden-quitar-el-subsidio-habitacional.shtml)
+
+---
+
+## D-016 · Aprobación humana para scrapear fuentes `html_prohibido`
+**Estado:** aprobada por el usuario · **Fecha:** 28-ago-2026 · **Autoriza:** Álvaro Cabreira
+
+El §3.5 del contrato clasifica Portal Inmobiliario como `html_prohibido` —su `robots.txt`
+bloquea `/propiedades/`— y establece que esa categoría **requiere aprobación humana explícita
+registrada aquí**. Este es ese registro.
+
+### Lo que el usuario autoriza, textual
+
+> *"no tengo problema que corras el scrapper de nuevo, creo que es clave actualizar la data
+> (...) No comercializaré la data ni nada (...) es solo para yo detectar oportunidades, es
+> como un vitrineo masivo con ayuda de scrapping."*
+
+Se le planteó la objeción antes de que decidiera (Ley 21.719, `robots.txt`, y que Portal
+Inmobiliario corre sobre la API de MercadoLibre que acaba de cerrarse). La reafirmó. Decisión
+tomada: **se procede.**
+
+### Qué cambia
+
+`legal_tier: html_prohibido` deja de ser un bloqueo absoluto y pasa a ser **una fuente que
+exige esta aprobación citada en su ADR**. Todo colector de esa categoría debe referenciar
+D-016 en `config/fuentes.yml` y en su ADR, o no se habilita.
+
+El uso personal y no comercial sí modifica el análisis de **términos de servicio**: no hay
+reventa, ni producto derivado, ni redistribución. Eso es real y es lo que sostiene la decisión.
+
+### Qué NO cambia, y no depende de la intención del usuario
+
+1. **Ley 21.719.** Que el uso sea personal no saca a un dato personal de su ámbito, y el hecho
+   de que sea público tampoco. Los avisos traen nombre, teléfono y correo del corredor:
+   **eso no entra a la base analítica, punto.** El §3.4 sigue vigente sin excepción.
+2. **No se escala contra bloqueos técnicos.** Si el sitio responde 403 o pone un WAF, se acata.
+   Nada de proxies residenciales, rotación de identidad ni evasión de detección: el §3.5 ya
+   dice que un scraper que necesita proxies residenciales es la señal de que estás en la
+   categoría equivocada. La aprobación cubre recolectar, no cubre esquivar.
+3. **Cadencia moderada y `User-Agent` honesto.** Se respeta `Crawl-delay` donde exista y se
+   sigue identificando con el UA declarado. No se disfraza de navegador.
+4. **La data no se redistribuye.** Queda en la máquina del usuario y en su base local.
+
+### Consecuencia inmediata
+
+Desbloquea T-912 (de dónde salen los avisos de vivienda usada). El orden de preferencia del
+§3.5 **no se invierte**: se sigue prefiriendo API oficial y `json_publico` cuando existan. Lo
+que esta decisión habilita es el último recurso, no el primero.
+
+Nota de realidad, medida ayer: Portal Inmobiliario corre sobre MercadoLibre, y
+`/sites/MLC/search` devuelve 403 desde el 28-ago-2026 (ADR-003). Es posible que el código
+heredado del usuario ya no funcione por esa razón y no por el `robots.txt`. Se verifica al
+revisarlo.
