@@ -316,3 +316,41 @@ largo y la segunda es una mas corta por construccion. Corregido a `tramos[:-1]`.
 
 siguiente: que el usuario corra `cli probe` y despues `cli ingest`. Si el troceado por ano
 resuelve el corte, T-010 se cierra.
+
+## 2026-08-28 · iteración 9 — el diagnostico desmiente mi hipotesis
+gates: **VERDE** · `pytest`: **141 passed**
+
+`cli probe` corrido por el usuario contra la API real:
+
+    robots.txt  HTTP 404                    327 bytes
+    hoy         RemoteProtocolError          —
+    1 mes       HTTP 200    2.159 bytes     31 registros
+    8 meses     HTTP 200   16.778 bytes    243 registros
+    1 ano       HTTP 200   25.196 bytes    365 registros
+    32 meses    HTTP 200   67.193 bytes    974 registros
+
+**Mi hipotesis era falsa.** Supuse que el `Server disconnected` venia del tamano del rango.
+La medicion dice lo contrario: 32 meses responden perfecto, y es exactamente la MISMA URL
+que habia fallado minutos antes. **El corte es intermitente, no depende del tamano.**
+
+Lo que arregla el fallo son los reintentos con backoff, que agregué por otra razon —haber
+encontrado que el colector no cumplia el §5 del contrato—. El troceado por ano no era la
+solucion que yo creia.
+
+Se corrigieron los comentarios del modulo, el docstring de `ventanas()` y el de `collect()`,
+que afirmaban la causa equivocada. **Una explicacion falsa en el codigo es peor que ninguna:
+sobrevive al que la escribio y desvia al que venga despues.** El troceado se conserva con su
+razon verdadera: que un corte cueste rehacer una ventana y no el periodo entero.
+
+hallazgos secundarios:
+1. `api.cmfchile.cl/robots.txt` devuelve **404**. La lectura estandar del protocolo es que
+   sin robots.txt todo esta permitido, y `robots_check.verificar()` ya lo trata asi,
+   guardando el snapshot vacio con su sha. Comportamiento correcto, ahora confirmado contra
+   el servidor real.
+2. **El endpoint sin periodo (`/uf` a secas, el valor de hoy) fallo.** No se puede distinguir
+   con una sola muestra si es el mismo corte intermitente o si esta roto. Queda anotado en el
+   docstring; el colector solo lo usa cuando no se le da rango.
+
+lección metodologica: el `probe` valio la pena. Sin el habria "arreglado" el problema con el
+troceado, habria funcionado por casualidad —gracias a los reintentos— y habria quedado en el
+codigo una explicacion equivocada de por que.

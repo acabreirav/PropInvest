@@ -16,6 +16,13 @@ Rutas verificadas contra la documentación:
     /uf/periodo/{a1}/{a2}?apikey=&formato=json      rango de años
     /uf/periodo/{a1}/{m1}/{a2}/{m2}?...             rango de meses
 
+ESTABILIDAD DE LA FUENTE: medido con `cli probe` el 28-ago-2026 contra la API real, el
+servidor **corta la conexion al azar** (`RemoteProtocolError: Server disconnected without
+sending a response`), sin relacion con el tamano del rango pedido: la misma URL de 32 meses
+fallo y minutos despues devolvio 974 registros. Por eso `_pedir` reintenta con backoff
+exponencial. El endpoint sin periodo (`/uf` a secas, el valor de hoy) fallo en esa misma
+medicion; se desconoce si es el mismo corte intermitente o si esta roto.
+
 ADVERTENCIA DE PROCEDENCIA: la forma de arriba está tomada de la documentación oficial de
 la CMF, pero NO ha sido verificada todavía contra una respuesta viva — el entorno donde se
 escribió este módulo tiene bloqueado el egreso hacia `api.cmfchile.cl`. Por eso `selftest()`
@@ -69,8 +76,16 @@ TRANSITORIOS = (
 )
 INTENTOS = 4
 
-# La API corta la conexion con rangos largos. Se pide de a un ano calendario y se une
-# despues: mas peticiones chicas, pero cada una responde. Ver `ventanas()`.
+# MEDIDO el 28-ago-2026 con `cli probe` desde la maquina del usuario, contra la API real:
+# 1 mes, 8 meses, 1 ano y 32 meses devolvieron HTTP 200 sin problema (974 registros el mas
+# largo). La MISMA peticion de 32 meses habia fallado minutos antes con
+# `RemoteProtocolError`. O sea: el corte es INTERMITENTE, no depende del tamano del rango.
+# La hipotesis inicial —que el rango largo era la causa— quedo desmentida por la medicion.
+#
+# El troceado se conserva igual, por dos razones que si se sostienen: cada ventana reintenta
+# por separado, asi que un corte no obliga a rehacer los 32 meses; y respuestas mas chicas
+# son mas amables con un servidor que ya demostro ser inestable. Lo que arregla el fallo son
+# los reintentos de `_pedir`, no esto.
 MESES_POR_PETICION = 12
 
 # serie interna -> (ruta del recurso, clave del envoltorio JSON, unidad)
@@ -120,8 +135,9 @@ class Indicador(BaseModel):
 def ventanas(desde: str, hasta: str, meses: int = MESES_POR_PETICION) -> list[tuple[str, str]]:
     """Parte un rango AAAA-MM en tramos de a lo mas `meses`, alineados al ano calendario.
 
-    Existe porque la API de la CMF cierra la conexion sin responder cuando el periodo es
-    largo: 32 meses de una sola vez fallan, un ano a la vez funciona. Es puro y testeable.
+    NO existe porque los rangos largos fallen: se midio y 32 meses responden bien. Existe
+    para que un corte de conexion —que en esta API ocurre al azar— cueste rehacer una
+    ventana y no el periodo entero. Es pura y testeable.
     """
     a1, m1 = (int(x) for x in desde.split("-"))
     a2, m2 = (int(x) for x in hasta.split("-"))
@@ -233,8 +249,8 @@ class CmfIndicadores:
     def collect(self, scope: Scope) -> Iterator[RawDoc]:
         """Descarga y persiste en la zona cruda ANTES de parsear (§3.6).
 
-        El periodo se trocea en ventanas de a lo mas un ano: la API cierra la conexion
-        sin responder cuando el rango es largo.
+        El periodo se trocea en ventanas de a lo mas un ano para que un corte cueste
+        rehacer una ventana y no todo. El corte en si lo absorbe `_pedir` con reintentos.
         """
         veredicto = self.robots_ok()
         if not veredicto.allowed or not veredicto.snapshot_sha:
