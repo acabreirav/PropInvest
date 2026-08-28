@@ -375,12 +375,58 @@ nota: >
   saber si FOGAES cubre usadas (T-913): la respuesta define si el usado va a 90% o a 80%.
 
 ## T-916 · Auditar el codigo heredado del proyecto anterior del usuario
-estado: bloqueada · agente: fuente-scout · fase: 1 · depende_de: []
-bloqueo: "esperando el codigo. El zip no sube: se acordo pasarlo por repo de GitHub."
+estado: hecha · agente: fuente-scout · fase: 1 · depende_de: []
+resultado: "docs/adr/004-legado-investop.md — 6.180 HTML parseados, 5.870 unidades unicas"
 criterio_de_aceptacion:
-  - [ ] Inventario: que scrapea cada modulo, contra que endpoint, y si sigue vivo tras el 403
-  - [ ] Que se puede reusar tal cual, que hay que reescribir para cumplir el contrato
+  - [x] Inventario: que scrapea cada modulo, contra que endpoint, y si sigue vivo tras el 403
+  - [x] Que se puede reusar tal cual, que hay que reescribir para cumplir el contrato
         (seis columnas de procedencia, zona cruda, idempotencia, cero datos personales)
-  - [ ] Revision critica: que se le escapo al trabajo anterior (lo pidio el usuario explicitamente)
-  - [ ] Inventario de la data historica: que vale (series irreproducibles, fixtures) y que es basura
+  - [x] Revision critica: que se le escapo al trabajo anterior (lo pidio el usuario explicitamente)
+  - [x] Inventario de la data historica: que vale (series irreproducibles, fixtures) y que es basura
   - [ ] Purga de datos personales ANTES de que nada toque la base analitica
+
+## T-917 · `exigir_dfl2` vaciaria el ranking contra datos de portal
+estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: []
+criterio_de_aceptacion:
+  - [ ] `acogida_dfl2` admite tres estados: si / no / **por_verificar**, no un booleano
+  - [ ] `exigir_dfl2` excluye solo los `no`; los `por_verificar` compiten y se marcan en la UI
+  - [ ] La ficha de unidad dice como verificarlo (escritura o certificado municipal)
+  - [ ] Caso de oro: un universo entero de `por_verificar` no produce ranking vacio
+hallazgo: >
+  Medido sobre los 5.870 avisos del legado: **16 mencionan DFL2. El 0,3%.** Con exigir_dfl2
+  como exclusion dura booleana, el ranking se vacia — y no porque las unidades no sean DFL2,
+  sino porque el aviso no lo declara. Confirma el §2.5: el DFL2 se verifica en la escritura,
+  nunca en lo que diga el vendedor. Un ND tratado como `false` es exactamente lo que el §3.2
+  prohibe.
+
+## T-918 · Ingesta del legado: HTML a la zona cruda con procedencia
+estado: pendiente · agente: colector · fase: 1 · depende_de: [T-916]
+criterio_de_aceptacion:
+  - [ ] Los 6.180 HTML entran a `data/raw/` con `.meta.json` y las seis columnas,
+        declarando honestamente `fetched_at` de mayo-2026 (NO se disfrazan de frescos)
+  - [ ] Fuente propia `portal_legado_2026_05`, marcada como historica y **excluida del
+        ranking por el gate de frescura de 21 dias** (§7.3). Sirve de base, no de dato vivo
+  - [ ] Purga de datos personales ANTES de persistir: 6.306 de 6.229 archivos mencionan
+        contacto y 503 tienen patrones de telefono o mail (§3.4)
+  - [ ] Fixtures para `tests/integration/`, que hoy esta vacio
+  - [ ] Diccionario de 81 microzonas reales -> alimenta T-013 sin tocar la API de MELI
+
+## T-919 · Delta de precios: cuatro meses de senal de compra
+estado: pendiente · agente: colector · fase: 1 · depende_de: [T-918, T-920]
+criterio_de_aceptacion:
+  - [ ] Re-scrapear las 6 comunas por la ruta permitida `_Desde_`
+  - [ ] Cruce contra la foto de may-2026 por `portal_id`
+  - [ ] Reporte: siguen a la venta / vendidas / **bajaron de precio** (SCD tipo 2)
+nota: "Un aviso desaparece cuando se vende: esa foto de mayo no se puede volver a tomar."
+
+## T-920 · Colector Portal Inmobiliario por la ruta PERMITIDA
+estado: pendiente · agente: colector · fase: 1 · depende_de: [T-916]
+criterio_de_aceptacion:
+  - [ ] Solo rutas `_Desde_` que el robots.txt permite. `robots_check` pasa ANTES de recolectar
+  - [ ] `USER_AGENT` honesto de Flujo Cero. **Sin** `--disable-blink-features`, sin UA falso,
+        **sin sesion autenticada** (lo que se arriesga no es una IP: es la cuenta del usuario)
+  - [ ] Separa `unidad_unica` de `proyecto_multiple`: el proyecto publica rangos, no precios
+  - [ ] Seis columnas de procedencia, zona cruda, idempotencia, deteccion de parser roto
+  - [ ] `Decimal` para todo monto; `datetime` con tzinfo=UTC
+  - [ ] La UF sale de `dim_tiempo_financiero`, NUNCA hardcodeada (el legado tenia 38.000 fijo
+        y hoy la UF esta en ~40.800: 7% de error silencioso en cada arriendo publicado en UF)

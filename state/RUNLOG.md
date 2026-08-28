@@ -678,3 +678,45 @@ legal. `objetivo_unidades: 2` -> `null`, con `tope_legal_unidades: 2` aparte, y 
 tratar "no declarado" como "quiere el maximo". CLAUDE.md §2.5 corregido.
 
 **Estado.** 216 tests verdes.
+
+---
+
+## 2026-08-28 · T-916 · Auditoria del proyecto anterior del usuario
+
+**Que llego.** 3.036 lineas de Python y 3,2 GB de HTML de Portal Inmobiliario scrapeado entre
+el 30-abr y el 5-may de 2026. Detalle completo en `docs/adr/004-legado-investop.md`.
+
+**Incidente de seguridad, primero.** El filtro de PowerShell que YO escribi incluia `.html` y
+`.json`, y barrio 3,2 GB de paginas scrapeadas y un `storage_state` de Playwright con 25
+cookies de sesion de Portal Inmobiliario, todo a un repo PUBLICO de GitHub. Se le pidio al
+usuario borrar el repo y cerrar sesiones. La copia local quedo clonada, no se perdio nada.
+Leccion: filtrar por extension no separa codigo de datos. Para la proxima, lista blanca de
+rutas, no de extensiones.
+
+**No era Apify.** El usuario recordaba mal: cero referencias en todo el repo. Es Playwright con
+perfil persistente autenticado con su cuenta de MercadoLibre.
+
+**Lo medido** (parser heredado corrido sobre los 6.229 archivos): 6.180 parseables, **5.870
+unidades unicas** (2.629 arriendo, 3.240 venta). Cobertura 100% en precio, m2, dormitorios,
+banos y comuna; 99,3% microzona; 82% antiguedad; 77% gastos comunes.
+
+**Los hallazgos que cambian el plan:**
+
+1. **La ruta permitida alcanza para el usado.** Las paginas `_Desde_` —las que el robots.txt
+   SI permite— traen 38 de 48 tarjetas como unidades individuales con precio exacto,
+   dormitorios, banos, m2 y barrio. Para stock usado **no hace falta invocar D-016**.
+2. **El DFL2 no esta en los avisos: 16 de 5.870, el 0,3%.** `exigir_dfl2: true` como exclusion
+   dura vaciaria el ranking. Confirma el §2.5 al pie de la letra. -> T-917.
+3. **El delta de precios de 4 meses es lo irrepetible.** Un aviso desaparece al venderse; esa
+   foto no se vuelve a tomar. -> T-919.
+4. **El codigo viejo resolvia T-911**: aplica la rebaja DFL2 de contribuciones solo si
+   `antiguedad < 20`. El motor nuevo no hace esa distincion.
+5. **Usa evasion**: UA de Chrome falso y `--disable-blink-features=AutomationControlled`, y
+   scrapea autenticado. D-016 no lo cubre, y lo que se arriesga no es una IP: es su cuenta.
+6. **La UF estaba hardcodeada en 38.000.** Hoy esta en ~40.800: 7% de error silencioso en cada
+   arriendo publicado en UF.
+
+**Gate de comparables:** 59 de 81 microzonas llegan a n>=8 de arriendo (73%). Por
+(microzona, dormitorios): 93 de 256 (36%), cubriendo 2.136 unidades. Piso real donde hoy hay cero.
+
+**Abre** T-917, T-918, T-919, T-920.
