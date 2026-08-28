@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal as D
 from decimal import getcontext
 
@@ -255,6 +256,43 @@ def gates() -> None:
 
     ruta = db.crear()
     typer.echo(f"✓ esquema DuckDB aplicado: {ruta.name}")
+
+    # §7.3 sobre lo que haya cargado. Sin datos aun, verifica que los checks corren.
+    import duckdb
+
+    from flujocero.quality import checks as qc
+
+    con = duckdb.connect(str(ruta))
+    try:
+        unidades = (
+            [
+                dict(zip([d[0] for d in con.description], fila, strict=True))
+                for fila in con.execute("SELECT * FROM fact_unidad_venta").fetchall()
+            ]
+            if con.execute("SELECT count(*) FROM fact_unidad_venta").fetchone()[0]
+            else []
+        )
+        comps = (
+            [
+                dict(zip([d[0] for d in con.description], fila, strict=True))
+                for fila in con.execute("SELECT * FROM fact_arriendo_comp").fetchall()
+            ]
+            if con.execute("SELECT count(*) FROM fact_arriendo_comp").fetchone()[0]
+            else []
+        )
+    finally:
+        con.close()
+
+    if unidades or comps:
+        rep = qc.correr(unidades, comps, datetime.now(UTC))
+        typer.echo(str(rep))
+        if rep.falla:
+            fallos.append("los gates de calidad de datos del §7.3 estan en rojo")
+    else:
+        typer.echo(
+            f"• calidad de datos: sin filas que revisar todavia "
+            f"({len(qc.PATRONES_PERSONALES)} patrones de datos personales armados)"
+        )
 
     if fallos:
         for f in fallos:

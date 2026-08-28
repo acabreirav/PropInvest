@@ -1,0 +1,449 @@
+"""Gates de calidad de datos — CLAUDE.md §7.3 y tarea T-026.
+
+Cada check devuelve un `Hallazgo` con severidad explícita. La distinción importa:
+
+- `FALLA`  detiene el pipeline. El ranking no se publica.
+- `ALERTA` no lo detiene, pero queda en el reporte y marca el ranking como `parcial`.
+- `MARCA`  no falla nada: etiqueta filas (`sospechoso = true`) sin borrarlas nunca.
+
+El contrato es explícito en que **no se borra dato** (§7.3) y en que **no se imputa en
+silencio** (§3.2). Estos checks marcan y reportan; ninguno hace DELETE ni UPDATE de valores.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from decimal import Decimal
+from enum import Enum
+from typing import Any
+
+# --------------------------------------------------------------------------- ancla externa
+
+# UF/m² de venta de departamento nuevo, de `docs/00-hallazgos.md §3`.
+# No es un supuesto del modelo: es una tabla publicada, con fuente y periodo. Sirve como
+# ancla para detectar que nuestro propio pipeline se desvió, no para reemplazar el dato.
+UF_M2_REFERENCIA: dict[str, Decimal] = {
+    "vitacura": Decimal("133"),
+    "las-condes": Decimal("110.7"),
+    "nunoa": Decimal("88.4"),
+    "santiago": Decimal("80.9"),
+    "la-florida": Decimal("75.0"),
+    "macul": Decimal("72.9"),
+    "recoleta": Decimal("71.0"),
+    "san-miguel": Decimal("71"),
+    "estacion-central": Decimal("67.1"),
+    "la-cisterna": Decimal("66.1"),
+    "independencia": Decimal("67.5"),  # punto medio del rango 65-70
+    "cerrillos": Decimal("64.3"),
+    "maipu": Decimal("61.5"),  # punto medio del rango 58-65
+}
+
+# Umbrales del §7.3. Viven acá y no repartidos por el código.
+COBERTURA_MINIMA = Decimal("0.80")
+FRESCURA_MAX_DIAS = 21
+DESVIACION_MAX_ANCLA = Decimal("0.20")
+DESVIACION_MAX_ARRIENDO = Decimal("0.25")
+MIN_COMPARABLES = 8
+VENTANA_DEDUP_DIAS = 30
+
+
+class Severidad(str, Enum):
+    FALLA = "FALLA"
+    ALERTA = "ALERTA"
+    MARCA = "MARCA"
+    OK = "OK"
+
+
+@dataclass
+class Hallazgo:
+    check: str
+    severidad: Severidad
+    mensaje: str
+    filas_afectadas: int = 0
+    detalle: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return self.severidad in (Severidad.OK, Severidad.MARCA)
+
+    def __str__(self) -> str:
+        simbolo = {
+            Severidad.OK: "✓",
+            Severidad.MARCA: "•",
+            Severidad.ALERTA: "!",
+            Severidad.FALLA: "✗",
+        }[self.severidad]
+        cabeza = f"{simbolo} {self.check}: {self.mensaje}"
+        if not self.detalle:
+            return cabeza
+        return cabeza + "\n" + "\n".join(f"    {d}" for d in self.detalle[:10])
+
+
+# --------------------------------------------------------------------------- datos personales
+
+# §3.4: cero datos personales. El check corre sobre VALORES, no sobre nombres de columna:
+# un correo en una columna llamada `notas` es exactamente igual de ilegal.
+PATRONES_PERSONALES: dict[str, re.Pattern[str]] = {
+    "email": re.compile(r"[\w.+-]+@[\w-]+\.[\w.]{2,}"),
+    # Celular chileno: +56 9 XXXX XXXX, con o sin separadores.
+    "telefono_cl": re.compile(r"(?:\+?56[\s.-]?)?9[\s.-]?\d{4}[\s.-]?\d{4}\b"),
+    # RUT de persona natural con dígito verificador.
+    "rut": re.compile(r"\b\d{1,2}\.?\d{3}\.?\d{3}[-‐]?[\dkK]\b"),
+}
+
+# El nombre de la inmobiliaria (persona jurídica) sí se persiste (§3.4). Un RUT de empresa
+# empieza en 60.000.000 o más; bajo eso se asume persona natural.
+RUT_EMPRESA_DESDE = 60_000_000
+
+
+def _es_rut_de_empresa(texto: str) -> bool:
+    solo_numeros = re.sub(r"[^\d]", "", texto.split("-")[0])
+    return bool(solo_numeros) and int(solo_numeros) >= RUT_EMPRESA_DESDE
+
+
+def buscar_datos_personales(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§3.4 · Ley 21.719. Regla dura: si aparece uno, el pipeline se detiene.
+
+    Se revisa el valor de toda columna de texto, no una lista blanca de nombres.
+    """
+    encontrados: list[str] = []
+    for i, fila in enumerate(filas):
+        for columna, valor in fila.items():
+            if not isinstance(valor, str) or not valor:
+                continue
+            for etiqueta, patron in PATRONES_PERSONALES.items():
+                m = patron.search(valor)
+                if not m:
+                    continue
+                if etiqueta == "rut" and _es_rut_de_empresa(m.group()):
+                    continue  # persona jurídica: permitido
+                encontrados.append(f"fila {i}, columna `{columna}`: {etiqueta} detectado")
+    if encontrados:
+        return Hallazgo(
+            "datos_personales",
+            Severidad.FALLA,
+            f"{len(encontrados)} valores con datos personales — CLAUDE.md §3.4, Ley 21.719",
+            len(encontrados),
+            encontrados,
+        )
+    return Hallazgo("datos_personales", Severidad.OK, "sin datos personales en los valores")
+
+
+# --------------------------------------------------------------------------- procedencia
+
+
+def procedencia_completa(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§3.1 · las seis columnas, en cada fila que llegue a la base."""
+    from flujocero.sources.base import COLUMNAS_PROCEDENCIA
+
+    faltantes: list[str] = []
+    for i, fila in enumerate(filas):
+        vacias = [c for c in COLUMNAS_PROCEDENCIA if not fila.get(c)]
+        if vacias:
+            faltantes.append(f"fila {i}: falta {', '.join(vacias)}")
+    if faltantes:
+        return Hallazgo(
+            "procedencia",
+            Severidad.FALLA,
+            f"{len(faltantes)} filas sin procedencia completa — §3.1",
+            len(faltantes),
+            faltantes,
+        )
+    return Hallazgo("procedencia", Severidad.OK, f"{len(filas)} filas con las seis columnas")
+
+
+# --------------------------------------------------------------------------- cobertura
+
+
+def cobertura_precio_y_microzona(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§7.3 · ≥80% con `precio_uf` real (no 'desde') y microzona asignada."""
+    if not filas:
+        return Hallazgo("cobertura", Severidad.ALERTA, "no hay unidades que evaluar")
+    buenas = sum(
+        1
+        for f in filas
+        if f.get("precio_uf") and f.get("microzona_id") and f.get("evidence_level") in ("V", "D")
+    )
+    ratio = Decimal(buenas) / Decimal(len(filas))
+    if ratio < COBERTURA_MINIMA:
+        return Hallazgo(
+            "cobertura",
+            Severidad.ALERTA,
+            f"cobertura {ratio:.1%} < {COBERTURA_MINIMA:.0%}; el ranking se marca `parcial`",
+            len(filas) - buenas,
+        )
+    return Hallazgo("cobertura", Severidad.OK, f"cobertura {ratio:.1%}")
+
+
+# --------------------------------------------------------------------------- frescura
+
+
+def frescura(filas: list[dict[str, Any]], ahora: datetime) -> Hallazgo:
+    """§7.3 · ninguna fila del ranking con `fetched_at` de más de 21 días.
+
+    `ahora` entra por argumento: nada de fechas del sistema dentro de la lógica (§11).
+    """
+    limite = ahora - timedelta(days=FRESCURA_MAX_DIAS)
+    viejas = [
+        f"{f.get('unidad_key', i)}: {f['fetched_at']:%Y-%m-%d}"
+        for i, f in enumerate(filas)
+        if isinstance(f.get("fetched_at"), datetime) and f["fetched_at"] < limite
+    ]
+    if viejas:
+        return Hallazgo(
+            "frescura",
+            Severidad.FALLA,
+            f"{len(viejas)} filas con más de {FRESCURA_MAX_DIAS} días",
+            len(viejas),
+            viejas,
+        )
+    return Hallazgo("frescura", Severidad.OK, f"todas dentro de {FRESCURA_MAX_DIAS} días")
+
+
+# --------------------------------------------------------------------------- outliers
+
+
+def _percentil(valores: list[Decimal], p: Decimal) -> Decimal:
+    """Percentil por interpolación lineal. Determinístico, sin dependencias."""
+    if not valores:
+        raise ValueError("lista vacía")
+    orden = sorted(valores)
+    if len(orden) == 1:
+        return orden[0]
+    pos = (Decimal(len(orden)) - 1) * p
+    bajo = int(pos)
+    alto = min(bajo + 1, len(orden) - 1)
+    resto = pos - Decimal(bajo)
+    return orden[bajo] + (orden[alto] - orden[bajo]) * resto
+
+
+def marcar_outliers(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§7.3 · `precio_uf/m²` fuera de [p1, p99] de su microzona.
+
+    **Marca, no borra.** La fila se conserva y queda fuera del cálculo de medianas.
+    Muta `sospechoso` en el dict recibido, que es la única mutación de todo el módulo.
+    """
+    por_zona: dict[str, list[tuple[int, Decimal]]] = {}
+    for i, f in enumerate(filas):
+        zona, precio, m2 = f.get("microzona_id"), f.get("precio_uf"), f.get("m2_utiles")
+        if not zona or not precio or not m2:
+            continue
+        por_zona.setdefault(str(zona), []).append((i, Decimal(str(precio)) / Decimal(str(m2))))
+
+    marcadas: list[str] = []
+    for zona, pares in por_zona.items():
+        if len(pares) < 3:  # con menos de tres, el percentil no significa nada
+            continue
+        valores = [v for _, v in pares]
+        p1, p99 = _percentil(valores, Decimal("0.01")), _percentil(valores, Decimal("0.99"))
+        for i, v in pares:
+            if v < p1 or v > p99:
+                filas[i]["sospechoso"] = True
+                marcadas.append(f"{filas[i].get('unidad_key', i)} en {zona}: {v:.1f} UF/m²")
+    if marcadas:
+        return Hallazgo(
+            "outliers",
+            Severidad.MARCA,
+            f"{len(marcadas)} unidades marcadas `sospechoso`; se conservan, no entran a medianas",
+            len(marcadas),
+            marcadas,
+        )
+    return Hallazgo("outliers", Severidad.OK, "sin outliers de UF/m² por microzona")
+
+
+# --------------------------------------------------------------------------- duplicados
+
+
+def duplicados_de_venta(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§7.3 · dos unidades con el mismo `(proyecto_id, numero_unidad)` colapsan."""
+    vistos: dict[tuple[str, str], int] = {}
+    choques: list[str] = []
+    for i, f in enumerate(filas):
+        clave = (str(f.get("proyecto_id", "")), str(f.get("numero_unidad", "")))
+        if not all(clave):
+            continue
+        if clave in vistos:
+            choques.append(f"{clave[0]}/{clave[1]} en filas {vistos[clave]} y {i}")
+        else:
+            vistos[clave] = i
+    if choques:
+        return Hallazgo(
+            "duplicados_venta",
+            Severidad.FALLA,
+            f"{len(choques)} pares con la misma clave natural",
+            len(choques),
+            choques,
+        )
+    return Hallazgo("duplicados_venta", Severidad.OK, "sin duplicados por clave natural")
+
+
+def duplicados_de_arriendo(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§7.3 · misma `(direccion_normalizada, m2, dormitorios, precio)` en ≤30 días.
+
+    El mismo departamento republicado por dos corredores infla el conteo de comparables,
+    que es lo que decide si una microzona entra al ranking (n ≥ 8).
+    """
+    grupos: dict[tuple[Any, ...], list[tuple[int, Any]]] = {}
+    for i, f in enumerate(filas):
+        clave = (
+            f.get("direccion_normalizada"),
+            f.get("m2_utiles"),
+            f.get("dormitorios"),
+            f.get("arriendo_clp"),
+        )
+        if not all(v is not None for v in clave):
+            continue
+        grupos.setdefault(clave, []).append((i, f.get("publicado_en")))
+
+    dups: list[str] = []
+    for clave, apariciones in grupos.items():
+        if len(apariciones) < 2:
+            continue
+        fechas = [(i, d) for i, d in apariciones if d is not None]
+        for a in range(len(fechas)):
+            for b in range(a + 1, len(fechas)):
+                if abs((fechas[a][1] - fechas[b][1]).days) <= VENTANA_DEDUP_DIAS:
+                    dups.append(f"{clave[0]} · filas {fechas[a][0]} y {fechas[b][0]}")
+    if dups:
+        return Hallazgo(
+            "duplicados_arriendo",
+            Severidad.MARCA,
+            f"{len(dups)} avisos duplicados en ≤{VENTANA_DEDUP_DIAS} días; se deduplican",
+            len(dups),
+            dups,
+        )
+    return Hallazgo("duplicados_arriendo", Severidad.OK, "sin avisos duplicados")
+
+
+# --------------------------------------------------------------------------- anclas
+
+
+def ancla_externa_uf_m2(mediana_por_comuna: dict[str, Decimal]) -> Hallazgo:
+    """§7.3 · UF/m² mediano por comuna vs la tabla Colliers. Desviación >20% falla.
+
+    Es el check que detecta que nuestro pipeline se desvió, no que el mercado se movió:
+    una desviación de esa magnitud contra una tabla publicada casi siempre es un parser
+    roto, una unidad mal convertida o un filtro que dejó entrar stock usado.
+    """
+    desviadas: list[str] = []
+    comparadas = 0
+    for comuna, nuestra in mediana_por_comuna.items():
+        referencia = UF_M2_REFERENCIA.get(comuna)
+        if referencia is None:
+            continue
+        comparadas += 1
+        desviacion = abs(nuestra - referencia) / referencia
+        if desviacion > DESVIACION_MAX_ANCLA:
+            desviadas.append(
+                f"{comuna}: {nuestra:.1f} vs {referencia:.1f} UF/m² de referencia "
+                f"({desviacion:+.0%})"
+            )
+    if desviadas:
+        return Hallazgo(
+            "ancla_externa",
+            Severidad.FALLA,
+            f"{len(desviadas)} comunas se desvían >{DESVIACION_MAX_ANCLA:.0%} de la referencia",
+            len(desviadas),
+            desviadas,
+        )
+    if comparadas == 0:
+        return Hallazgo(
+            "ancla_externa", Severidad.ALERTA, "ninguna comuna tiene referencia con qué comparar"
+        )
+    return Hallazgo("ancla_externa", Severidad.OK, f"{comparadas} comunas dentro de ±20%")
+
+
+def comparables_suficientes(
+    conteo_por_microzona_tipologia: dict[tuple[str, str], int],
+) -> Hallazgo:
+    """§7.3 y D-008 · `n < 8` ⇒ `ND`, sin imputar. Es exclusión, no penalización."""
+    flacas = [
+        f"{z}/{t}: n={n}"
+        for (z, t), n in conteo_por_microzona_tipologia.items()
+        if n < MIN_COMPARABLES
+    ]
+    if flacas:
+        return Hallazgo(
+            "comparables_suficientes",
+            Severidad.MARCA,
+            f"{len(flacas)} combinaciones con n<{MIN_COMPARABLES}; van a `ND` y salen del ranking",
+            len(flacas),
+            flacas,
+        )
+    return Hallazgo("comparables_suficientes", Severidad.OK, f"todas con n>={MIN_COMPARABLES}")
+
+
+def reconciliacion_arriendo(
+    mediana_por_microzona: dict[str, Decimal], benchmark: dict[str, Decimal]
+) -> Hallazgo:
+    """§7.3 · la mediana debe estar dentro de ±25% del benchmark. Alerta, no borrado."""
+    fuera: list[str] = []
+    for zona, nuestra in mediana_por_microzona.items():
+        ref = benchmark.get(zona)
+        if ref is None or ref == 0:
+            continue
+        d = abs(nuestra - ref) / ref
+        if d > DESVIACION_MAX_ARRIENDO:
+            fuera.append(f"{zona}: {nuestra:.2f} vs {ref:.2f} ({d:+.0%})")
+    if fuera:
+        return Hallazgo(
+            "reconciliacion_arriendo",
+            Severidad.ALERTA,
+            f"{len(fuera)} microzonas fuera de ±{DESVIACION_MAX_ARRIENDO:.0%}; "
+            "se explica, no se borra",
+            len(fuera),
+            fuera,
+        )
+    return Hallazgo("reconciliacion_arriendo", Severidad.OK, "medianas dentro de ±25%")
+
+
+# --------------------------------------------------------------------------- orquestación
+
+
+@dataclass
+class ReporteCalidad:
+    hallazgos: list[Hallazgo] = field(default_factory=list)
+
+    @property
+    def falla(self) -> bool:
+        return any(h.severidad is Severidad.FALLA for h in self.hallazgos)
+
+    @property
+    def parcial(self) -> bool:
+        """El ranking se publica marcado como `parcial` en la UI."""
+        return any(h.severidad is Severidad.ALERTA for h in self.hallazgos)
+
+    def __str__(self) -> str:
+        cuerpo = "\n".join(str(h) for h in self.hallazgos)
+        if self.falla:
+            estado = "ROJO — el ranking no se publica"
+        elif self.parcial:
+            estado = "PARCIAL — se publica con advertencia"
+        else:
+            estado = "VERDE"
+        return f"{cuerpo}\n\ncalidad de datos: {estado}"
+
+
+def correr(
+    unidades: list[dict[str, Any]],
+    comparables: list[dict[str, Any]],
+    ahora: datetime,
+    mediana_uf_m2_por_comuna: dict[str, Decimal] | None = None,
+    conteo_comparables: dict[tuple[str, str], int] | None = None,
+) -> ReporteCalidad:
+    """Corre todos los checks del §7.3 sobre un lote ya cargado."""
+    rep = ReporteCalidad()
+    rep.hallazgos.append(buscar_datos_personales(unidades + comparables))
+    rep.hallazgos.append(procedencia_completa(unidades))
+    rep.hallazgos.append(cobertura_precio_y_microzona(unidades))
+    rep.hallazgos.append(frescura(unidades, ahora))
+    rep.hallazgos.append(marcar_outliers(unidades))
+    rep.hallazgos.append(duplicados_de_venta(unidades))
+    rep.hallazgos.append(duplicados_de_arriendo(comparables))
+    if mediana_uf_m2_por_comuna is not None:
+        rep.hallazgos.append(ancla_externa_uf_m2(mediana_uf_m2_por_comuna))
+    if conteo_comparables is not None:
+        rep.hallazgos.append(comparables_suficientes(conteo_comparables))
+    return rep

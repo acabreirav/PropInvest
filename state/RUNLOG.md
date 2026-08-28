@@ -177,3 +177,39 @@ suponía que la cónyuge financiaba su propio pie. Los $40.000.000 son de él. C
 a compra individual; la cónyuge entra sólo como codeudora solidaria sin co-propiedad.
 
 siguiente: T-012, tasas hipotecarias por banco.
+
+## 2026-08-28 · iteración 5 — T-026, gates de calidad de datos
+tareas: T-026 → **en_curso** · T-012 → **bloqueada** (ver abajo)
+gates: **VERDE** · `pytest`: **101 passed** (eran 73)
+
+qué se construyó — `quality/checks.py`, los diez checks del §7.3:
+procedencia completa · cobertura ≥80% · frescura ≤21 días · outliers p1/p99 por microzona ·
+duplicados de venta por clave natural · duplicados de arriendo en ventana de 30 días ·
+ancla externa UF/m² contra Colliers · n≥8 comparables · reconciliación de arriendo ±25% ·
+**datos personales por regex sobre valores**.
+
+Tres severidades, y la distinción es deliberada:
+- `FALLA` detiene el ranking (datos personales, procedencia, frescura, duplicados, ancla)
+- `ALERTA` lo publica marcado `parcial` (cobertura, reconciliación)
+- `MARCA` sólo etiqueta (`sospechoso = true`) — outliers y n<8
+
+**Ningún check borra ni imputa.** El §7.3 dice "alerta, no borrado" y el §3.2 prohíbe imputar
+en silencio. El módulo entero hace una sola mutación: poner `sospechoso = true`.
+
+hallazgos:
+1. El check de datos personales distingue **RUT de persona natural de RUT de empresa** (corte
+   en 60.000.000). Sin eso, el nombre de la inmobiliaria — que el §3.4 sí permite persistir —
+   habría hecho fallar el gate.
+2. **Un test mío estaba mal y el código tenía razón.** El caso "limpio" del reporte usaba diez
+   unidades idénticas, y el detector de duplicados las rechazó correctamente: la clave natural
+   es `(proyecto_id, numero_unidad)`. Se corrigió el test y se agregó uno que fija ese
+   comportamiento como esperado.
+3. **T-026 no se marca `hecha`.** Los checks nunca han visto una fila real. Hasta que T-020 y
+   T-023 carguen datos, no se puede afirmar que los umbrales están bien calibrados.
+
+**T-012 bloqueada, y no se escribió código especulativo.** El proxy bloquea también
+`www.cmfchile.cl`, así que no fue posible ver el XLS de tasas hipotecarias por banco. Escribir
+un parser para una planilla cuya estructura no se ha visto sería código a ciegas disfrazado de
+avance. Se pide el archivo al usuario: es una descarga de navegador, sin terminal.
+
+siguiente: T-012 en cuanto llegue el XLS. Mientras, el resto de fase 1 depende de red.

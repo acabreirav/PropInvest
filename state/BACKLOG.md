@@ -81,8 +81,15 @@ criterio_de_aceptacion:
 ## T-012 · Colector CMF tasas hipotecarias por banco
 estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]
 paraleliza_con: [T-010, T-011]
+estado_real: bloqueada
 criterio_de_aceptacion:
   - `dim_tasa_banco` poblada; brecha 13 de §G resuelta o marcada `ND` con evidencia del intento
+bloqueo: >
+  El proxy de red bloquea `www.cmfchile.cl`, asi que no se pudo inspeccionar
+  `articles-46417_recurso_1.xls` y no hay forma de saber su estructura. NO se escribio un
+  parser a ciegas: seria codigo especulativo. Se necesita que el humano descargue el archivo
+  desde el navegador y lo adjunte. URL verificada:
+  https://www.cmfchile.cl/portal/estadisticas/617/articles-46417_recurso_1.xls
 
 ## T-013 · dim_microzona desde MELI classified_locations
 estado: pendiente · agente: geo-microzonas · fase: 1 · depende_de: [T-011]
@@ -138,10 +145,19 @@ criterio_de_aceptacion:
   - Socovesa parseando precios en `CLF` desde JSON-LD
 
 ## T-026 · Gates de calidad de datos
-estado: pendiente · agente: auditor-datos · fase: 1 · depende_de: [T-020, T-023]
+estado: en_curso · agente: auditor-datos · fase: 1 · depende_de: [T-020, T-023]
 criterio_de_aceptacion:
-  - Los 10 checks de CLAUDE.md §7.3 implementados y corriendo en `make gates`
-  - Check de datos personales por **regex sobre valores**, no solo nombre de columna
+  - [x] Los 10 checks de CLAUDE.md §7.3 implementados en `quality/checks.py`
+  - [x] Corriendo dentro de `make gates`
+  - [x] Check de datos personales por **regex sobre valores**, no solo nombre de columna
+  - [x] Ancla externa contra la tabla Colliers de `docs/00-hallazgos.md §3`
+  - [ ] **Ejercitados contra datos reales** — hoy solo contra fixtures sinteticas
+nota: >
+  Se adelanto a sus dependencias porque es logica pura y no necesita red. Los checks estan
+  escritos y probados con 28 casos, pero nunca han visto una fila real: hasta que T-020 y
+  T-023 carguen datos, no se puede afirmar que los umbrales estan bien calibrados.
+  Tres severidades: FALLA detiene el ranking, ALERTA lo marca `parcial`, MARCA solo etiqueta.
+  Ningun check borra ni imputa: el §7.3 y el §3.2 lo prohiben.
 
 ## T-027 · API + dashboard v1
 estado: pendiente · agente: dashboard · fase: 1 · depende_de: [T-004, T-026]
