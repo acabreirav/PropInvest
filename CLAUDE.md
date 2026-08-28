@@ -482,9 +482,17 @@ en la ficha de la unidad. Ponderadores en `config/params.yml`, no en el código.
 | `descuento_vs_microzona` | 5% | UF/m² de la unidad vs mediana de su microzona |
 
 **Penalizaciones duras (excluyen del ranking, no restan puntos):**
-precio > UF 6.000 · vivienda usada · m² útiles > 140 (pierde DFL2) · microzona marcada como
+precio > UF 6.000 · m² útiles > 140 (pierde DFL2) · microzona marcada como
 saturada en `config/zonas.yml` · sin comparables de arriendo suficientes (n < 8) ·
 dato de precio con `evidence_level` = `E`.
+
+**La vivienda usada dejó de ser exclusión el 28-ago-2026 (D-015).** Compite en el ranking
+como escenario, no como igual: el subsidio a la tasa es condición del **inmueble** —el
+Decreto 180 art. 3 exige *"primera venta"*— así que un usado se evalúa siempre a tasa sin
+subsidio, y el motor se lo niega en `finance/modelo.tasa_aplicable` aunque el escenario pida
+`con_subsidio`. No lo decide `params.yml`: ahí solo se abre la puerta al usado.
+El **Subsidio Tramo 4.000 (DS1 Tramo 4)** sí admite usadas, pero obliga a habitar la vivienda
+y prohíbe arrendarla 5 años: es incompatible con este inversionista. No lo re-descubras.
 
 ---
 

@@ -41,6 +41,11 @@ class Escenario:
     dfl2: bool
     vacancia: Decimal
     tasa_anual: Decimal
+    # La tasa a la que cae una unidad que NO califica al subsidio. Va explicita porque el
+    # par importa: contrastar una tasa de mejor caso CON subsidio contra el PROMEDIO de
+    # mercado sin subsidio mete 67 pb de castigo donde la norma solo quita 60, y confunde
+    # "no tiene subsidio" con "es peor banco". None = usar la misma del escenario.
+    tasa_sin_subsidio: Decimal | None = None
 
 
 @dataclass
@@ -71,6 +76,10 @@ class Evaluacion:
     break_even_occupancy: Decimal = D(0)
     tir_real: dict[int, Decimal] = field(default_factory=dict)
     van_uf: Decimal = D(0)
+    # Que tasa se aplico DE VERDAD, y si el subsidio del escenario sobrevivio al inmueble.
+    tasa_aplicada: Decimal = D(0)
+    subsidio_aplicado: bool = False
+    motivo_sin_subsidio: str | None = None
     excluido: bool = False
     motivo_exclusion: str | None = None
     score: Decimal = D(0)
@@ -90,6 +99,46 @@ def deficit_caja_max_uf(params: Config, inv: Config) -> Decimal | None:
     if tope is None:
         return None
     return D(str(tope)) / params.d("macro.valor_uf_clp")
+
+
+# ------------------------------------------------------------------- elegibilidad del subsidio
+
+
+def tasa_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[Decimal, bool, str | None]:
+    """Devuelve `(tasa, subsidio_aplicado, motivo_si_no)`.
+
+    El subsidio a la tasa de la Ley 21.748 es una condicion del **inmueble**, no del
+    escenario: el Decreto 180 art. 3 exige *"primera venta de la vivienda"*. Un escenario
+    puede pedir `con_subsidio` todo lo que quiera; si la unidad es usada, no lo tiene.
+
+    Esto no es una sutileza. Desde que el ranking admite stock usado (D-015), aplicarle la
+    tasa subsidiada a un usado le bajaria el dividendo ~60 puntos base contra una norma que
+    no lo cubre, y el resultado seria exactamente lo que el §7.6 manda buscar: una
+    oportunidad falsa, mas atractiva en la pantalla que en la escritura.
+
+    La tasa de caida la declara el escenario (`tasa_sin_subsidio`), no esta funcion: el par
+    tiene que ser comparable. Con las tasas de hoy, contrastar el mejor caso con subsidio
+    (3,30%) contra el promedio de mercado sin subsidio (3,97%) son 67 pb, cuando el mejor caso
+    sin subsidio (3,39%) esta a 9 pb. La diferencia decide si el usado gana o pierde, asi que
+    la eleccion del par no puede quedar implicita.
+
+    El subsidio Tramo 4.000 (DS1 Tramo 4) SI admite usadas, pero obliga a habitar la
+    vivienda y prohibe arrendarla por 5 anos: es incompatible con este inversionista y por
+    eso no entra al modelo. Ver docs/05-decisiones.md D-015.
+    """
+    if not e.con_subsidio:
+        return e.tasa_anual, False, None
+    caida = e.tasa_sin_subsidio if e.tasa_sin_subsidio is not None else e.tasa_anual
+    if not u.es_vivienda_nueva:
+        return (
+            caida,
+            False,
+            "vivienda usada: el subsidio a la tasa exige primera venta del inmueble",
+        )
+    tope = p.d("subsidio_ley_21748.tope_valor_vivienda_uf")
+    if u.precio_uf > tope:
+        return caida, False, f"precio sobre el tope de UF {tope}"
+    return e.tasa_anual, True, None
 
 
 # ----------------------------------------------------------------------- exclusiones duras
@@ -195,8 +244,10 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
     pi = p.d("macro.inflacion_anual_esperada")
     plazo = int(p.d("financiamiento.plazo_anios"))
 
+    ev.tasa_aplicada, ev.subsidio_aplicado, ev.motivo_sin_subsidio = tasa_aplicable(u, e, p)
+
     ev.credito_uf = u.precio_uf * (D(1) - e.pie_pct)
-    ev.dividendo_uf = f.dividendo_frances(ev.credito_uf, e.tasa_anual, plazo)
+    ev.dividendo_uf = f.dividendo_frances(ev.credito_uf, ev.tasa_aplicada, plazo)
     seguros_mensuales = ev.credito_uf * p.d(
         "gastos_operativos.seguro_desgravamen_pct_mensual_saldo"
     ) + u.precio_uf * p.d("gastos_operativos.seguro_incendio_sismo_pct_mensual_tasacion")
@@ -221,7 +272,7 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
     ev.atcf_mensual_uf = ev.btcf_mensual_uf  # el impuesto ya está dentro del NOI
 
     ev.amortizacion_mensual_uf = f.amortizacion_mensual_promedio(
-        ev.credito_uf, e.tasa_anual, plazo, anio=1
+        ev.credito_uf, ev.tasa_aplicada, plazo, anio=1
     )
     ev.costo_tenencia_mensual_uf = f.costo_tenencia_mensual(
         ev.btcf_mensual_uf, ev.amortizacion_mensual_uf
@@ -238,7 +289,7 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
         servicio_anual, ev.opex_anual_uf, e.vacancia, pi
     )
     ev.pie_minimo_flujo_cero = f.pie_minimo_flujo_cero(
-        ev.rentabilidad_bruta, e.tasa_anual, plazo, ev.opex_anual_uf / ev.pgi_uf
+        ev.rentabilidad_bruta, ev.tasa_aplicada, plazo, ev.opex_anual_uf / ev.pgi_uf
     )
     ev.break_even_occupancy = f.break_even_occupancy(ev.opex_anual_uf, servicio_anual, ev.pgi_uf)
 
@@ -255,7 +306,7 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
         ganancia = max(D(0), venta - u.precio_uf - exencion)
         flujos[n] += (
             venta * (D(1) - com_venta)
-            - f.saldo_insoluto(ev.credito_uf, e.tasa_anual, plazo, n * 12)
+            - f.saldo_insoluto(ev.credito_uf, ev.tasa_aplicada, plazo, n * 12)
             - ganancia * tasa_gc
         )
         try:

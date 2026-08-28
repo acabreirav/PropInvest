@@ -591,3 +591,48 @@ razón que valía la pena: httpx normaliza los nombres de cabecera a minúsculas
   descartado de entrada.
 
 **Estado.** 206 tests verdes (+7). T-011 sigue `en_curso`: falta una corrida mas del usuario.
+
+---
+
+## 2026-08-28 · D-015 · El usado entra al ranking, sin el subsidio
+
+**De donde salio.** El usuario aporto que "el subsidio ahora incluye viviendas usadas hasta
+UF 4.000". Verificado antes de actuar: es cierto, pero es **otro instrumento**.
+
+**Que se encontro.** Tres cosas distintas que la prensa junta en un titular:
+subsidio a la tasa (Ley 21.748, solo primera venta, tope UF 6.000) · FOGAES ampliado
+(garantia, tope UF 6.000, cobertura de usadas SIN CONFIRMAR) · **Subsidio Tramo 4.000
+(DS1 Tramo 4)**, que si admite usadas pero **obliga a habitar la vivienda y prohibe
+arrendarla 5 anos**. Para una tesis de arriendo desde el primer mes no es suboptimo:
+es incompatible.
+
+**Que se decidio (por el usuario).** El usado entra como **escenario**, no como pivote.
+
+**Que se hizo.**
+- `solo_vivienda_nueva: false`. El usado compite.
+- `finance/modelo.tasa_aplicable()`: el subsidio es condicion del INMUEBLE, no del escenario.
+  Un usado se evalua a tasa sin subsidio aunque el escenario pida `con_subsidio`, con el
+  motivo escrito en la evaluacion.
+- **La tasa negada manda en todo el calculo**, no solo en el dividendo: amortizacion, pie de
+  equilibrio y saldo insoluto para la TIR. Dejar tres de esos a la tasa vieja habria dejado el
+  modelo incoherente consigo mismo sin que se notara. Es el bug que casi cometo.
+- Caso de oro simetrico: **sin subsidio de por medio, un usado y un nuevo identicos dan
+  exactamente lo mismo.** Si difieren, se colo una penalizacion encubierta.
+- `params.yml:subsidio_ds1_tramo4` documenta el instrumento con
+  `aplicable_a_este_inversionista: false` y la razon, para no re-descubrirlo.
+- CLAUDE.md §12 actualizado: la vivienda usada deja de ser exclusion dura.
+
+**Deuda que esto abre.** T-911 (la rebaja DFL2 de contribuciones corre desde la recepcion
+municipal; el modelo hoy la aplica sin mirar antiguedad — supuesto optimista sobre el
+beneficio de mayor valor presente) · T-912 (de donde salen los avisos de usado; el 403 de
+MELI golpea mas fuerte aca) · T-913 (preguntas al banco).
+
+**Estado.** 6 casos de oro nuevos. mypy --strict verde sobre finance/.
+
+**Auto-critica §7.6 — encontro un error material.** La primera version hacia caer al usado a
+la tasa PROMEDIO de mercado (3,97%) mientras el nuevo conservaba una tasa de MEJOR CASO
+(3,30%): 67 pb de castigo donde la norma quita 60. El mejor caso sin subsidio es 3,39%, a 9 pb.
+Entre 9 y 67 pb esta la respuesta a si el usado gana o pierde. Corregido: el `Escenario`
+declara `tasa_sin_subsidio` y el par es mejor-caso con mejor-caso. Caso de oro nuevo: perder
+el subsidio no puede costar mas de 60 pb. Destapo ademas T-914: las cuatro tasas de params.yml
+vienen de bancos y fechas distintas, asi que ninguna resta entre ellas mide el subsidio.

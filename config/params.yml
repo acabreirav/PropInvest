@@ -39,6 +39,25 @@ subsidio_ley_21748:
   limite_subsidios_por_persona: {v: null, evidence: C}
   aplica_a_renegociados: {v: false, evidence: V}
 
+# Instrumento DISTINTO del subsidio a la tasa, y la prensa los mezcla en un solo titular.
+# Se documenta aqui para que nadie lo vuelva a confundir. NO entra al modelo: ver D-015.
+subsidio_ds1_tramo4:
+  nombre: "Subsidio Tramo 4.000 (DS1 Tramo 4)"
+  aporte_directo_uf: {v: 400, evidence: V, fuente: "anuncio Minvu / gob.cl ago-2026"}
+  tope_valor_vivienda_uf: {v: 4000, evidence: V}
+  tope_zonas_extremas_uf: {v: 4500, evidence: V, nota: "Arica y Parinacota, Tarapaca, Antofagasta, Aysen, Magallanes, Palena, Chiloe"}
+  ahorro_minimo_uf: {v: 200, evidence: V, nota: "cuenta de ahorro para la vivienda, 12 meses de antiguedad"}
+  admite_vivienda_usada: {v: true, evidence: V}
+  cupos_primer_llamado: {v: 5000, evidence: V}
+  primer_llamado: "2026-11"
+  exige_registro_social_hogares: {v: true, evidence: V}
+  aplicable_a_este_inversionista: {v: false, evidence: V}
+  razon_no_aplicable: >
+    El DS1, en cualquiera de sus tramos, obliga a que la vivienda sea habitada
+    personalmente por el beneficiario y prohibe arrendarla o venderla por 5 anos desde la
+    compra. La tesis completa de este proyecto es arrendar desde el primer mes: no es
+    suboptimo, es incompatible. Tomarlo y arrendar igual es causal de revocacion.
+
 fogaes:
   cobertura_pct_saldo_insoluto: {v: 0.50, evidence: V}
   ltv_habilitado: {v: 0.90, evidence: V}
@@ -139,7 +158,10 @@ score:
     # null = sin filtro. Es exclusion dura, no penalizacion: una unidad que exige mas caja
     # de la que el inversionista quiere comprometer no compite, se cae.
     aplicar_deficit_caja_max: true
-    solo_vivienda_nueva: true
+    # D-015 (28-ago-2026): el stock usado entra al ranking como ESCENARIO. No recibe el
+    # subsidio a la tasa —el Decreto 180 art. 3 exige primera venta del inmueble— y el
+    # motor se lo niega en `finance/modelo.tasa_aplicable`, no aca.
+    solo_vivienda_nueva: false
     m2_utiles_max: 140
     min_comparables_arriendo: 8
     excluir_microzonas_saturadas: true

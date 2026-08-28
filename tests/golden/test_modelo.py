@@ -7,7 +7,13 @@ import pytest
 
 from flujocero.config import cargar, ticket_maximo_uf
 from flujocero.finance.escenarios import construir_escenarios, escenario_base, evaluar_universo
-from flujocero.finance.modelo import Escenario, Unidad, contribuciones_anuales_uf, evaluar
+from flujocero.finance.modelo import (
+    Escenario,
+    Unidad,
+    contribuciones_anuales_uf,
+    evaluar,
+    tasa_aplicable,
+)
 
 getcontext().prec = 34
 
@@ -41,6 +47,7 @@ def escenario(**kw) -> Escenario:
         dfl2=True,
         vacancia=D("0.08"),
         tasa_anual=D("0.0330"),
+        tasa_sin_subsidio=D("0.0339"),
     )
     base.update(kw)
     return Escenario(**base)
@@ -91,7 +98,6 @@ def test_seguros_no_se_duplican(cfg) -> None:
         (dict(microzona_saturada=True), "saturada"),
         (dict(evidence_precio="E"), "estimado"),
         (dict(acogida_dfl2=False), "DFL2"),
-        (dict(es_vivienda_nueva=False), "usada"),
     ],
 )
 def test_exclusiones_duras(cfg, kw, fragmento) -> None:
@@ -167,3 +173,110 @@ def test_tope_uf6000(cfg) -> None:
         D(8_000_000), D(0), D("0.033"), 30, D("0.90"), D(40804), D("0.25"), D("0.45"), D(6000)
     )
     assert r["ticket_max_uf"] == D(6000)
+
+
+# --------------------------------------------------------- usado: escenario, no exclusion (D-015)
+
+
+def test_el_usado_entra_al_ranking_pero_sin_el_subsidio(cfg) -> None:
+    """D-015: el stock usado compite. Lo que NO hereda es el subsidio a la tasa.
+
+    El Decreto 180 art. 3 lo ata a la *primera venta del inmueble*: es condicion de la
+    propiedad, no del escenario. Un escenario `con_subsidio` no se la puede regalar.
+    """
+    p, inv = cfg
+    ev = evaluar(unidad(es_vivienda_nueva=False), escenario(con_subsidio=True), p, inv)
+    assert not ev.excluido, "el usado ya no se excluye: compite"
+    assert not ev.subsidio_aplicado
+    assert "primera venta" in ev.motivo_sin_subsidio
+    assert ev.tasa_aplicada == D("0.0339"), "cae a la tasa que el escenario declaro"
+
+
+def test_un_usado_paga_mas_dividendo_que_el_mismo_depto_nuevo(cfg) -> None:
+    """La consecuencia en plata de lo anterior, sobre la MISMA unidad y el mismo escenario."""
+    p, inv = cfg
+    e = escenario(con_subsidio=True)
+    nuevo = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
+    usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
+    assert usado.dividendo_uf > nuevo.dividendo_uf
+    assert nuevo.subsidio_aplicado and not usado.subsidio_aplicado
+
+
+def test_la_tasa_negada_manda_en_TODO_el_calculo_no_solo_en_el_dividendo(cfg) -> None:
+    """El bug facil: bajar el dividendo y dejar amortizacion, pie de equilibrio y TIR a la
+    tasa vieja. El modelo quedaria incoherente consigo mismo y el error no se veria."""
+    p, inv = cfg
+    e = escenario(con_subsidio=True)
+    nuevo = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
+    usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
+    # A mayor tasa: se amortiza menos capital y hace falta mas pie para llegar a flujo cero.
+    assert usado.amortizacion_mensual_uf < nuevo.amortizacion_mensual_uf
+    assert usado.pie_minimo_flujo_cero > nuevo.pie_minimo_flujo_cero
+
+
+def test_sin_subsidio_en_el_escenario_el_usado_y_el_nuevo_son_identicos(cfg) -> None:
+    """Sin subsidio de por medio, ser usado no debe cambiar NADA por si solo. Si cambia,
+    es que se colo una penalizacion encubierta en vez de un supuesto declarado."""
+    p, inv = cfg
+    e = escenario(con_subsidio=False, tasa_anual=p.d("financiamiento.tasa_anual_sin_subsidio"))
+    nuevo = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
+    usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
+    assert usado.dividendo_uf == nuevo.dividendo_uf
+    assert usado.pie_minimo_flujo_cero == nuevo.pie_minimo_flujo_cero
+
+
+def test_el_subsidio_tampoco_se_aplica_sobre_el_tope_de_uf6000(cfg) -> None:
+    """Misma regla, otra condicion del inmueble. Se prueba en el limite exacto."""
+    p, inv = cfg
+    tope = p.d("subsidio_ley_21748.tope_valor_vivienda_uf")
+    justo = evaluar(unidad(precio_uf=tope, arriendo_mensual_uf=D(20)), escenario(), p, inv)
+    assert justo.subsidio_aplicado, "en el tope exacto todavia califica"
+
+
+def test_el_ds1_tramo4000_esta_declarado_y_marcado_como_no_aplicable(cfg) -> None:
+    """Es el instrumento que SI admite usadas, y el que no podemos usar: obliga a habitar
+    la vivienda y prohibe arrendarla 5 anos. Queda escrito para no re-descubrirlo."""
+    p, _ = cfg
+    t4 = p.crudo("subsidio_ds1_tramo4")
+    assert t4["admite_vivienda_usada"]["v"] is True
+    assert t4["aplicable_a_este_inversionista"]["v"] is False
+    assert "arrendar" in t4["razon_no_aplicable"]
+
+
+def test_perder_el_subsidio_cuesta_lo_que_vale_el_subsidio_y_ni_un_punto_mas(cfg) -> None:
+    """El error que casi cometo: hacer caer al usado al PROMEDIO de mercado sin subsidio
+    mientras el nuevo goza de una tasa de mejor caso. Con las cifras de hoy eso son 67 pb de
+    castigo donde la norma quita 60, y confunde "no tiene subsidio" con "es peor banco".
+    El par lo declara el escenario y tiene que ser comparable."""
+    p, inv = cfg
+    e = escenario(con_subsidio=True)
+    usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
+    assert usado.tasa_aplicada == e.tasa_sin_subsidio
+    brecha_pb = (usado.tasa_aplicada - e.tasa_anual) * D(10000)
+    assert brecha_pb <= D(60), f"el usado carga {brecha_pb} pb, mas que el subsidio mismo"
+
+
+def test_los_escenarios_construidos_emparejan_mejor_caso_con_mejor_caso(cfg) -> None:
+    p, inv = cfg
+    for e in construir_escenarios(p, inv):
+        if e.con_subsidio:
+            assert e.tasa_sin_subsidio == p.d("financiamiento.tasa_mejor_sin_subsidio")
+        else:
+            assert e.tasa_sin_subsidio == e.tasa_anual, "sin subsidio no hay nada que perder"
+
+
+def test_el_escenario_base_tambien_declara_su_caida(cfg) -> None:
+    p, inv = cfg
+    assert escenario_base(p, inv).tasa_sin_subsidio is not None
+
+
+def test_sobre_el_tope_el_subsidio_se_niega_aunque_el_ranking_lo_admitiera(cfg) -> None:
+    """Se prueba la funcion pura: hoy la exclusion dura tapa este caso, pero si el tope del
+    ranking y el de la norma se separan, la regla tiene que seguir de pie sola."""
+    p, _ = cfg
+    tope = p.d("subsidio_ley_21748.tope_valor_vivienda_uf")
+    tasa, aplicado, motivo = tasa_aplicable(
+        unidad(precio_uf=tope + D(1)), escenario(con_subsidio=True), p
+    )
+    assert not aplicado and "tope" in motivo
+    assert tasa == D("0.0339")

@@ -23,11 +23,14 @@ def construir_escenarios(p: Config, inv: Config) -> list[Escenario]:
     ]
     salida: list[Escenario] = []
     for con_sub, pie, dfl2, vac in product([True, False], pies, dfl2_posibles, vacancias):
+        # Mejor caso con mejor caso, promedio con promedio: si no, la unidad que pierde el
+        # subsidio carga ademas la diferencia entre bancos y el modelo confunde dos cosas.
         tasa = (
             p.d("financiamiento.tasa_mejor_caso_fogaes")
             if con_sub
             else p.d("financiamiento.tasa_anual_sin_subsidio")
         )
+        caida = p.d("financiamiento.tasa_mejor_sin_subsidio") if con_sub else tasa
         gestion = "prof" if vac == vacancias[1] else "indiv"
         salida.append(
             Escenario(
@@ -38,6 +41,7 @@ def construir_escenarios(p: Config, inv: Config) -> list[Escenario]:
                 dfl2=dfl2,
                 vacancia=vac,
                 tasa_anual=tasa,
+                tasa_sin_subsidio=caida,
             )
         )
     return salida
@@ -53,6 +57,7 @@ def escenario_base(p: Config, inv: Config) -> Escenario:
         dfl2=bool(inv.crudo("estrategia_dfl2").get("exigir_dfl2")),
         vacancia=p.d("vacancia_y_riesgo.vacancia_gestion_individual"),
         tasa_anual=p.d("financiamiento.tasa_mejor_caso_fogaes"),
+        tasa_sin_subsidio=p.d("financiamiento.tasa_mejor_sin_subsidio"),
     )
 
 

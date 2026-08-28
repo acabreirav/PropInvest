@@ -358,3 +358,104 @@ recorta antes que la regla.
 **Efecto colateral, ya aplicado:** `assetplan_arriendo` sube a fuente **primaria** de la capa 4.
 Su `robots.txt` permite explícitamente ClaudeBot, cubre 175 edificios con `lastmod` diario, y es
 arriendo **efectivo** —no precio pedido—, que es lo que el §4 exige como numerador del yield.
+
+---
+
+## D-015 · El stock usado entra al ranking como escenario
+**Estado:** decidida por el usuario · **Fecha:** 28-ago-2026
+
+El usuario aportó que "el subsidio ahora incluye viviendas usadas hasta UF 4.000". La
+información es real, pero corresponde a **un instrumento distinto** del que el proyecto
+modela. La prensa los junta en un solo titular y por eso conviene dejarlos separados aquí.
+
+### Los tres instrumentos, separados
+
+| Instrumento | Tope | ¿Usadas? | Fuente |
+|---|---|---|---|
+| **Subsidio a la tasa** (Ley 21.748, Decreto 180) — 60 pb | UF 6.000 | **No.** Exige *primera venta del inmueble* (art. 3) | BCN Ley Fácil; Decreto 180 exento |
+| **FOGAES ampliado** — garantía, habilita 90% LTV | UF 6.000 (subió desde 4.000), desde sept-2026 | **Sin confirmar** | prensa ago-2026 |
+| **Subsidio Tramo 4.000 (DS1 Tramo 4)** — aporte directo 400 UF | UF 4.000 (4.500 zonas extremas) | **Sí** | Minvu / gob.cl ago-2026 |
+
+### Por qué el Tramo 4.000 no sirve para este inversionista
+
+El DS1, **en cualquiera de sus tramos**, exige que la vivienda *"sea habitada personalmente
+por el beneficiario y/o su núcleo familiar"* y **prohíbe arrendarla o venderla durante 5 años**
+desde la compra. Pide además Registro Social de Hogares y 200 UF de ahorro con 12 meses de
+antigüedad, y son 5.000 cupos en un llamado de nov-2026.
+
+La tesis completa del proyecto es arrendar desde el primer mes. No es que el subsidio sea
+subóptimo: es **incompatible**, y tomarlo arrendando igual es causal de revocación. Queda
+declarado en `params.yml:subsidio_ds1_tramo4` con `aplicable_a_este_inversionista: false`
+para que ningún agente futuro lo vuelva a proponer.
+
+### Lo que sí se decidió
+
+La intuición económica de fondo es correcta y sobrevive al error de vehículo: **el stock
+usado rinde más y por eso llega a flujo cero con menos pie.** El propio §13.3 del contrato lo
+admite sin decirlo cuando advierte que los "13,3% de Cerro Navia" son stock usado.
+
+**Decisión: el usado entra como escenario, no como pivote.** Concretamente:
+
+1. `score.exclusiones_duras.solo_vivienda_nueva` pasa a `false`. El usado compite.
+2. **El motor le niega el subsidio a la tasa, y eso no lo decide la config.** Se agregó
+   `finance/modelo.tasa_aplicable(u, e, p)`: si la unidad no es de primera venta, devuelve la
+   tasa sin subsidio aunque el escenario pida `con_subsidio`, y deja el motivo escrito en la
+   evaluación. Es la clase de error que el §7.6 manda buscar: aplicarle 60 pb de rebaja a un
+   inmueble que la norma no cubre produce una oportunidad falsa, más atractiva en la pantalla
+   que en la escritura.
+3. La tasa aplicada manda en **todo** el cálculo —dividendo, amortización, pie de equilibrio
+   y saldo insoluto para la TIR—, no solo en el dividendo. Bajar el dividendo y dejar el resto
+   a la tasa vieja dejaría el modelo incoherente consigo mismo sin que se note.
+4. Se agregó el caso de oro simétrico: **sin subsidio de por medio, un usado y un nuevo
+   idénticos deben dar exactamente lo mismo.** Si difieren, es que se coló una penalización
+   encubierta en vez de un supuesto declarado.
+
+### Lo que encontró la revisión adversarial (§7.6)
+
+La primera versión de `tasa_aplicable` hacía caer al usado a
+`financiamiento.tasa_anual_sin_subsidio` (3,97%, el **promedio** de mercado) mientras el nuevo
+conservaba `tasa_mejor_caso_fogaes` (3,30%, un **mejor caso**). Eso son **67 pb** de castigo
+donde la norma solo quita 60, y mezcla dos cosas distintas: "no califica al subsidio" con
+"consiguió peor banco". El mejor caso sin subsidio es 3,39% — a **9 pb**.
+
+La diferencia entre 9 y 67 pb decide si el usado gana o pierde la comparación. Corregido: el
+`Escenario` ahora declara `tasa_sin_subsidio` explícitamente y el emparejamiento es mejor caso
+con mejor caso. Caso de oro: **perder el subsidio no puede costar más de 60 pb.**
+
+Queda una pregunta de datos que esto destapó: que el mejor caso con subsidio (3,30%) y sin
+subsidio (3,39%) estén a 9 pb, cuando el subsidio son 60 pb, sugiere que las tasas observadas
+no aíslan el efecto del subsidio —vienen de bancos y fechas distintas. → T-914.
+
+### Lo que queda abierto
+
+- **¿FOGAES cubre viviendas usadas o solo primera venta?** Es la pregunta que más mueve la
+  aguja y no la pude resolver con fuentes públicas. Si las cubre, el usado se compra con 10%
+  de pie y el objetivo de minimizar pie sobrevive. Si no, exige ~20% y la comparación cambia
+  por completo. **Va al banco.**
+- **¿El subsidio a la tasa tiene límite de unidades por persona?** Una fuente bancaria sugiere
+  que no; el inversionista quiere dos. `params.yml` lo tiene como `null` con evidencia `C`.
+  **Va al banco.**
+- **DFL2 en usado:** el beneficio de renta sigue a la propiedad, pero la rebaja de
+  contribuciones corre desde la recepción municipal. Un usado de 15 años podría tener esa
+  ventana consumida, y el DFL2 es lo que más vale en valor presente (§2.5). El modelo hoy
+  **no** distingue antigüedad al aplicar la rebaja: es un supuesto optimista y hay que
+  cerrarlo antes de rankear usado con datos reales. → T-911.
+- **De dónde salen los avisos de usado.** Esto empeora con el 403 de MercadoLibre, no mejora:
+  la obra nueva tiene caminos permitidos que no pasan por portales (PlanOK, wp-json de
+  inmobiliarias, Pabellón, Enlace); el usado vive disperso en los portales, que es justo donde
+  se cerró la puerta. Queda Chilepropiedades (permite crawling) y el catastro SII. → T-912.
+
+### Efecto colateral que juega a favor
+
+La **Capa 1 (catastro SII)** estaba planificada como ancla determinística y resulta ser mucho
+más valiosa para usado que para nuevo: un departamento usado tiene rol SII con avalúo, año de
+construcción, materialidad y m² registrados. Un proyecto nuevo a veces ni tiene roles
+individuales todavía. Esa capa pasa de ancla a fuente de atributos.
+
+**Fuentes:** [BCN Ley Fácil — subsidio a la tasa para viviendas nuevas](https://www.bcn.cl/api-leyfacil/servicio/ObtenerGuiaPublicadaHTML?uri=subsidio-a-la-tasa-de-interes-hipotecaria-para-la-adquisicion-de-viviendas-nuevas) ·
+[Decreto 180 exento de 2025](https://fogaes.cl/wp-content/uploads/2026/05/Decreto-180-exento-de-2025.-Reglas-generales-de-funcionamiento-del-Subsidio-a-la-Tasa-de-Interes-de-Creditos-Hipotecarios-de-Viviendas-Nuevas.pdf) ·
+[Minvu — Subsidio Sectores Medios D.S.1](https://www.minvu.gob.cl/postulacion/primer-llamado-nacional-2026-para-postular-al-subsidio-para-sectores-medios-d-s-1/) ·
+[Serviu Maule — anuncio Tramo 4.000](https://serviumaule.minvu.gob.cl/noticia/minvu-anuncio-nuevo-tramo-4-000-en-expo-vivienda-y-bancoestado-presenta-hipotecario-pro/) ·
+[T13 — Fogaes ampliado](https://www.t13.cl/noticia/te-puede-servir/para-viviendas-hasta-6000-uf-como-funciona-fogaes-ampliado-desde-cuando-estara-26-8-2026) ·
+[UsaTuSubsidio — prohibiciones de las viviendas con subsidio habitacional](https://usatusubsidio.cl/noticias/prohibiciones-de-las-viviendas-con-subsidio-habitacional/) ·
+[BioBioChile — razones por las que te pueden quitar el subsidio](https://www.biobiochile.cl/noticias/servicios/explicado/2023/11/29/las-6-razones-por-las-que-te-pueden-quitar-el-subsidio-habitacional.shtml)

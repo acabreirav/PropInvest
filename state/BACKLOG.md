@@ -308,3 +308,50 @@ criterio_de_aceptacion:
 
 ## T-903 · Vigilar parsers rotos
 El gate de caída >30% dispara esta tarea automáticamente.
+
+## T-911 · DFL2 en vivienda usada: la ventana de contribuciones puede estar consumida
+estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: []
+criterio_de_aceptacion:
+  - [ ] Verificar con fuente citada desde cuando corre la rebaja de 50% de contribuciones
+        (recepcion municipal) y su duracion segun m2
+  - [ ] `Unidad` gana `anio_recepcion` y la rebaja se aplica solo si la ventana sigue abierta
+  - [ ] Caso de oro: un usado con ventana vencida paga contribuciones completas
+  - [ ] La exencion de renta del DFL2 se verifica aparte: sigue a la propiedad, no a la ventana
+nota: >
+  Hoy el modelo aplica la rebaja DFL2 a cualquier unidad acogida, sin mirar antiguedad. Para
+  obra nueva era inocuo. Con usado en el ranking (D-015) es un supuesto optimista sobre lo que
+  el §2.5 declara como el beneficio de mayor valor presente. Cerrar ANTES de rankear usado
+  con datos reales.
+
+## T-912 · De donde salen los avisos de vivienda usada
+estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: [T-011]
+criterio_de_aceptacion:
+  - [ ] ADR por fuente candidata con robots + legal_tier: chilepropiedades, catastro SII, CBR
+  - [ ] Ninguna fuente `html_prohibido` sin aprobacion humana explicita
+  - [ ] Estimacion de cobertura por comuna de Fase 1
+nota: >
+  El 403 de MercadoLibre golpea mas fuerte al usado que al nuevo: la obra nueva tiene caminos
+  permitidos que no pasan por portales (PlanOK, wp-json, Pabellon, Enlace); el usado vive
+  disperso en los portales. Chilepropiedades permite crawling (Crawl-delay: 2). El catastro SII
+  da atributos reales por rol, que para usado vale mas que para nuevo.
+
+## T-913 · Preguntas al banco (bloquean dos decisiones)
+estado: bloqueada_por_humano · agente: - · fase: 1
+criterio_de_aceptacion:
+  - [ ] ¿FOGAES cubre viviendas USADAS o solo primera venta? (D-015 — la que mas mueve la aguja)
+  - [ ] ¿El subsidio a la tasa tiene limite de unidades por persona? (params: null, evidence C)
+  - [ ] ¿Tasa del tramo <= UF 3.000 vs tramo general? (D-009)
+  - [ ] ¿Acepta conyuge como codeudora solidaria SIN copropiedad? (D-011 pregunta 4)
+
+## T-914 · Las tasas de params.yml no aislan el efecto del subsidio
+estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: []
+criterio_de_aceptacion:
+  - [ ] Obtener, del mismo banco y la misma fecha, la tasa CON y SIN subsidio
+  - [ ] Si la brecha observada no se acerca a los 60 pb del Decreto 180, explicar por que
+        (efecto FOGAES sobre el spread, mix de plazos, LTV distinto) y dejarlo escrito
+  - [ ] params.yml queda con un par comparable, no con cuatro tasas de origen mezclado
+nota: >
+  Hoy conviven tasa_mejor_caso_fogaes 3,30% y tasa_mejor_sin_subsidio 3,39%: 9 pb, cuando el
+  subsidio son 60. Y tasa_anual_sin_subsidio 3,97% es un promedio de otra fuente. Vienen de
+  bancos y fechas distintas, asi que ninguna resta entre ellas mide el subsidio. Lo destapo la
+  revision adversarial de D-015, porque de ese par depende si el stock usado gana o pierde.
