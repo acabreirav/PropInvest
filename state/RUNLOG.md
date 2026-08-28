@@ -636,3 +636,45 @@ Entre 9 y 67 pb esta la respuesta a si el usado gana o pierde. Corregido: el `Es
 declara `tasa_sin_subsidio` y el par es mejor-caso con mejor-caso. Caso de oro nuevo: perder
 el subsidio no puede costar mas de 60 pb. Destapo ademas T-914: las cuatro tasas de params.yml
 vienen de bancos y fechas distintas, asi que ninguna resta entre ellas mide el subsidio.
+
+---
+
+## 2026-08-28 · T-914 cerrada con datos del usuario, y un supuesto mio refutado
+
+**Que aporto el usuario.** Tasas de los simuladores de los propios bancos, mismo dia, mismas
+condiciones (depto NUEVO UF 3.999, pie 10%, 30 anos):
+
+| Banco | Con subsidio | Sin subsidio | Brecha |
+|---|---|---|---|
+| BancoEstado | 3,30% | 4,29% | **99 pb** |
+| Santander | 3,32% | 4,78% (CAE 5,35) | **146 pb** |
+
+**Que refuto.** El caso de oro que escribi hace una hora afirmaba que "perder el subsidio no
+puede costar mas de 60 pb", porque 60 pb son los del Decreto 180. Falso: la brecha real es
+99-146 pb. Y ademas el test pasaba por la razon equivocada — comparaba contra un valor fijo en
+el fixture, no contra la configuracion. Un test que valida su propio fixture no valida nada.
+
+**Que confirma.** El §2.1 del contrato, textual: el subsidio son 60 pb y *"el resto de la
+rebaja que cita la prensa viene del efecto FOGAES sobre el spread del banco"*. Los datos lo
+miden: 99 pb menos 60 = 39 pb de FOGAES en BancoEstado; 86 pb en Santander.
+
+**Consecuencia para D-015.** Perder el subsidio cuesta el doble de lo que yo modelaba. Si el
+usado ademas pierde FOGAES, cae a 80% de LTV. La pregunta al banco sobre FOGAES en usadas
+pasa de importante a decisiva.
+
+**Que se corrigio.**
+- `params.yml`: bloque `tasas_pareadas_simulador` con los cuatro valores y su procedencia.
+  `tasa_mejor_sin_subsidio` 3,39% -> **4,29%** (era de otro banco y otro producto).
+- El caso de oro ahora afirma lo medido y exige que la brecha SUPERE los 60 pb.
+- `cli capacidad` usaba el promedio de mercado contra una tasa de mejor caso: mismo error de
+  emparejamiento. Ahora muestra tres casos con su LTV y **el pie en pesos** contra el ahorro
+  disponible — un ticket mayor con menos LTV es aritmetica correcta y consejo falso si el pie
+  no esta en la cuenta.
+- Se destapo que `ltv_sin_fogaes: 0.80` estaba en la config **sin que nadie lo usara**: el
+  motor permitia pie de 10% sin FOGAES, que la propia config declara imposible. -> T-915.
+
+**Correccion de perfil.** El usuario nunca dijo que quisiera dos viviendas; dos es el tope
+legal. `objetivo_unidades: 2` -> `null`, con `tope_legal_unidades: 2` aparte, y el gate deja de
+tratar "no declarado" como "quiere el maximo". CLAUDE.md §2.5 corregido.
+
+**Estado.** 216 tests verdes.

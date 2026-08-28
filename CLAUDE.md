@@ -66,7 +66,8 @@ Estos salieron de la investigación previa (ver `docs/00-hallazgos.md`). **No lo
    Depto ≤140 m² acogido a DFL2: arriendo **exento de impuesto a la renta**, 50% de rebaja de
    contribuciones por 10–20 años, exento de IVA de arriendo, exento de impuesto de herencias.
    Límite: **2 por persona natural**; la persona jurídica **no accede**.
-   El inversionista tiene **0 de sus 2 cupos usados y quiere ambos**.
+   El inversionista tiene **0 de sus 2 cupos usados**. Cuántos quiere usar **no está
+   definido** (corregido el 28-ago-2026: dos es el tope legal, no su objetivo).
    → `exigir_dfl2: true` en `config/inversionista.yml`: **solo se rankean unidades acogidas a DFL2
    con ≤140 m² útiles**; el resto queda excluido por regla dura, no por puntaje. Y el DFL2 se
    verifica en la escritura o el certificado municipal, nunca en lo que diga el vendedor.

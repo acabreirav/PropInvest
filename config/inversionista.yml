@@ -21,7 +21,11 @@ elegibilidad:
   califica_fogaes_90ltv: true
 
 estrategia_dfl2:
-  objetivo_unidades: 2             # el máximo por persona natural (Ley 20.455)
+  # NO DEFINIDO por el inversionista. El 28-ago-2026 corrigió el supuesto: nunca dijo que
+  # quisiera dos. Dos es el TOPE legal por persona natural (Ley 20.455), no su objetivo.
+  # `null` = sin objetivo declarado; el motor no debe asumir ninguno.
+  objetivo_unidades: null
+  tope_legal_unidades: 2           # el máximo por persona natural (Ley 20.455)
   max_m2_utiles: 140               # sobre esto se pierde DFL2. Exclusión dura del ranking.
   exigir_dfl2: true                # solo se rankean unidades acogidas a DFL2
   nota_escalamiento: >

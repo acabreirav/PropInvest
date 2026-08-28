@@ -12,13 +12,39 @@ macro:
   tasa_descuento_real: {v: 0.060, evidence: E, rango: [0.05, 0.07]}
 
 financiamiento:
+  plazo_anios: {v: 30, evidence: V}
+  # MEDIDO 28-ago-2026 en los simuladores de los propios bancos, MISMO banco, MISMO dia,
+  # MISMAS condiciones: depto NUEVO UF 3.999, pie 10%, 30 anos. Es la unica forma de que la
+  # resta entre dos tasas signifique algo (T-914). Los promedios de mercado no sirven para
+  # esto: mezclan plazos, LTV y bancos.
+  tasas_pareadas_simulador:
+    condiciones: "depto nuevo UF 3.999 · pie 10% · 30 anos · 28-ago-2026"
+    bancoestado:
+      con_subsidio: {v: 0.0330, evidence: V, fuente: "simulador BancoEstado 28-ago-2026"}
+      sin_subsidio: {v: 0.0429, evidence: V, fuente: "simulador BancoEstado 28-ago-2026"}
+      brecha_pb: {v: 99, evidence: D}
+    santander:
+      con_subsidio: {v: 0.0332, evidence: V, fuente: "simulador Santander 28-ago-2026"}
+      sin_subsidio: {v: 0.0478, evidence: V, fuente: "simulador Santander 28-ago-2026"}
+      sin_subsidio_cae: {v: 0.0535, evidence: V, fuente: "simulador Santander 28-ago-2026"}
+      brecha_pb: {v: 146, evidence: D}
+    nota: >
+      La brecha observada (99-146 pb) es MUCHO mayor que los 60 pb del Decreto 180, y eso
+      confirma el hallazgo del CLAUDE.md §2.1: el subsidio son 60 pb y el resto viene del
+      efecto FOGAES sobre el spread del banco. No es un error de medicion: son dos cosas
+      sumadas. Consecuencia: perder el subsidio a la tasa cuesta bastante mas que 60 pb
+      cuando ademas se pierde la garantia.
+
   ltv_con_fogaes: {v: 0.90, evidence: V}
   ltv_sin_fogaes: {v: 0.80, evidence: V}
-  plazo_anios: {v: 30, evidence: V}
+  # Las dos que usa el motor, ya pareadas. Se toma BancoEstado por ser el par mas conservador
+  # (menor brecha): si el usado gana con 99 pb en contra, gana con mas razon con 146.
+  tasa_mejor_caso_fogaes: {v: 0.0330, evidence: V, fuente: "simulador BancoEstado 28-ago-2026"}
+  tasa_mejor_sin_subsidio: {v: 0.0429, evidence: V, fuente: "simulador BancoEstado 28-ago-2026, mismas condiciones"}
+  # Promedio de mercado. NO sirve para parear contra una tasa de mejor caso: mezcla plazos,
+  # LTV y bancos. Se conserva como referencia macro, no como contraste del subsidio.
   tasa_anual_sin_subsidio: {v: 0.0397, evidence: V, fuente: "BCCh F022.VIV.TIP.MA03.UF.Z.M jul-2026"}
   tasa_anual_con_subsidio_fogaes: {v: 0.0340, evidence: V, fuente: "licitación FOGAES jun-2025"}
-  tasa_mejor_caso_fogaes: {v: 0.0330, evidence: V, fuente: "Santander / Bco de Chile ago-2026"}
-  tasa_mejor_sin_subsidio: {v: 0.0339, evidence: V, fuente: "Itaú ago-2026"}
   subsidio_tasa_pb: {v: 60, evidence: V, fuente: "Decreto 180 exento arts. 1 y 13"}
   sistema_amortizacion: frances
   dividendo_max_pct_ingreso: {v: 0.25, evidence: V}

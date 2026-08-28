@@ -344,14 +344,31 @@ criterio_de_aceptacion:
   - [ ] ¿Acepta conyuge como codeudora solidaria SIN copropiedad? (D-011 pregunta 4)
 
 ## T-914 · Las tasas de params.yml no aislan el efecto del subsidio
-estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: []
+estado: hecha · agente: - · fase: 1 · depende_de: []
 criterio_de_aceptacion:
-  - [ ] Obtener, del mismo banco y la misma fecha, la tasa CON y SIN subsidio
-  - [ ] Si la brecha observada no se acerca a los 60 pb del Decreto 180, explicar por que
-        (efecto FOGAES sobre el spread, mix de plazos, LTV distinto) y dejarlo escrito
-  - [ ] params.yml queda con un par comparable, no con cuatro tasas de origen mezclado
+  - [x] Obtener, del mismo banco y la misma fecha, la tasa CON y SIN subsidio
+        -> el usuario las midio en los simuladores el 28-ago-2026, mismas condiciones
+        (depto nuevo UF 3.999, pie 10%, 30 anos):
+        BancoEstado 3,30% / 4,29% = 99 pb · Santander 3,32% / 4,78% (CAE 5,35) = 146 pb
+  - [x] Explicar por que la brecha supera los 60 pb del Decreto 180
+        -> CONFIRMA el §2.1: 60 pb son el subsidio y el resto es el efecto FOGAES sobre el
+        spread del banco. Son dos beneficios sumados.
+  - [x] params.yml queda con un par comparable: se usa el de BancoEstado por conservador
 nota: >
   Hoy conviven tasa_mejor_caso_fogaes 3,30% y tasa_mejor_sin_subsidio 3,39%: 9 pb, cuando el
   subsidio son 60. Y tasa_anual_sin_subsidio 3,97% es un promedio de otra fuente. Vienen de
   bancos y fechas distintas, asi que ninguna resta entre ellas mide el subsidio. Lo destapo la
   revision adversarial de D-015, porque de ese par depende si el stock usado gana o pierde.
+
+## T-915 · El motor no distingue FOGAES de subsidio a la tasa
+estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: [T-913]
+criterio_de_aceptacion:
+  - [ ] `Escenario` gana `con_fogaes` separado de `con_subsidio`
+  - [ ] El pie minimo del escenario sale del LTV que corresponde (0,90 con FOGAES / 0,80 sin)
+  - [ ] Un escenario con pie 10% y sin FOGAES se marca inviable, no se calcula en silencio
+  - [ ] Caso de oro: perder solo el subsidio y perder ambos dan resultados distintos
+nota: >
+  Hoy `con_subsidio` arrastra implicitamente el 90% de LTV, y `ltv_sin_fogaes: 0.80` estaba en
+  params.yml sin que nadie lo usara. Los datos del usuario mostraron que son dos beneficios
+  separables: 60 pb del Decreto 180 mas el efecto FOGAES sobre el spread. Bloqueada hasta
+  saber si FOGAES cubre usadas (T-913): la respuesta define si el usado va a 90% o a 80%.

@@ -47,7 +47,7 @@ def escenario(**kw) -> Escenario:
         dfl2=True,
         vacancia=D("0.08"),
         tasa_anual=D("0.0330"),
-        tasa_sin_subsidio=D("0.0339"),
+        tasa_sin_subsidio=D("0.0429"),
     )
     base.update(kw)
     return Escenario(**base)
@@ -189,7 +189,7 @@ def test_el_usado_entra_al_ranking_pero_sin_el_subsidio(cfg) -> None:
     assert not ev.excluido, "el usado ya no se excluye: compite"
     assert not ev.subsidio_aplicado
     assert "primera venta" in ev.motivo_sin_subsidio
-    assert ev.tasa_aplicada == D("0.0339"), "cae a la tasa que el escenario declaro"
+    assert ev.tasa_aplicada == D("0.0429"), "cae a la tasa que el escenario declaro"
 
 
 def test_un_usado_paga_mas_dividendo_que_el_mismo_depto_nuevo(cfg) -> None:
@@ -243,17 +243,40 @@ def test_el_ds1_tramo4000_esta_declarado_y_marcado_como_no_aplicable(cfg) -> Non
     assert "arrendar" in t4["razon_no_aplicable"]
 
 
-def test_perder_el_subsidio_cuesta_lo_que_vale_el_subsidio_y_ni_un_punto_mas(cfg) -> None:
-    """El error que casi cometo: hacer caer al usado al PROMEDIO de mercado sin subsidio
-    mientras el nuevo goza de una tasa de mejor caso. Con las cifras de hoy eso son 67 pb de
-    castigo donde la norma quita 60, y confunde "no tiene subsidio" con "es peor banco".
-    El par lo declara el escenario y tiene que ser comparable."""
+def test_perder_el_subsidio_cuesta_exactamente_la_brecha_medida(cfg) -> None:
+    """Que cuesta perder el subsidio, medido y no supuesto.
+
+    Version anterior de este test: "no puede costar mas de 60 pb", porque el Decreto 180 son
+    60 pb. **Era falso**, y ademas pasaba por la razon equivocada: comparaba contra un
+    `tasa_sin_subsidio` fijo en el fixture en vez de contra la configuracion real.
+
+    Los simuladores de los propios bancos, mismo dia y mismas condiciones (depto nuevo
+    UF 3.999, pie 10%, 30 anos), dan brechas de **99 pb (BancoEstado)** y **146 pb
+    (Santander)** — no 60. Y eso confirma el §2.1 del contrato en vez de contradecirlo: el
+    subsidio son 60 pb y **el resto es el efecto FOGAES sobre el spread del banco**. Son dos
+    beneficios sumados, y quien no califica pierde los dos.
+    """
     p, inv = cfg
-    e = escenario(con_subsidio=True)
+    e = escenario_base(p, inv)
     usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
-    assert usado.tasa_aplicada == e.tasa_sin_subsidio
-    brecha_pb = (usado.tasa_aplicada - e.tasa_anual) * D(10000)
-    assert brecha_pb <= D(60), f"el usado carga {brecha_pb} pb, mas que el subsidio mismo"
+    nuevo_ = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
+
+    assert usado.tasa_aplicada == p.d("financiamiento.tasa_mejor_sin_subsidio")
+    assert nuevo_.tasa_aplicada == p.d("financiamiento.tasa_mejor_caso_fogaes")
+
+    brecha_pb = (usado.tasa_aplicada - nuevo_.tasa_aplicada) * D(10000)
+    assert brecha_pb == D(99), "la brecha pareada de BancoEstado, medida el 28-ago-2026"
+    assert brecha_pb > p.d("financiamiento.subsidio_tasa_pb"), (
+        "la brecha DEBE superar los 60 pb del Decreto 180: incluye el efecto FOGAES"
+    )
+
+
+def test_el_par_de_tasas_del_motor_viene_del_mismo_banco_y_dia(cfg) -> None:
+    """T-914: una resta entre tasas de bancos o fechas distintas no mide nada."""
+    p, _ = cfg
+    par = p.crudo("financiamiento.tasas_pareadas_simulador")["bancoestado"]
+    assert p.d("financiamiento.tasa_mejor_caso_fogaes") == D(str(par["con_subsidio"]["v"]))
+    assert p.d("financiamiento.tasa_mejor_sin_subsidio") == D(str(par["sin_subsidio"]["v"]))
 
 
 def test_los_escenarios_construidos_emparejan_mejor_caso_con_mejor_caso(cfg) -> None:
@@ -279,4 +302,4 @@ def test_sobre_el_tope_el_subsidio_se_niega_aunque_el_ranking_lo_admitiera(cfg) 
         unidad(precio_uf=tope + D(1)), escenario(con_subsidio=True), p
     )
     assert not aplicado and "tope" in motivo
-    assert tasa == D("0.0339")
+    assert tasa == D("0.0429")

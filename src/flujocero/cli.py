@@ -99,25 +99,47 @@ def capacidad() -> None:
         typer.echo("Falta `renta_liquida_mensual_clp` en config/inversionista.yml.")
         raise typer.Exit(1)
     otras = D(str(inv.crudo("restricciones").get("otros_creditos_cuota_mensual_clp") or 0))
-    for etiqueta, tasa in [
-        ("con subsidio + FOGAES", p.d("financiamiento.tasa_mejor_caso_fogaes")),
-        ("sin subsidio", p.d("financiamiento.tasa_anual_sin_subsidio")),
+    _ahorro = inv.crudo("restricciones").get("ahorro_disponible_pie_clp")
+    ahorro = D(str(_ahorro)) if _ahorro is not None else None
+    # Las tres combinaciones que importan. El LTV va con cada una: sin FOGAES el banco no
+    # presta el 90%, asi que el ticket no lo limita solo el dividendo sino tambien el pie.
+    # Las tasas del par con/sin subsidio son del MISMO banco y el MISMO dia (T-914).
+    con_sub = p.d("financiamiento.tasa_mejor_caso_fogaes")
+    sin_sub = p.d("financiamiento.tasa_mejor_sin_subsidio")
+    ltv_con = p.d("financiamiento.ltv_con_fogaes")
+    ltv_sin = p.d("financiamiento.ltv_sin_fogaes")
+    for etiqueta, tasa, ltv in [
+        ("subsidio + FOGAES", con_sub, ltv_con),
+        ("solo FOGAES (usado?)", sin_sub, ltv_con),
+        ("ni subsidio ni FOGAES", sin_sub, ltv_sin),
     ]:
         r = ticket_maximo_uf(
             D(str(renta)),
             otras,
             tasa,
             int(p.d("financiamiento.plazo_anios")),
-            p.d("financiamiento.ltv_con_fogaes"),
+            ltv,
             p.d("macro.valor_uf_clp"),
             p.d("financiamiento.dividendo_max_pct_ingreso"),
             p.d("financiamiento.carga_financiera_max_pct"),
             p.d("subsidio_ley_21748.tope_valor_vivienda_uf"),
         )
+        # Un ticket mas alto con menos LTV es aritmetica correcta y consejo falso si el pie
+        # no esta en la cuenta: sale de tu bolsillo, no del banco.
+        pie_clp = r["ticket_max_uf"] * (D(1) - ltv) * p.d("macro.valor_uf_clp")
+        alcanza = ahorro is None or pie_clp <= ahorro
+        marca = "" if alcanza else "  <- el pie NO alcanza"
         typer.echo(
-            f"{etiqueta:<24} dividendo máx ${int(r['dividendo_max_clp']):,}  "
-            f"crédito UF {r['credito_max_uf']:.0f}  ticket UF {r['ticket_max_uf']:.0f}"
+            f"{etiqueta:<24} tasa {tasa:.2%}  pie min {1 - ltv:.0%}  "
+            f"crédito UF {r['credito_max_uf']:.0f}  ticket UF {r['ticket_max_uf']:.0f}  "
+            f"pie ${int(pie_clp):,}{marca}"
         )
+    typer.echo(
+        f"\n  dividendo máximo ${int(r['dividendo_max_clp']):,}/mes en los tres casos: "
+        "lo fija la renta, no el producto."
+    )
+    if ahorro is not None:
+        typer.echo(f"  ahorro disponible para el pie: ${int(ahorro):,}")
 
 
 def _params_con_uf_real(p):
@@ -478,10 +500,11 @@ def gates() -> None:
 
     if inv.crudo("perfil")["tipo"] != "persona_natural":
         fallos.append("el perfil debe ser persona_natural: la persona jurídica no accede a DFL2")
-    if (
-        inv.crudo("estrategia_dfl2")["objetivo_unidades"]
-        > p.crudo("tributacion.limite_dfl2_por_persona_natural")["v"]
-    ):
+    objetivo = inv.crudo("estrategia_dfl2")["objetivo_unidades"]
+    limite = p.crudo("tributacion.limite_dfl2_por_persona_natural")["v"]
+    # `None` = el inversionista no declaro un objetivo. No es lo mismo que declarar el tope:
+    # dar por hecho que quiere el maximo legal es inventarle una intencion.
+    if objetivo is not None and objetivo > limite:
         fallos.append("el objetivo de unidades DFL2 supera el límite legal por persona natural")
     typer.echo("✓ perfil del inversionista coherente con el régimen DFL2")
 
