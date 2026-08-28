@@ -208,8 +208,12 @@ def ingest(
     except ErrorDeFuente as exc:
         typer.echo(f"✗ {exc}")
         typer.echo(
-            "\n  Si esto dice 'proxy' o '403', el entorno no tiene salida hacia la CMF.\n"
-            "  Este comando necesita ejecutarse desde una maquina con internet abierto."
+            "\n  'proxy' o '403'      -> el entorno no tiene salida hacia la CMF;"
+            " corre esto desde una maquina con internet abierto."
+            "\n  'Server disconnected' -> la API de la CMF corta al azar. Ya se reintenta"
+            " 4 veces con espera creciente; vuelve a intentar en un rato."
+            "\n  '401' o 'apikey'      -> revisa CMF_APIKEY en el .env."
+            "\n\n  `cli probe` prueba peticiones de tamano creciente y dice cual pasa."
         )
         raise typer.Exit(1) from exc
     typer.echo(f"✓ {len(docs)} documentos en la zona cruda")

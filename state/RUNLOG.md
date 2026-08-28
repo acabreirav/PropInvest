@@ -354,3 +354,37 @@ hallazgos secundarios:
 lección metodologica: el `probe` valio la pena. Sin el habria "arreglado" el problema con el
 troceado, habria funcionado por casualidad —gracias a los reintentos— y habria quedado en el
 codigo una explicacion equivocada de por que.
+
+## 2026-08-28 · iteración 10 — el mismo servidor, ahora en robots.txt
+gates: **VERDE** · `pytest`: **154 passed** (eran 141)
+
+Segunda corrida del usuario:
+
+    ✗ no se recolecta: verificación de robots.txt no superada — robots.txt respondió 500
+
+Veinte minutos antes, en el `probe`, ese mismo `robots.txt` devolvia **404**. Es la misma
+inestabilidad del servidor, ahora en el otro extremo.
+
+**Dos errores mios, y el segundo es de criterio, no de codigo.**
+
+1. Le puse reintentos a las peticiones de datos y **no a la de robots.txt**, contra el mismo
+   host que ya habia demostrado ser inestable. Corregido: mismo backoff exponencial con
+   jitter, 4 intentos.
+2. **Trataba un 500 como una prohibicion.** No lo es. El RFC 9309 distingue tres casos que
+   es facil confundir:
+   - **4xx (no disponible)**, 404 incluido: NO hay restricciones. Se permite.
+   - **5xx (inalcanzable)**: se reintenta; agotados los intentos se asume prohibicion, pero
+     **por caida del servidor y no por decision del sitio**, y el mensaje ahora lo dice.
+   - **2xx**: se parsea y manda lo que diga.
+
+   El codigo anterior mandaba todo 4xx que no fuera 404 al mismo saco que el 5xx. Un 403 en
+   `robots.txt` significa "no disponible", no "prohibido crawlear".
+
+La distincion no es academica: un 500 transitorio tratado como prohibicion detiene una
+recoleccion legitima, y un 5xx tratado como permiso saltaria una prohibicion real.
+
+13 tests nuevos, incluida la secuencia exacta que fallo (500, 500, 404) y la que debe seguir
+prohibiendo (un `Disallow: /` de verdad).
+
+Tambien se corrigio la pista de error de la CLI, que solo hablaba de proxy y 403 y no servia
+para este caso. Ahora distingue tres sintomas y menciona `cli probe`.
