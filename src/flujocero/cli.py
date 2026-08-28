@@ -9,7 +9,7 @@ from decimal import getcontext
 import typer
 
 from flujocero import db
-from flujocero.config import RAIZ, cargar, ticket_maximo_uf
+from flujocero.config import RAIZ, cargar, con_valor, ticket_maximo_uf, uf_desde_la_base
 
 getcontext().prec = 34
 app = typer.Typer(add_completion=False, help="Flujo Cero")
@@ -120,6 +120,28 @@ def capacidad() -> None:
         )
 
 
+def _params_con_uf_real(p):
+    """Reemplaza la UF fija de params.yml por la ultima cargada en la base, si la hay.
+
+    El motor es puro y no lee la base (§11): la lectura ocurre aca y el valor entra al
+    motor por argumento, con su `evidence` y su fuente.
+    """
+    import duckdb
+
+    ruta = db.ruta_db()
+    if not ruta.exists():
+        return p, "params.yml (no hay base cargada)"
+    con = duckdb.connect(str(ruta), read_only=True)
+    try:
+        real = uf_desde_la_base(con)
+    finally:
+        con.close()
+    if real is None:
+        return p, "params.yml (no hay serie de UF cargada)"
+    valor, fuente = real
+    return con_valor(p, "macro.valor_uf_clp", float(valor), fuente), fuente
+
+
 @app.command()
 def demo() -> None:
     """Corre el motor sobre unidades de ejemplo. Sirve para ver el modelo funcionando."""
@@ -127,6 +149,7 @@ def demo() -> None:
     from flujocero.finance.modelo import Unidad
 
     p, inv = cargar("params"), cargar("inversionista")
+    p, nota_uf = _params_con_uf_real(p)
     e = escenario_base(p, inv)
     us = [
         Unidad(
@@ -197,8 +220,9 @@ def demo() -> None:
     evals = evaluar_universo(us, e, p, inv)
     typer.echo(
         f"Escenario base: pie {e.pie_pct:.0%} · tasa {e.tasa_anual:.2%} · "
-        f"{'con' if e.con_subsidio else 'sin'} subsidio · DFL2 {e.dfl2} · vacancia {e.vacancia:.1%}\n"
+        f"{'con' if e.con_subsidio else 'sin'} subsidio · DFL2 {e.dfl2} · vacancia {e.vacancia:.1%}"
     )
+    typer.echo(f"UF ${p.d('macro.valor_uf_clp'):,.0f} — fuente: {nota_uf}\n")
     hdr = f"{'unidad':<10}{'UF':>7}{'arr UF':>8}{'yield':>8}{'div UF':>9}{'déficit/mes':>13}{'pie eq.':>9}{'TIR 10a':>9}{'score':>7}"
     typer.echo(hdr)
     typer.echo("-" * len(hdr))
@@ -263,9 +287,22 @@ def ingest(
         raise typer.Exit(2) from exc
 
     typer.echo(f"colector {colector.id} · series {list(colector.series)} · {desde} → {hasta}")
+
+    from flujocero.quality import bitacora
+
+    # La corrida se abre ANTES de salir a la red: una recoleccion que falla tambien es
+    # informacion, y si no queda escrita el detector de parser roto no puede usarla.
+    con = duckdb.connect(str(db.ruta_db()))
+    db.aplicar_esquema(con)
+    corrida = bitacora.abrir(colector.id)
+    anterior_pre = bitacora.filas_de_la_ultima_corrida_exitosa(con, colector.id)
+
     try:
         docs = list(colector.collect(Scope(desde=desde, hasta=hasta)))
     except ErrorDeFuente as exc:
+        corrida.notas = f"recoleccion fallida: {exc}"[:400]
+        bitacora.cerrar(con, corrida, filas_corrida_anterior=anterior_pre)
+        con.close()
         typer.echo(f"✗ {exc}")
         typer.echo(
             "\n  'proxy' o '403'      -> el entorno no tiene salida hacia la CMF;"
@@ -274,40 +311,58 @@ def ingest(
             " 4 veces con espera creciente; vuelve a intentar en un rato."
             "\n  '401' o 'apikey'      -> revisa CMF_APIKEY en el .env."
             "\n\n  `cli probe` prueba peticiones de tamano creciente y dice cual pasa."
+            "\n  El intento quedo registrado en la tabla `run_log`."
         )
         raise typer.Exit(1) from exc
     typer.echo(f"✓ {len(docs)} documentos en la zona cruda")
+    corrida.docs_recolectados = len(docs)
+    # §7.1 · el detector de parser roto compara contra la ULTIMA CORRIDA EXITOSA.
+    anterior = anterior_pre
+    if anterior:
+        typer.echo(f"  corrida anterior exitosa: {anterior} filas")
 
-    filas = []
-    for d in docs:
-        filas.extend(colector.parse(d))
-
-    rep = source_contract.verificar(colector, filas)
-    if not rep.ok:
-        typer.echo(str(rep))
-        raise typer.Exit(1)
-    typer.echo(f"✓ contrato de fuente: {len(filas)} filas con procedencia completa")
-
-    st = colector.selftest(muestra_viva=docs[:5])
-    typer.echo(f"{'✓' if st.ok else '✗'} selftest: {st.checks}")
-    for k, v in st.detalle.items():
-        typer.echo(f"    {k}: {v}")
-    if not st.ok:
-        raise typer.Exit(1)
-
-    con = duckdb.connect(str(db.ruta_db()))
     try:
-        db.aplicar_esquema(con)
+        filas = []
+        for d in docs:
+            try:
+                filas.extend(colector.parse(d))
+            except Exception as exc:  # noqa: BLE001 — §11: se registra, no se traga
+                eid = bitacora.registrar_error(con, colector.id, d.ruta, exc)
+                typer.echo(f"! error de parseo registrado ({eid[:8]}) en {d.ruta.name}: {exc}")
+
+        rep = source_contract.verificar(colector, filas)
+        if not rep.ok:
+            typer.echo(str(rep))
+            corrida.notas = "contrato de fuente en rojo"
+            raise typer.Exit(1)
+        typer.echo(f"✓ contrato de fuente: {len(filas)} filas con procedencia completa")
+
+        st = colector.selftest(muestra_viva=docs[:5], n_filas_corrida_anterior=anterior)
+        typer.echo(f"{'✓' if st.ok else '✗'} selftest: {st.checks}")
+        for k, v in st.detalle.items():
+            typer.echo(f"    {k}: {v}")
+        corrida.selftest_ok = st.ok
+        if not st.ok:
+            corrida.notas = "selftest en rojo"
+            raise typer.Exit(1)
+
         n = cargar_en_duckdb(con, filas)
+        corrida.filas_insertadas = n
         por_serie = con.execute(
             "SELECT serie, count(*), min(fecha), max(fecha) "
             "FROM dim_tiempo_financiero GROUP BY serie ORDER BY serie"
         ).fetchall()
+        typer.echo(f"✓ {n} filas cargadas en dim_tiempo_financiero")
+        for serie, cuenta, mn, mx in por_serie:
+            typer.echo(f"    {serie:<12} {cuenta:>6} filas   {mn} → {mx}")
+        caida = bitacora.caida_pct(anterior, n)
+        if caida is not None:
+            typer.echo(f"  variacion vs corrida anterior: {-caida:+.1%}")
     finally:
+        # La corrida se registra SIEMPRE, salga bien o mal: una corrida fallida que no
+        # queda escrita es una corrida que el detector de parser roto no puede usar.
+        bitacora.cerrar(con, corrida, filas_corrida_anterior=anterior)
         con.close()
-    typer.echo(f"✓ {n} filas cargadas en dim_tiempo_financiero")
-    for serie, cuenta, mn, mx in por_serie:
-        typer.echo(f"    {serie:<12} {cuenta:>6} filas   {mn} → {mx}")
 
 
 @app.command()

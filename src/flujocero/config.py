@@ -133,3 +133,48 @@ def ticket_maximo_uf(
         "ticket_max_uf": min(credito_uf / ltv, tope_uf),
         "restriccion_activa": D(1) if por_carga < por_dividendo else D(0),
     }
+
+
+def con_valor(base: Config, ruta: str, valor: Any, fuente: str) -> Config:
+    """Copia de `base` con un valor reemplazado, marcado `V` y con su fuente.
+
+    Es lo que permite que el motor siga siendo puro. El §11 le prohibe I/O, asi que no
+    puede leer la UF de la base por su cuenta: alguien de afuera la lee, arma un `Config`
+    con ella y se lo pasa. El valor viaja con su `evidence` y su `fuente`, no pelado.
+    """
+    import copy
+
+    datos = copy.deepcopy(base._datos)  # noqa: SLF001 — copia deliberada, no acceso al estado
+    nodo = datos
+    partes = ruta.split(".")
+    for parte in partes[:-1]:
+        nodo = nodo.setdefault(parte, {})
+    anterior = nodo.get(partes[-1])
+    nuevo: dict[str, Any] = {"v": valor, "evidence": "V", "fuente": fuente}
+    if isinstance(anterior, dict) and "rango" in anterior:
+        nuevo["rango"] = anterior["rango"]
+    nodo[partes[-1]] = nuevo
+    return Config(datos, f"{base.origen}+{ruta}")
+
+
+def uf_desde_la_base(conexion: Any, fecha: Any = None) -> tuple[Decimal, str] | None:
+    """La UF mas reciente de `dim_tiempo_financiero`, con la fuente que la respalda.
+
+    Devuelve `None` si no hay serie cargada, para que quien llame decida si cae al valor
+    fijo de `params.yml` o se detiene. No imputa nada por su cuenta (§3.2).
+    """
+    if fecha is None:
+        fila = conexion.execute(
+            "SELECT valor, fecha, source_id, source_url FROM dim_tiempo_financiero "
+            "WHERE serie = 'uf' ORDER BY fecha DESC LIMIT 1"
+        ).fetchone()
+    else:
+        fila = conexion.execute(
+            "SELECT valor, fecha, source_id, source_url FROM dim_tiempo_financiero "
+            "WHERE serie = 'uf' AND fecha <= ? ORDER BY fecha DESC LIMIT 1",
+            (fecha,),
+        ).fetchone()
+    if not fila or fila[0] is None:
+        return None
+    valor, dia, source_id, _url = fila
+    return Decimal(str(valor)), f"{source_id} · dim_tiempo_financiero · {dia}"

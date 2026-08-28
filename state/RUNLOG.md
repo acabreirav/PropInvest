@@ -464,3 +464,54 @@ desde la zona cruda → **las filas salen idénticas**, incluidas `source_url` y
 Se agrega `sources/registro.py`: el mapa de qué colector reconstruye qué `source_id`. Una
 fuente sin entrada no se reconstruye y se reporta; nunca se descarta un blob por no saber
 leerlo.
+
+## 2026-08-28 · iteración 13 — segunda ronda de deuda: la bitácora y la UF real
+gates: **VERDE** · `pytest`: **184 passed** (eran 165)
+
+La auditoría anterior dejó tres deudas declaradas. Al ir a pagarlas aparecieron **dos más**,
+y una dejaba un gate del contrato inoperante.
+
+### Lo nuevo que encontró esta ronda
+
+**`run_log` y `parse_errors` existían en el esquema y nadie las escribía.** Consecuencia
+concreta: el §7.1 exige que el `selftest` compare el conteo de filas contra *la última
+corrida exitosa* y falle si cayó más de 30% — el detector de parser roto. Sin persistir ese
+conteo, el detector recibía `None` y **nunca podía disparar**. El gate existía en el código
+y era decorativo.
+
+Se construye `quality/bitacora.py`, y se conecta al `ingest`:
+- La corrida se abre **antes** de salir a la red. Una recolección fallida también es
+  información, y si no queda escrita el detector no puede usarla.
+- Solo se compara contra corridas con `selftest_ok`. Comparar contra una fallida
+  convertiría el fallo en la nueva referencia y el detector dejaría de disparar **para
+  siempre**.
+- Un error de parseo se registra con su documento crudo y la corrida continúa (§11). Se
+  guarda la **ruta** del blob, no una copia: el documento ya está en la zona cruda.
+
+**`pytz` faltaba como dependencia.** DuckDB lo necesita para devolver `TIMESTAMPTZ`, y el
+§11 obliga a que toda fecha en la base lleve zona horaria. Habría explotado en la primera
+lectura de cualquier marca de tiempo.
+
+### La deuda declarada que se pagó
+
+**La UF deja de ser un parámetro fijo.** T-010 cargó 974 valores reales y el motor seguía
+usando `40804`. El §11 le prohíbe I/O al motor, así que la lectura ocurre afuera:
+`uf_desde_la_base()` la busca y `con_valor()` arma una copia de la config con ella, marcada
+`evidence: V` y con su fuente. Verificado con prueba negativa: alterando la UF de la base a
+99.999, el `demo` la usa.
+
+Si no hay serie cargada, `uf_desde_la_base()` devuelve `None` y el `demo` cae al valor de
+`params.yml` **diciéndolo en pantalla**. No imputa en silencio (§3.2).
+
+### Estado de la deuda
+
+| # | Deuda | Estado |
+|---|---|---|
+| 1 | `rebuild --from-raw` no reconstruía | pagada (iteración 12) |
+| 2 | La zona cruda perdía 3 de las 6 columnas | pagada (iteración 12) |
+| 3 | Caso de oro de la TIR con 1e-6 en vez de 1e-9 | pagada (iteración 12) |
+| 4 | La UF como parámetro fijo | **pagada** |
+| 5 | `run_log` / `parse_errors` sin escribir | **pagada** |
+| 6 | `pytz` ausente | **pagada** |
+| 7 | `tests/integration/` vacío | pendiente, declarada |
+| 8 | Fixture derivada de documentación | T-909, necesita el archivo del usuario |
