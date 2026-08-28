@@ -8,7 +8,7 @@ from decimal import getcontext
 import typer
 
 from flujocero import db
-from flujocero.config import cargar, ticket_maximo_uf
+from flujocero.config import RAIZ, cargar, ticket_maximo_uf
 
 getcontext().prec = 34
 app = typer.Typer(add_completion=False, help="Flujo Cero")
@@ -157,6 +157,82 @@ def demo() -> None:
         f"\nDéficit mensual en pesos, peor caso: ${int(-peor.btcf_mensual_uf * uf):,}. "
         "La TIR está en términos REALES: para compararla con un depósito a plazo, súmale la inflación."
     )
+
+
+@app.command()
+def ingest(
+    fuente: str = typer.Option("cmf_indicadores", help="source_id a ejecutar"),
+    desde: str = typer.Option("2024-01", help="AAAA-MM"),
+    hasta: str = typer.Option("2026-08", help="AAAA-MM"),
+) -> None:
+    """Ejecuta un colector contra la red y carga el resultado en DuckDB.
+
+    Necesita salida a internet y las credenciales en `.env`. Escribe primero a la zona
+    cruda (`data/raw/`) y sólo despues parsea, para que `make rebuild` pueda reconstruir.
+    """
+    import os
+
+    import duckdb
+    from dotenv import load_dotenv
+
+    from flujocero.quality import source_contract
+    from flujocero.sources.base import Scope
+
+    if fuente != "cmf_indicadores":
+        typer.echo(f"colector '{fuente}' todavia no existe. Disponibles: cmf_indicadores")
+        raise typer.Exit(2)
+
+    load_dotenv(RAIZ / ".env")
+    from flujocero.sources.cmf_indicadores import ErrorDeFuente, cargar_en_duckdb, desde_entorno
+
+    try:
+        colector = desde_entorno(dict(os.environ))
+    except ErrorDeFuente as exc:
+        typer.echo(f"✗ {exc}")
+        raise typer.Exit(2) from exc
+
+    typer.echo(f"colector {colector.id} · series {list(colector.series)} · {desde} → {hasta}")
+    try:
+        docs = list(colector.collect(Scope(desde=desde, hasta=hasta)))
+    except ErrorDeFuente as exc:
+        typer.echo(f"✗ {exc}")
+        typer.echo(
+            "\n  Si esto dice 'proxy' o '403', el entorno no tiene salida hacia la CMF.\n"
+            "  Este comando necesita ejecutarse desde una maquina con internet abierto."
+        )
+        raise typer.Exit(1) from exc
+    typer.echo(f"✓ {len(docs)} documentos en la zona cruda")
+
+    filas = []
+    for d in docs:
+        filas.extend(colector.parse(d))
+
+    rep = source_contract.verificar(colector, filas)
+    if not rep.ok:
+        typer.echo(str(rep))
+        raise typer.Exit(1)
+    typer.echo(f"✓ contrato de fuente: {len(filas)} filas con procedencia completa")
+
+    st = colector.selftest(muestra_viva=docs[:5])
+    typer.echo(f"{'✓' if st.ok else '✗'} selftest: {st.checks}")
+    for k, v in st.detalle.items():
+        typer.echo(f"    {k}: {v}")
+    if not st.ok:
+        raise typer.Exit(1)
+
+    con = duckdb.connect(str(db.ruta_db()))
+    try:
+        db.aplicar_esquema(con)
+        n = cargar_en_duckdb(con, filas)
+        por_serie = con.execute(
+            "SELECT serie, count(*), min(fecha), max(fecha) "
+            "FROM dim_tiempo_financiero GROUP BY serie ORDER BY serie"
+        ).fetchall()
+    finally:
+        con.close()
+    typer.echo(f"✓ {n} filas cargadas en dim_tiempo_financiero")
+    for serie, cuenta, mn, mx in por_serie:
+        typer.echo(f"    {serie:<12} {cuenta:>6} filas   {mn} → {mx}")
 
 
 @app.command()

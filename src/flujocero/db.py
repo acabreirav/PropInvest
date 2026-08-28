@@ -15,18 +15,28 @@ def ruta_db(raiz: Path | None = None) -> Path:
     return d / "flujocero.duckdb"
 
 
+def ruta_esquema(raiz: Path | None = None) -> Path:
+    return (raiz or RAIZ) / "schema" / "schema.sql"
+
+
+def aplicar_esquema(con: duckdb.DuckDBPyConnection, raiz: Path | None = None) -> list[str]:
+    """Aplica el DDL sobre una conexión ya abierta. Lo usan `crear()` y los tests,
+    para que ambos ejerciten exactamente el mismo esquema."""
+    sql = ruta_esquema(raiz).read_text(encoding="utf-8")
+    try:
+        con.execute("INSTALL spatial; LOAD spatial;")
+    except duckdb.Error:
+        # Sin la extensión espacial, GEOMETRY se degrada a BLOB (WKB).
+        sql = sql.replace("GEOMETRY", "BLOB")
+    con.execute(sql)
+    return [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+
+
 def crear(raiz: Path | None = None) -> Path:
     ruta = ruta_db(raiz)
-    sql = ((raiz or RAIZ) / "schema" / "schema.sql").read_text(encoding="utf-8")
     con = duckdb.connect(str(ruta))
     try:
-        try:
-            con.execute("INSTALL spatial; LOAD spatial;")
-        except Exception:
-            # Sin la extensión espacial, GEOMETRY se degrada a BLOB (WKB).
-            sql = sql.replace("GEOMETRY", "BLOB")
-        con.execute(sql)
-        tablas = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+        tablas = aplicar_esquema(con, raiz)
     finally:
         con.close()
     if len(tablas) < 10:

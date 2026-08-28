@@ -13,6 +13,11 @@ fuentes:
     cadencia: diaria
     fallback: gael_indicadores
     notas: "formato=json obligatorio; default es xml"
+    modulo: "src/flujocero/sources/cmf_indicadores.py"
+    adr: "docs/adr/001-cmf-indicadores.md"
+    parser_version: "cmf_indicadores/1.0.0"
+    produce: dim_tiempo_financiero
+    selftest: "verde contra fixture; forma_verificada=false — falta muestra viva (T-010)"
 
   - id: gael_indicadores
     capa: 6

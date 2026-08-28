@@ -52,11 +52,22 @@ criterio_de_aceptacion:
 # FASE 1 · Un extremo a otro sobre 3 comunas (San Miguel, La Florida, Ñuñoa)
 
 ## T-010 · Colector CMF + Gael (UF, UTM, IPC, TMC)
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]
+estado: en_curso · agente: colector · fase: 1 · depende_de: [T-002]
 paraleliza_con: [T-011, T-012]
 criterio_de_aceptacion:
-  - Serie de UF completa 2024–2026 en `dim_tiempo_financiero`
-  - Fallback a Gael respetando su límite duro (>9 req/10 s = ban de 1 h)
+  - [x] Modulo `sources/cmf_indicadores.py` con el contrato Source del §7.1
+  - [x] `dim_tiempo_financiero` con las seis columnas de procedencia (requirio cambio de esquema)
+  - [x] Carga idempotente por clave natural `(fecha, serie)`
+  - [x] ADR escrito: `docs/adr/001-cmf-indicadores.md`
+  - [ ] **Serie de UF completa 2024-2026 cargada** — requiere ejecutar contra la API real
+  - [ ] **`selftest()` contra muestra viva** — hoy `forma_verificada: false`
+  - [ ] Fallback a Gael respetando su limite duro (>9 req/10 s = ban de 1 h)
+bloqueo: >
+  El proxy de red de este entorno bloquea `api.cmfchile.cl`, asi que no se pudo grabar
+  una respuesta real ni cargar la serie. El codigo, sus tests y los gates estan verdes;
+  lo unico que falta es ejecutarlo desde una maquina con salida a internet:
+  `uv run python -m flujocero.cli ingest --desde 2024-01 --hasta 2026-08`
+  NO se marca `hecha` hasta que eso corra: el §7.1 exige selftest contra muestra viva.
 
 ## T-011 · OAuth MercadoLibre + verificación de categorías
 estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: []

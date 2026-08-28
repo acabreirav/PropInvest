@@ -106,16 +106,37 @@ CREATE TABLE IF NOT EXISTS fact_transaccion (
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );
 
+-- Formato largo, una fila por (fecha, serie). El formato ancho anterior era incompatible
+-- con CLAUDE.md 3.1: UF, UTM, IPC y TPM vienen de endpoints distintos, y un solo juego de
+-- seis columnas de procedencia por fila no puede describir cuatro origenes a la vez.
 CREATE TABLE IF NOT EXISTS dim_tiempo_financiero (
-  fecha DATE PRIMARY KEY,
-  uf_clp DECIMAL(12,2), utm_clp DECIMAL(12,2), ipc_var_m DOUBLE, tpm DOUBLE,
-  tasa_hipotecaria_promedio DOUBLE
+  fecha DATE,
+  serie VARCHAR,                 -- uf | utm | ipc_var_m | tpm | tasa_hipotecaria_promedio
+  valor DECIMAL(18,6),
+  unidad VARCHAR,                -- CLP | pct
+  evidence_level VARCHAR CHECK (evidence_level IN ('V','D','E','ND')),
+  source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
+  parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR,
+  PRIMARY KEY (fecha, serie)
 );
+
+-- Vista de conveniencia con la forma ancha de siempre, para el motor y el dashboard.
+CREATE OR REPLACE VIEW v_tiempo_financiero AS
+SELECT fecha,
+       MAX(CASE WHEN serie = 'uf'  THEN valor END) AS uf_clp,
+       MAX(CASE WHEN serie = 'utm' THEN valor END) AS utm_clp,
+       MAX(CASE WHEN serie = 'ipc_var_m' THEN valor END) AS ipc_var_m,
+       MAX(CASE WHEN serie = 'tpm' THEN valor END) AS tpm,
+       MAX(CASE WHEN serie = 'tasa_hipotecaria_promedio' THEN valor END) AS tasa_hipotecaria_promedio
+FROM dim_tiempo_financiero
+GROUP BY fecha;
 
 CREATE TABLE IF NOT EXISTS dim_tasa_banco (
   fecha DATE, banco VARCHAR, con_subsidio BOOLEAN,
   tasa_anual DOUBLE, plazo_max_anios INTEGER, ltv_max DOUBLE,
-  evidence_level VARCHAR, source_url VARCHAR,
+  evidence_level VARCHAR CHECK (evidence_level IN ('V','D','E','ND')),
+  source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
+  parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR,
   PRIMARY KEY (fecha, banco, con_subsidio)
 );
 

@@ -92,3 +92,52 @@ tareas nuevas abiertas: T-905 (corregir el conteo de tests en RUNBOOK), T-906 (b
 
 siguiente: T-010 y T-012 (CMF: UF/UTM/IPC y tasas por banco) — código y tests contra
 fixtures grabadas acá; ejecución contra la red, en la máquina del usuario.
+
+## 2026-08-28 · iteración 3 — T-010 (colector CMF) y el contrato de fuentes
+tareas: T-010 → **en_curso** (no `hecha`: falta ejecución contra la API viva)
+gates: **VERDE** · ruff + ruff format + mypy --strict + `pytest`: **67 passed** (eran 28)
+
+qué se construyó:
+- `sources/base.py` — el contrato `Source` del §7.1, que no existía. Aporta `Procedencia`
+  (las seis columnas, imposible de construir incompleta), la zona cruda del §3.6 y
+  `SelfTestReport`.
+- `sources/robots_check.py` — el `python -m flujocero.sources.robots_check <url>` que el
+  §3.5 exige antes de cualquier scraper. Guarda snapshot y devuelve su sha.
+- `sources/cmf_indicadores.py` — colector de UF, UTM e IPC. `legal_tier: api_oficial`.
+- `quality/source_contract.py` — el gate: verifica el protocolo y, por separado, que las
+  filas lleven las seis columnas y un `evidence_level` legal.
+- `cli.py ingest` — recolecta, verifica contrato, corre selftest y carga en DuckDB.
+- 39 tests nuevos, ninguno toca la red.
+
+hallazgos:
+1. **`dim_tiempo_financiero` violaba el §3.1**: no tenía ninguna columna de procedencia, y
+   su formato ancho las hacía imposibles — UF, UTM, IPC y TPM vienen de endpoints distintos
+   y un solo juego de seis columnas por fila no puede describir cuatro orígenes. Pasa a
+   formato largo `(fecha, serie)` + vista `v_tiempo_financiero` para la forma ancha.
+   `dim_tasa_banco` tenía 2 de 6; completada.
+2. **La auto-crítica del §7.6 encontró un error real de mil veces.** `a_decimal("40.804")`
+   devolvía `40.804` en vez de `40804`: el código decidía caso a caso si el punto era
+   separador de miles o decimal. En formato chileno el punto es SIEMPRE separador de miles.
+   Es exactamente la clase de error contra la que advertía el ADR que yo mismo había escrito
+   tres archivos antes. Corregido, con tres casos de prueba que lo fijan.
+   (La auto-crítica la hice yo mismo sobre el código, no vía subagente.)
+3. **`collect()` recolectaba aunque la verificación de robots fallara.** El §3.5 dice que
+   pasa ANTES de recolectar. Corregido: sin veredicto favorable y sin `snapshot_sha` no se
+   descarga nada — y de todos modos la fila no podría insertarse sin procedencia completa.
+4. **La forma de la respuesta de la CMF no está verificada contra la API viva.** El proxy de
+   red bloquea `api.cmfchile.cl`. La estructura se tomó de la documentación oficial, la
+   fixture está marcada como derivada de documentación con valores sintéticos declarados
+   prohibidos como dato de mercado, y `selftest()` reporta `forma_verificada: false`
+   mientras no vea una muestra viva. Por eso T-010 queda `en_curso`.
+
+perfil del inversionista: renta líquida $2.250.000, ahorro $40.000.000, sin otros créditos.
+**Ticket máximo por capacidad de crédito: UF 3.497 con subsidio, UF 3.220 sin él.** La
+restricción vinculante no es el tope legal de UF 6.000 sino la renta. Eso deja el tramo
+especial de <= UF 3.000 (Decreto 180 art. 4) dentro del rango y el tramo general fuera de
+toda relevancia práctica. Sube la prioridad de D-009.
+
+tareas nuevas abiertas: D-011 (renta conjunta con la cónyuge — cuatro preguntas sin resolver
+sobre régimen patrimonial, propiedades previas, cupos DFL2 y co-deudor sin co-propiedad).
+
+siguiente: T-012 (tasas hipotecarias por banco, XLS de la CMF). No depende de red para
+escribirse. Y ejecutar `cli ingest` desde una máquina con internet para cerrar T-010.

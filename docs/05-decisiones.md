@@ -119,3 +119,51 @@ que duplica el cupo DFL2 **y** la exención de ganancia de capital de UF 8.000.
 
 Operativamente: `exigir_dfl2: true`, exclusión dura de todo lo que supere 140 m² útiles, y
 verificación del DFL2 en escritura o certificado municipal antes de firmar.
+
+
+---
+
+## D-011 · ¿Conviene sumar la renta de la cónyuge? **BLOQUEA el ticket objetivo**
+**Estado:** abierta · **Dueño:** humano + banco + notaría · **Abierta:** 28-ago-2026
+
+El inversionista plantea complementar renta con su cónyuge ($2.500.000 líquidos).
+Aritméticamente el efecto es grande y está calculado:
+
+| Renta considerada | Dividendo máx | Ticket máx (con subsidio, 3,30%, 30 años, LTV 90%) |
+|---|---|---|
+| Solo él, $2.250.000 | $562.500 | **UF 3.497** |
+| Conjunta, $4.750.000 | $1.187.500 | **UF 6.000** (tope legal) |
+
+O sea: **la restricción deja de ser la renta y pasa a ser la ley.** Eso cambia el universo
+de búsqueda por completo.
+
+**Pero el beneficio tributario y el subsidio no son aritmética, y no están resueltos.**
+Cuatro preguntas, ninguna respondible desde el modelo:
+
+1. **Régimen patrimonial del matrimonio.** Con **sociedad conyugal**, lo adquirido a título
+   oneroso entra al haber común, y eso arrastra cómo se cuentan los cupos DFL2 y quién
+   figura como propietario. Con **separación total de bienes**, cada uno es dueño de lo suyo
+   y los cupos se cuentan por separado — que es justo el escenario que D-010 identificó como
+   la vía para ir más allá de dos unidades. **Sin saber el régimen, no se puede modelar.**
+2. **¿La cónyuge tiene propiedades a su nombre?** Si las tiene, bajo la lectura de "primera
+   vivienda del comprador" el subsidio podría perderse, y con él el tramo especial de
+   ≤ UF 3.000 del Decreto 180 art. 4 — que, según D-009, es el tramo que mejor calza con
+   este perfil.
+3. **¿Cuántos cupos DFL2 tiene usados la cónyuge?** El límite de 2 es **por persona natural**
+   (Ley 20.455). Si ella tiene 0, el hogar dispone de 4 cupos, no de 2.
+4. **¿El banco acepta co-deudor sin exigir co-propiedad?** Sumar renta como co-deudor y
+   dejar la propiedad a nombre de uno solo es lo que preservaría los cupos DFL2 del otro.
+   Es práctica común, pero **debe confirmarse por escrito** con cada banco.
+
+**Riesgo si se avanza sin resolverlo:** duplicar la capacidad de crédito y perder el
+subsidio, o consumir dos cupos DFL2 en una sola propiedad. Ambos errores son caros y
+difíciles de deshacer después de la escritura.
+
+**Hasta resolverlo:** el ticket objetivo sigue siendo **UF 3.497** (renta individual), y el
+informe se calcula sobre esa base. La variante conjunta se modela sólo como escenario de
+contraste, nunca como caso base.
+
+**Qué se necesita para cerrarla:** (a) el régimen patrimonial del matrimonio, (b) si la
+cónyuge tiene propiedades, (c) cuántos cupos DFL2 tiene usados, y (d) la respuesta escrita
+del banco a la pregunta 4. Las tres primeras las tiene el inversionista; la cuarta va a la
+lista de preguntas del PASO 9 del runbook.
