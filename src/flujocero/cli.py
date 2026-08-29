@@ -523,11 +523,22 @@ def ingerir_legado(
     typer.echo(f"  {len(col.archivos())} archivos en el origen")
 
     corrida = bitacora.abrir(col.id)
-    docs = col.collect(limite=limite or None)
+
+    def avance(hechos: int, total: int) -> None:
+        # Sin esto el comando queda mudo entre diez y veinticinco minutos, y no hay forma de
+        # distinguir "trabajando" de "colgado". Cada 250 archivos alcanza para dar senal.
+        if hechos % 250 == 0 or hechos == total:
+            typer.echo(f"    zona cruda: {hechos}/{total} ({hechos / total:.0%})")
+
+    docs = col.collect(limite=limite or None, progreso=avance)
     corrida.docs_recolectados = len(docs)
     typer.echo(f"✓ {len(docs)} documentos a la zona cruda, anonimizados")
 
-    avisos = [a for d in docs for a in col.parse(leer_crudo(d.ruta))]
+    avisos = []
+    for i, d in enumerate(docs, 1):
+        avisos += col.parse(leer_crudo(d.ruta))
+        if i % 500 == 0 or i == len(docs):
+            typer.echo(f"    parseando: {i}/{len(docs)} ({i / len(docs):.0%})")
     typer.echo(f"✓ {len(avisos)} avisos parseados ({len(avisos) / max(len(docs), 1):.0%})")
 
     con = duckdb.connect(str(db.crear()))

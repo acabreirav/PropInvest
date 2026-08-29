@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -362,14 +363,25 @@ class PortalLegado:
     def archivos(self) -> list[Path]:
         return sorted(self.origen.glob("*.html")) if self.origen.is_dir() else []
 
-    def collect(self, limite: int | None = None) -> list[RawDoc]:
-        """Copia a la zona cruda, anonimizando primero. No toca la red."""
+    def collect(
+        self,
+        limite: int | None = None,
+        progreso: Callable[[int, int], None] | None = None,
+    ) -> list[RawDoc]:
+        """Copia a la zona cruda, anonimizando primero. No toca la red.
+
+        `progreso` recibe `(hechos, total)`. Sin el, el comando queda mudo entre diez y
+        veinticinco minutos y no hay forma de distinguir "trabajando" de "colgado".
+        """
         veredicto = self.robots_ok()
         if not veredicto.allowed:
             raise ErrorDeFuente(f"robots: {veredicto.motivo}")
 
+        archivos = self.archivos()[: limite or None]
         docs: list[RawDoc] = []
-        for ruta in self.archivos()[: limite or None]:
+        for i, ruta in enumerate(archivos, 1):
+            if progreso is not None:
+                progreso(i, len(archivos))
             momento = fecha_del_nombre(ruta.name)
             url = url_del_nombre(ruta.name)
             if momento is None or url is None:
