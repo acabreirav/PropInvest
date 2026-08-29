@@ -930,3 +930,35 @@ tener el numero: se lee como ventas.
 
 **Un caso de oro que estaba mal.** Exigia que una captura vieja **no dejara rastro**. Eso era
 exactamente el bug. Reescrito: el presente no se toca, y el pasado si se guarda.
+
+---
+
+## 2026-08-29 · El portal publica dos precios para el mismo aviso
+
+Verificando por que el delta encontro un cambio de UF 8.600 a UF 8.100 aparecio algo que no
+estaba en ninguna documentacion: **el precio depende de la superficie del portal.**
+
+Medido sobre 2.689 unidades presentes el mismo dia en la tarjeta del listado y en la ficha de
+detalle: 2.627 coinciden (97,7%), 14 difieren por truncado de decimales en la tarjeta, y
+**48 traen precios realmente distintos**. El peor caso: `MLC-3893367924`, UF 13.000 en la
+tarjeta contra UF 15.900 en la ficha — mismo aviso, mismo dia, mismo titulo, mismos 167 m2,
+22% de diferencia.
+
+**Consecuencia:** comparar una tarjeta de hoy contra una ficha de mayo inventa cambios de
+precio que nunca ocurrieron. La linea base tiene que ser tarjeta contra tarjeta.
+
+**Tres cambios, en orden de importancia:**
+
+1. **`ingerir-legado --busqueda`**: las 130 paginas de LISTADO de mayo que el usuario ya tenia
+   en disco entran a la zona cruda parseadas con el colector vivo. Ahi esta la linea base
+   correcta: 6.076 tarjetas, 2.974 filas de venta.
+2. **Candado entre superficies, asimetrico a proposito.** No se abre version comparando
+   tarjeta con ficha. Y cuando las dos existen, **manda la tarjeta**: es la superficie que el
+   colector vivo va a seguir viendo corrida tras corrida. Si mandara la ficha, la linea base
+   quedaria en una superficie que ya nadie vuelve a leer y el delta no cruzaria nunca.
+   Resultado: 2.696 filas en la superficie correcta, cero versiones falsas.
+3. **El gate de frescura pasa de FALLA a ALERTA.** El §7.3 prohibe que una fila vieja entre al
+   RANKING, no que exista en la base — la linea base historica es vieja por definicion.
+   Exonerar por `source_id` funcionaba solo mientras lo viejo y lo fresco vinieran de fuentes
+   distintas, y dejo de funcionar en cuanto la misma fuente tuvo las dos cosas. Ahora lo que
+   decide es la fecha de cada fila, y las viejas se reportan como excluidas del ranking.

@@ -216,10 +216,20 @@ def frescura(
             continue
         viejas.append(f"{f.get('unidad_key', i)}: {f['fetched_at']:%Y-%m-%d}")
     if viejas:
+        # ALERTA y no FALLA, y la diferencia es de fondo. El §7.3 prohibe que una fila vieja
+        # **entre al ranking**, no que exista en la base: la linea base historica contra la
+        # cual se mide que bajo de precio es vieja por definicion, y tiene que estar guardada.
+        #
+        # Antes esto era FALLA y funcionaba solo mientras lo viejo y lo fresco vinieran de
+        # fuentes distintas. Dejo de funcionar en cuanto la MISMA fuente tuvo las dos cosas:
+        # las paginas de listado de mayo se ingieren con el parser del colector vivo, porque
+        # comparar tarjeta con tarjeta es la unica comparacion valida. Exonerar por `source_id`
+        # ya no alcanza; lo que decide es la fecha de cada fila.
         return Hallazgo(
             "frescura",
-            Severidad.FALLA,
-            f"{len(viejas)} filas con más de {FRESCURA_MAX_DIAS} días",
+            Severidad.ALERTA,
+            f"{len(viejas)} filas con más de {FRESCURA_MAX_DIAS} días: quedan FUERA del "
+            f"ranking y sirven de línea base histórica",
             len(viejas),
             viejas,
         )

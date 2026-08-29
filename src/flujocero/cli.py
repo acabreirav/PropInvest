@@ -498,6 +498,9 @@ def ingerir_legado(
         help="carpeta con los HTML del proyecto anterior (data/raw/portal_inmobiliario/listings)",
     ),
     limite: int = typer.Option(0, help="0 = todos. Util para probar con pocos primero."),
+    busqueda: str = typer.Option(
+        "", help="carpeta con las PAGINAS DE LISTADO guardadas (.../portal_inmobiliario/search)"
+    ),
 ) -> None:
     """T-918 · ingiere la foto de Portal Inmobiliario de mayo-2026 (docs/adr/004-legado-investop.md).
 
@@ -557,9 +560,35 @@ def ingerir_legado(
             typer.echo(f"    {tabla:22s} {n:6d}")
     finally:
         con.close()
+    if busqueda:
+        from flujocero.sources import portal_busqueda as pb
+
+        carpeta_b = Path(busqueda).expanduser()
+        if not carpeta_b.is_dir():
+            typer.echo(f"✗ no existe la carpeta de busqueda {carpeta_b}")
+            raise typer.Exit(2)
+        typer.echo("\n  Páginas de listado (la línea base correcta para el delta):")
+        docs_b = pb.ingerir_guardadas(carpeta_b, progreso=avance)
+        tarjetas = [
+            x for d in docs_b for x in pb.PortalBusqueda("FlujoCero-ResearchBot/1.0").parse(d)
+        ]
+        con2 = duckdb.connect(str(db.crear()))
+        try:
+            n = pb.cargar_en_duckdb(con2, tarjetas)
+            typer.echo(f"✓ {len(docs_b)} páginas, {len(tarjetas)} tarjetas, {n} filas")
+        finally:
+            con2.close()
+
     typer.echo(
         "\n  Recordá: son datos de mayo-2026. El gate de frescura los deja fuera del ranking."
     )
+    if not busqueda:
+        typer.echo(
+            "  OJO: sin --busqueda, la línea base son FICHAS y el colector vivo lee TARJETAS.\n"
+            "  El portal publica precios distintos en cada superficie (medido: 48 de 2.689\n"
+            "  unidades, una con 22% de diferencia el mismo día), así que el delta compararía\n"
+            "  cosas distintas. Pasá --busqueda con la carpeta `search` del proyecto anterior."
+        )
 
 
 @app.command()

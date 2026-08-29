@@ -110,10 +110,13 @@ def test_cobertura_suficiente_pasa() -> None:
 # --------------------------------------------------------------------- frescura
 
 
-def test_una_fila_de_mas_de_21_dias_falla() -> None:
+def test_una_fila_de_mas_de_21_dias_queda_fuera_del_ranking() -> None:
+    """No detiene el pipeline: lo marca `parcial`. El §7.3 prohibe que una fila vieja entre al
+    RANKING, no que exista en la base — la linea base historica es vieja por definicion."""
     vieja = unidad(fetched_at=AHORA - timedelta(days=22))
     h = q.frescura([vieja], AHORA)
-    assert h.severidad is q.Severidad.FALLA
+    assert h.severidad is q.Severidad.ALERTA
+    assert "FUERA del ranking" in h.mensaje
 
 
 def test_exactamente_21_dias_todavia_pasa() -> None:
@@ -302,7 +305,11 @@ def test_una_fuente_historica_no_reprueba_el_gate_de_frescura() -> None:
         "fetched_at": datetime(2026, 5, 4, tzinfo=UTC),
     }
     ahora = datetime(2026, 8, 29, tzinfo=UTC)
-    assert q.frescura([vieja], ahora).severidad == q.Severidad.FALLA
+    # ALERTA, no FALLA: el §7.3 prohibe que una fila vieja entre al RANKING, no que exista.
+    # La linea base contra la cual se mide un cambio de precio es vieja por definicion.
+    sin_eximir = q.frescura([vieja], ahora)
+    assert sin_eximir.severidad == q.Severidad.ALERTA
+    assert "FUERA del ranking" in sin_eximir.mensaje
     exento = q.frescura([vieja], ahora, frozenset({"portal_legado_2026_05"}))
     assert exento.severidad == q.Severidad.OK
     assert "históricas" in exento.mensaje
@@ -319,7 +326,7 @@ def test_eximir_una_fuente_no_exime_a_las_demas() -> None:
     ]
     ahora = datetime(2026, 8, 29, tzinfo=UTC)
     h = q.frescura(filas, ahora, frozenset({"portal_legado_2026_05"}))
-    assert h.severidad == q.Severidad.FALLA
+    assert h.severidad == q.Severidad.ALERTA, "sigue reportandose, aunque no detenga"
 
 
 def test_dos_versiones_de_la_misma_unidad_no_son_un_duplicado() -> None:

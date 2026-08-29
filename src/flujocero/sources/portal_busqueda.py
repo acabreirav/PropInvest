@@ -508,3 +508,69 @@ class PortalBusqueda:
 def cargar_en_duckdb(conexion: Any, tarjetas: list[Tarjeta]) -> int:
     """Mismo cargador compartido que usa el colector historico (§3.6, SCD tipo 2)."""
     return cargar_avisos(conexion, list(tarjetas), SOURCE_ID, PARSER_VERSION)
+
+
+# ------------------------------------------------- ingesta de paginas de busqueda guardadas
+
+
+def fecha_del_nombre(nombre: str) -> datetime | None:
+    """`venta_san-miguel_p01_20260504.html` -> 2026-05-04 UTC."""
+    m = re.search(r"_(\d{4})(\d{2})(\d{2})\.html$", nombre)
+    if not m:
+        return None
+    y, mo, d = (int(x) for x in m.groups())
+    return datetime(y, mo, d, tzinfo=UTC)
+
+
+def url_del_nombre(nombre: str) -> str | None:
+    """Reconstruye la URL de listado que produjo ese archivo, en su forma permitida."""
+    m = re.match(r"(venta|arriendo)_([a-z-]+)_p(\d+)_", nombre)
+    if not m:
+        return None
+    operacion, comuna, pagina = m.group(1), m.group(2), int(m.group(3))
+    return url_busqueda(operacion, comuna, offset_de_pagina(pagina), "usadas")
+
+
+def ingerir_guardadas(
+    origen: Any,
+    raiz_cruda: Any = None,
+    progreso: Any = None,
+) -> list[RawDoc]:
+    """Mete a la zona cruda paginas de listado ya descargadas, con su fecha real.
+
+    Existe por una razon concreta y medida: **el portal publica precios distintos en la
+    tarjeta y en la ficha**. Sobre 2.689 unidades presentes en las dos superficies del mismo
+    dia, 48 tenian precios distintos, una de ellas UF 13.000 en la tarjeta contra UF 15.900
+    en la ficha — misma unidad, mismo dia, mismo titulo, 22% de diferencia.
+
+    Comparar una tarjeta de hoy contra una ficha de mayo inventaria cambios de precio que
+    nunca ocurrieron. La linea base tiene que ser **tarjeta contra tarjeta**, y las paginas
+    de listado de mayo ya estan en el disco del usuario.
+
+    No toca la red: los documentos ya existen.
+    """
+    from pathlib import Path as _P
+
+    carpeta = _P(str(origen))
+    archivos = sorted(carpeta.glob("*.html")) if carpeta.is_dir() else []
+    docs: list[RawDoc] = []
+    for i, ruta in enumerate(archivos, 1):
+        if progreso is not None:
+            progreso(i, len(archivos))
+        momento, url = fecha_del_nombre(ruta.name), url_del_nombre(ruta.name)
+        if momento is None or url is None:
+            continue
+        limpio, _ = anonimizar(ruta.read_bytes())
+        docs.append(
+            escribir_crudo(
+                source_id=SOURCE_ID,
+                url=url,
+                contenido=limpio,
+                momento=momento,
+                robots_snapshot_sha="historico:paginas-ya-descargadas",
+                nombre=ruta.stem,
+                raiz=raiz_cruda,
+                parser_version=PARSER_VERSION,
+            )
+        )
+    return docs

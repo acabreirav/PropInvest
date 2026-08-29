@@ -214,10 +214,64 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
          tabla de ruido y taparia los cambios reales.
     """
     vigente = conexion.execute(
-        "SELECT valid_from, precio_uf FROM fact_unidad_venta "
+        "SELECT valid_from, precio_uf, parser_version FROM fact_unidad_venta "
         "WHERE unidad_key = ? AND valid_to IS NULL",
         (a.portal_id,),
     ).fetchone()
+
+    # **El precio depende de la superficie del portal, no solo de la unidad.** Medido sobre
+    # 2.689 unidades presentes el mismo dia en la tarjeta del listado y en la ficha de
+    # detalle: 48 tenian precios distintos, y una marcaba UF 13.000 en la tarjeta contra
+    # UF 15.900 en la ficha — mismo aviso, mismo dia, mismo titulo, 22% de diferencia.
+    #
+    # Si se versionara entre superficies, cada ingesta inventaria un "cambio de precio" que
+    # nunca ocurrio. Una version solo se abre comparando tarjeta con tarjeta o ficha con
+    # ficha; entre superficies distintas se completan atributos y nada mas.
+    # La asimetria es deliberada: la TARJETA del listado es la superficie canonica del precio,
+    # porque es la que el colector vivo va a seguir viendo corrida tras corrida. Una ficha de
+    # detalle aporta lo que la tarjeta no trae —antiguedad, gastos comunes— pero su precio es
+    # provisional y una tarjeta lo reemplaza. Si mandara la ficha, la linea base quedaria en
+    # una superficie que ya nadie vuelve a leer y el delta no cruzaria nunca.
+    ES_TARJETA = "portal_busqueda"
+    if vigente is not None and vigente[2] != parser_version and ES_TARJETA in parser_version:
+        conexion.execute(
+            "UPDATE fact_unidad_venta SET precio_uf = ?, parser_version = ?, valid_from = ?, "
+            "fetched_at = ?, source_id = ?, source_url = ?, raw_blob_path = ?, "
+            "robots_snapshot_sha = ?, microzona_id = coalesce(?, microzona_id) "
+            "WHERE unidad_key = ? AND valid_to IS NULL",
+            (
+                a.precio_uf,
+                parser_version,
+                min(vigente[0], a.fetched_at),
+                a.fetched_at,
+                source_id,
+                a.url,
+                a.raw_blob_path,
+                a.robots_snapshot_sha,
+                a.microzona_id,
+                a.portal_id,
+            ),
+        )
+        return 0
+
+    if vigente is not None and vigente[2] != parser_version:
+        conexion.execute(
+            "UPDATE fact_unidad_venta SET microzona_id = coalesce(microzona_id, ?), "
+            "m2_utiles = coalesce(m2_utiles, ?), dormitorios = coalesce(dormitorios, ?), "
+            "banos = coalesce(banos, ?), tipologia = coalesce(tipologia, ?), "
+            "antiguedad_anios = coalesce(antiguedad_anios, ?) "
+            "WHERE unidad_key = ? AND valid_to IS NULL",
+            (
+                a.microzona_id,
+                float(a.m2_utiles) if a.m2_utiles is not None else None,
+                a.dormitorios,
+                a.banos,
+                a.tipologia,
+                getattr(a, "antiguedad_anios", None),
+                a.portal_id,
+            ),
+        )
+        return 0
 
     campos = (
         a.precio_uf,
@@ -230,7 +284,7 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
     )
 
     if vigente is not None:
-        desde, precio_previo = vigente
+        desde, precio_previo, _ = vigente
         if desde == a.fetched_at:
             conexion.execute(
                 "UPDATE fact_unidad_venta SET precio_uf = ?, m2_utiles = ?, dormitorios = ?, "

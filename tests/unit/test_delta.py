@@ -210,3 +210,50 @@ def test_lo_que_no_se_volvio_a_mirar_no_cuenta_como_desaparecido(con) -> None:
     assert r.fuera_de_alcance == 1, "MLC-8 no desaparecio: no se volvio a mirar"
     assert "no se volvieron a mirar" in str(r)
     assert r.microzonas_revisadas == 1
+
+
+def _aviso_superficie(pid: str, precio: str, fecha: datetime) -> Aviso:
+    return Aviso(pid, precio, fecha)
+
+
+def test_tarjeta_y_ficha_del_mismo_dia_no_inventan_un_cambio_de_precio(con) -> None:
+    """Medido sobre el corpus real: de 2.689 unidades presentes el mismo dia en las dos
+    superficies, 48 traian precios distintos, una con UF 13.000 en la tarjeta contra UF 15.900
+    en la ficha —mismo aviso, mismo dia, mismo titulo, 22%—. Versionar entre superficies
+    inventaria un cambio que nunca ocurrio."""
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "15900", MAYO)], "legado", "portal_legado/1.0.0")
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "13000", MAYO)], "vivo", "portal_busqueda/1.0.0")
+    filas = con.execute("SELECT precio_uf, parser_version FROM fact_unidad_venta").fetchall()
+    assert len(filas) == 1, "una sola fila: no son dos versiones, son dos superficies"
+
+
+def test_la_tarjeta_es_la_superficie_canonica_del_precio(con) -> None:
+    """Es la que el colector vivo va a seguir viendo. Si mandara la ficha, la linea base
+    quedaria en una superficie que ya nadie vuelve a leer y el delta no cruzaria nunca."""
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "15900", MAYO)], "legado", "portal_legado/1.0.0")
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "13000", MAYO)], "vivo", "portal_busqueda/1.0.0")
+    precio, parser = con.execute(
+        "SELECT precio_uf, parser_version FROM fact_unidad_venta"
+    ).fetchone()
+    assert precio == D("13000.00") and parser == "portal_busqueda/1.0.0"
+
+
+def test_la_ficha_completa_atributos_pero_no_pisa_el_precio_de_la_tarjeta(con) -> None:
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "13000", MAYO)], "vivo", "portal_busqueda/1.0.0")
+    con.execute("UPDATE fact_unidad_venta SET antiguedad_anios = NULL")
+    ficha = _aviso_superficie("MLC-1", "15900", MAYO)
+    ficha.antiguedad_anios = 12
+    cargar_avisos(con, [ficha], "legado", "portal_legado/1.0.0")
+    precio, antig = con.execute(
+        "SELECT precio_uf, antiguedad_anios FROM fact_unidad_venta"
+    ).fetchone()
+    assert precio == D("13000.00"), "el precio de la tarjeta manda"
+    assert antig == 12, "pero la ficha aporta lo que la tarjeta no trae"
+
+
+def test_dos_tarjetas_de_fechas_distintas_SI_versionan(con) -> None:
+    """El candado es entre superficies, no entre fechas. Tarjeta contra tarjeta es
+    exactamente la comparacion que el delta necesita."""
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "4000", MAYO)], "vivo", "portal_busqueda/1.0.0")
+    cargar_avisos(con, [_aviso_superficie("MLC-1", "3600", HOY)], "vivo", "portal_busqueda/1.0.0")
+    assert len(delta.comparar(con, HOY).bajaron) == 1
