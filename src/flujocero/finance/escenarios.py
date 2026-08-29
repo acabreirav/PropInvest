@@ -9,7 +9,13 @@ from decimal import Decimal
 from itertools import product
 
 from flujocero.config import Config
-from flujocero.finance.modelo import Escenario, Evaluacion, Unidad, evaluar
+from flujocero.finance.modelo import (
+    Escenario,
+    Evaluacion,
+    Unidad,
+    evaluar,
+    pie_flujo_cero_real,
+)
 
 D = Decimal
 
@@ -84,7 +90,23 @@ def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
         "costo_tenencia_mensual_uf": _normalizar(
             [e.costo_tenencia_mensual_uf for _, e in vivos], True
         ),
-        "pie_minimo_flujo_cero": _normalizar([e.pie_minimo_flujo_cero for _, e in vivos], False),
+        # El pie REAL cuando esta calculado, con la forma cerrada como respaldo. Rankear con
+        # la cerrada ordenaria el 20% del score por una metrica que subestima 24-30 puntos, y
+        # lo haria de forma desigual: subestima mas donde la vacancia y el opex pesan mas.
+        # Un `None` —la unidad no llega a flujo cero ni con 95% de pie— es lo peor posible.
+        "pie_minimo_flujo_cero": _normalizar(
+            [
+                e.pie_flujo_cero_real
+                if e.pie_flujo_cero_real is not None
+                else (
+                    D(1)
+                    if e.pie_flujo_cero_real is None and e.btcf_mensual_uf < 0
+                    else e.pie_minimo_flujo_cero
+                )
+                for _, e in vivos
+            ],
+            False,
+        ),
         "tir_real_apalancada_10a": _normalizar([e.tir_real.get(10, D(-1)) for _, e in vivos], True),
         "riesgo_microzona": _normalizar([u.riesgo_microzona for u, _ in vivos], False),
         "catalizador": _normalizar([u.catalizador for u, _ in vivos], True),
@@ -97,8 +119,22 @@ def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
 
 
 def evaluar_universo(
-    unidades: list[Unidad], escenario: Escenario, p: Config, inv: Config
+    unidades: list[Unidad],
+    escenario: Escenario,
+    p: Config,
+    inv: Config,
+    pie_exacto: bool = True,
 ) -> list[Evaluacion]:
+    """`pie_exacto` busca por biseccion el pie de flujo cero sobre el modelo completo.
+
+    Cuesta ~11 evaluaciones extra por unidad y vale cada una: la forma cerrada subestima el
+    pie necesario en 24 a 30 puntos porcentuales, porque parte del yield bruto e ignora
+    vacancia, incobrabilidad, erosion intra-anual y seguros.
+    """
     evals = [evaluar(u, escenario, p, inv) for u in unidades]
+    if pie_exacto:
+        for u, ev in zip(unidades, evals, strict=True):
+            if not ev.excluido:
+                ev.pie_flujo_cero_real = pie_flujo_cero_real(u, escenario, p, inv)
     puntuar(unidades, evals, p)
     return evals

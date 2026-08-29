@@ -1190,3 +1190,46 @@ equilibrio en el Gran Santiago esta en 34-47%. Estas unidades salen con pie de f
 **17-20%**, y la primera en **-7%** (se paga sola). El contrato tenia razon para el stock NUEVO
 que era su alcance original; abrir a usado (D-015) cambio ese piso. No invalida el hallazgo:
 lo acota.
+
+---
+
+## 2026-08-29 · La metrica insignia del producto estaba optimista, y por mucho
+
+Mirando el primer ranking real aparecio una contradiccion en la misma fila:
+`MLC-1933353711` marcaba pie de flujo cero **17%**, estaba puesta al **20%**, y aun asi
+costaba **-$3.380 al mes**. Dos numeros lado a lado que se desmentian.
+
+**La causa.** `pie_minimo_flujo_cero` es la forma cerrada `1 - (1-opex)·yield/factor`, que
+parte del yield **BRUTO**: ignora la vacancia, la incobrabilidad, la erosion intra-anual del
+§3.3 y los seguros que el banco cobra junto al dividendo. Todo eso empeora el flujo, asi que
+la forma cerrada **subestima sistematicamente el pie necesario**.
+
+**Cuanto.** Medido por biseccion sobre el modelo completo, en unidades reales del ranking:
+
+| unidad | forma cerrada | REAL | diferencia |
+|---|---|---|---|
+| MLC-3907646442 | -6% | 24% | +30 pts |
+| MLC-1933353711 | 18% | 43% | +25 pts |
+| MLC-1948762123 | 20% | 44% | +24 pts |
+| MLC-4125847944 | 20% | 44% | +24 pts |
+
+Y esos 43-44% caen exactamente dentro del **34-47% que el §2.3 del contrato predecia**. O sea:
+el contrato tenia razon y yo le dije al usuario lo contrario hace una hora, apoyado en la
+metrica sesgada. **Correccion entregada.**
+
+**Que se hizo.** `pie_flujo_cero_real()` busca por biseccion el pie donde el flujo del modelo
+completo cruza cero — el mismo modelo que produce el resto de la fila, para que lo mostrado
+sea internamente coherente. `core.pie_minimo_flujo_cero` se conserva intacta: esta anclada por
+el §7.2 contra la literatura y sirve para comparar con cifras publicadas, pero deja de ser lo
+que se muestra y lo que rankea.
+
+El score tambien pasa a usar la real. Rankear con la cerrada ordenaba el **20% del score** por
+una metrica sesgada, y ademas de forma desigual: subestima mas donde la vacancia y el opex
+pesan mas. Cuesta ~90 s sobre 1.000 unidades y los vale.
+
+**El hallazgo grande, que sale de la misma medicion.** Con DFL2 **confirmado**, esa misma
+unidad pasa de 44% a **0%** de pie de flujo cero: se paga sola. Toda la diferencia es el
+impuesto a la renta sobre el arriendo, UF 37,8 al ano. El §2.5 dice que el DFL2 vale mas que
+el subsidio en valor presente; esto lo cuantifica. Y como el portal declara DFL2 en el 0,3% de
+los avisos, **el ranking de hoy es sistematicamente pesimista justo en la dimension que mas
+importa**. Verificar el DFL2 en la escritura pasa a ser la accion de mayor valor del proyecto.

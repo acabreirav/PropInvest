@@ -5,7 +5,7 @@ Convención: TODO en UF, términos reales. Ver docs/02-modelo-financiero.md.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
 from flujocero.config import Config
@@ -98,6 +98,10 @@ class Evaluacion:
     ventana_contribuciones_abierta: bool = True
     pie_minimo_exigido: Decimal = D(0)
     pie_efectivo: Decimal = D(0)
+    # El pie de flujo cero REAL, buscado sobre el modelo completo. Convive con
+    # `pie_minimo_flujo_cero`, que es la forma cerrada comparable con la literatura, y las dos
+    # no coinciden: ver `pie_flujo_cero_real()`.
+    pie_flujo_cero_real: Decimal | None = None
     excluido: bool = False
     motivo_exclusion: str | None = None
     score: Decimal = D(0)
@@ -329,10 +333,15 @@ def gastos_de_cierre_uf(precio_uf: Decimal, credito_uf: Decimal, p: Config) -> D
 # -------------------------------------------------------------------------------- evaluación
 
 
-def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
+def evaluar(
+    u: Unidad, e: Escenario, p: Config, inv: Config, saltar_exclusiones: bool = False
+) -> Evaluacion:
+    """`saltar_exclusiones` existe para la busqueda del pie de flujo cero: el filtro de
+    deficit depende del pie, y el pie que se busca depende del flujo. Sin esta puerta la
+    busqueda se muerde la cola."""
     ev = Evaluacion(unidad_key=u.unidad_key, escenario_id=e.escenario_id)
 
-    motivo = evaluar_exclusiones(u, p, inv)
+    motivo = None if saltar_exclusiones else evaluar_exclusiones(u, p, inv)
     if motivo:
         ev.excluido, ev.motivo_exclusion = True, motivo
         return ev
@@ -436,3 +445,40 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
             f"tolerado de {tope * uf:,.0f} CLP/mes"
         )
     return ev
+
+
+def pie_flujo_cero_real(
+    u: Unidad, e: Escenario, p: Config, inv: Config, tolerancia: Decimal = D("0.0005")
+) -> Decimal | None:
+    """El pie con el que el flujo mensual REAL llega a cero. `None` si no llega nunca.
+
+    Convive con `core.pie_minimo_flujo_cero`, que es la forma cerrada
+    `1 - (1-opex)·yield/factor` y está anclada por el §7.2 contra la literatura. **Las dos no
+    coinciden, y la diferencia no es de redondeo.** La forma cerrada parte del yield BRUTO:
+    ignora la vacancia, la incobrabilidad, la erosión intra-anual del §3.3 y los seguros que
+    el banco cobra con el dividendo. Todo eso empeora el flujo, así que la forma cerrada
+    **subestima sistemáticamente el pie necesario**.
+
+    Se vio en el primer ranking real: una unidad con forma cerrada en 18% seguía costando
+    plata a 35% de pie. Dos métricas contradiciéndose en la misma fila, y la optimista era la
+    que el contrato llama "la métrica honesta".
+
+    Se resuelve por bisección sobre el modelo completo — el mismo que produce el resto de la
+    fila — para que lo que se muestra sea internamente coherente.
+    """
+
+    def flujo(pie: Decimal) -> Decimal:
+        return evaluar(u, replace(e, pie_pct=pie), p, inv, saltar_exclusiones=True).btcf_mensual_uf
+
+    bajo, alto = D(0), D("0.95")
+    if flujo(alto) < 0:
+        return None  # ni poniendo el 95% se paga sola
+    if flujo(bajo) >= 0:
+        return D(0)  # se paga sola sin pie
+    while alto - bajo > tolerancia:
+        medio = (bajo + alto) / 2
+        if flujo(medio) < 0:
+            bajo = medio
+        else:
+            alto = medio
+    return alto

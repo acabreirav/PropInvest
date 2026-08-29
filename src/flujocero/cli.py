@@ -869,12 +869,17 @@ def oportunidades(
     )
     for u, ev in vivos[:top]:
         tenencia = ev.costo_tenencia_mensual_uf * uf
+        # El pie de flujo cero REAL, no la forma cerrada: esa subestima 24-30 puntos porque
+        # ignora vacancia, incobrabilidad, erosion intra-anual y seguros.
+        pie_cero = (
+            f"{ev.pie_flujo_cero_real:.0%}" if ev.pie_flujo_cero_real is not None else "nunca"
+        )
         typer.echo(
             f"    {u.unidad_key:16s} {u.precio_uf:>7,.0f} {u.m2_utiles:>5.0f} "
             f"{u.precio_uf / u.m2_utiles:>6.1f} "
             f"{ev.rentabilidad_bruta:>6.2%} {ev.cap_rate:>6.2%} "
             f"{'$' + format(int(tenencia), ','):>13s} {ev.pie_efectivo:>4.0%} "
-            f"{ev.pie_minimo_flujo_cero:>6.0%}  {u.microzona_id}"
+            f"{pie_cero:>6s}  {u.microzona_id}"
         )
 
     # El §13.3 advierte exactamente de esto: los yields de dos digitos del ranking chileno son

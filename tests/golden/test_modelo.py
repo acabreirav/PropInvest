@@ -1,5 +1,6 @@
 """Casos de oro del modelo completo — invariantes contables y reglas del régimen."""
 
+from dataclasses import replace
 from decimal import Decimal as D
 from decimal import getcontext
 
@@ -13,6 +14,7 @@ from flujocero.finance.modelo import (
     contribuciones_anuales_uf,
     evaluar,
     gastos_de_cierre_uf,
+    pie_flujo_cero_real,
     tasa_aplicable,
     ventana_dfl2_abierta,
 )
@@ -415,3 +417,78 @@ def test_sin_dato_de_antiguedad_la_ventana_se_asume_abierta(cfg) -> None:
     """Es donde falta el dato —obra nueva— y es tambien donde la ventana recien empieza."""
     p, _ = cfg
     assert ventana_dfl2_abierta(unidad(antiguedad_anios=None), p) is True
+
+
+# ----------------------------------------------- el pie de flujo cero REAL vs la forma cerrada
+
+
+def test_la_forma_cerrada_subestima_el_pie_y_por_eso_existe_la_busqueda(cfg) -> None:
+    """La forma cerrada `1 - (1-opex)·yield/factor` parte del yield BRUTO: ignora vacancia,
+    incobrabilidad, la erosion intra-anual del §3.3 y los seguros que el banco cobra con el
+    dividendo. Todo eso empeora el flujo, asi que **subestima sistematicamente**.
+
+    Se vio en el primer ranking real: una unidad con forma cerrada en 18% seguia costando
+    plata a 35% de pie. Dos metricas contradiciendose en la misma fila, y la optimista era la
+    que el contrato llama "la metrica honesta"."""
+    p, inv = cfg
+    e = escenario_base(p, inv)
+    u = unidad(
+        precio_uf=D(2110),
+        m2_utiles=D(58),
+        arriendo_mensual_uf=D("13.70"),
+        es_vivienda_nueva=False,
+        acogida_dfl2=None,
+    )
+    cerrada = evaluar(u, e, p, inv, saltar_exclusiones=True).pie_minimo_flujo_cero
+    real = pie_flujo_cero_real(u, e, p, inv)
+    assert real is not None
+    assert real > cerrada, "la cerrada es optimista, nunca al reves"
+    assert real - cerrada > D("0.10"), "y la diferencia es de decenas de puntos, no de redondeo"
+
+
+def test_el_pie_hallado_de_verdad_da_flujo_cero(cfg) -> None:
+    """La prueba de que la busqueda hace lo que dice: al pie que devuelve, el flujo del
+    modelo completo cruza cero."""
+    p, inv = cfg
+    e = escenario_base(p, inv)
+    u = unidad(
+        precio_uf=D(2110),
+        m2_utiles=D(58),
+        arriendo_mensual_uf=D("13.70"),
+        es_vivienda_nueva=False,
+        acogida_dfl2=None,
+    )
+    pie = pie_flujo_cero_real(u, e, p, inv)
+    justo = evaluar(u, replace(e, pie_pct=pie), p, inv, saltar_exclusiones=True)
+    apenas_menos = evaluar(u, replace(e, pie_pct=pie - D("0.01")), p, inv, saltar_exclusiones=True)
+    assert justo.btcf_mensual_uf >= 0
+    assert apenas_menos.btcf_mensual_uf < 0
+
+
+def test_una_unidad_que_nunca_se_paga_sola_devuelve_None(cfg) -> None:
+    """`None` no es un error: es la respuesta correcta a "ni con 95% de pie". Rankearla con
+    un numero cualquiera la haria competir contra unidades que si llegan."""
+    p, inv = cfg
+    mala = unidad(
+        precio_uf=D(6000),
+        m2_utiles=D(40),
+        arriendo_mensual_uf=D("3"),
+        es_vivienda_nueva=False,
+        acogida_dfl2=None,
+    )
+    assert pie_flujo_cero_real(mala, escenario_base(p, inv), p, inv) is None
+
+
+def test_el_DFL2_sin_confirmar_es_lo_que_mas_encarece_el_pie(cfg) -> None:
+    """Medido sobre una unidad real del ranking: sin DFL2 confirmado el arriendo paga
+    impuesto a la renta, y eso mueve el pie de flujo cero de 0% a mas del 40%. El §2.5 dice
+    que el DFL2 vale mas que el subsidio en valor presente; esto lo cuantifica."""
+    p, inv = cfg
+    e = escenario_base(p, inv)
+    base = dict(
+        precio_uf=D(2110), m2_utiles=D(58), arriendo_mensual_uf=D("13.70"), es_vivienda_nueva=False
+    )
+    sin = pie_flujo_cero_real(unidad(**base, acogida_dfl2=None), e, p, inv)
+    con = pie_flujo_cero_real(unidad(**base, acogida_dfl2=True, antiguedad_anios=5), e, p, inv)
+    assert sin is not None and con is not None
+    assert sin - con > D("0.30"), "verificar el DFL2 vale mas de 30 puntos de pie"
