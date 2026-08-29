@@ -45,6 +45,10 @@ class Reporte:
     nuevas: int
     sin_cambio: int
     corte: datetime
+    # Unidades viejas en microzonas que la corrida nueva NO toco. No desaparecieron: no se
+    # volvieron a mirar. Se cuentan aparte para que nadie las lea como ventas.
+    fuera_de_alcance: int = 0
+    microzonas_revisadas: int = 0
     # Cuantas fechas de captura distintas hay antes del corte. Cero significa que todo lo
     # cargado es de una sola foto y que el informe, aunque tenga numeros, no compara nada.
     capturas_previas: int = 0
@@ -81,7 +85,14 @@ class Reporte:
             f"  sin cambio        : {self.sin_cambio}",
             f"  ya no estan       : {self.desaparecidas}   (un aviso desaparece al venderse)",
             f"  nuevas            : {self.nuevas}",
+            f"\n  alcance: {self.microzonas_revisadas} microzonas re-revisadas.",
         ]
+        if self.fuera_de_alcance:
+            lineas.append(
+                f"  {self.fuera_de_alcance} unidades de la foto vieja quedaron FUERA de esa\n"
+                f"  corrida. No desaparecieron: no se volvieron a mirar. Para incluirlas hay\n"
+                f"  que recolectar sus comunas con mas paginas."
+            )
         if self.bajaron:
             lineas.append("\n  Las que mas bajaron:")
             for c in self.bajaron[:10]:
@@ -93,17 +104,29 @@ class Reporte:
 
 
 def comparar(conexion: Any, corte: datetime) -> Reporte:
-    """Cruza el estado del mercado antes y después de `corte`, sobre `fact_unidad_venta`.
+    """Cruza el estado del mercado antes y despues de `corte`, sobre `fact_unidad_venta`.
 
-    **La clasificación va por fechas, no por `source_id`.** Cuando una unidad sigue publicada
+    **La clasificacion va por fechas, no por `source_id`.** Cuando una unidad sigue publicada
     al mismo precio, el cargador actualiza su procedencia a la captura de hoy: la fila deja de
-    "ser del legado" aunque se haya visto por primera vez en mayo. Clasificar por fuente diría
-    que esa unidad desapareció, que es exactamente lo contrario de lo que pasó.
+    "ser del legado" aunque se haya visto por primera vez en mayo. Clasificar por fuente diria
+    que esa unidad desaparecio, que es exactamente lo contrario de lo que paso.
 
-    Lo que separa los cuatro casos son dos fechas que el SCD tipo 2 ya guarda:
-    `valid_from` (cuándo se vio por primera vez a este precio) y `fetched_at` (cuándo se
-    confirmó por última vez).
+    **Y se compara solo dentro del alcance re-revisado.** Una unidad de mayo en una microzona
+    que la corrida nueva no toco no "desaparecio": no se volvio a mirar. Contarla como vendida
+    inflo el informe del usuario a 2.691 desapariciones cuando solo habia recolectado tres
+    comunas y dos paginas de cada una. Un numero que mide el alcance de la corrida disfrazado
+    de senal de mercado es peor que no tener el numero.
     """
+    # Microzonas que la captura nueva efectivamente toco.
+    alcance = {
+        f[0]
+        for f in conexion.execute(
+            "SELECT DISTINCT microzona_id FROM fact_unidad_venta "
+            "WHERE fetched_at >= ? AND microzona_id IS NOT NULL",
+            (corte,),
+        ).fetchall()
+    }
+
     cambios = [
         CambioDePrecio(*fila)
         for fila in conexion.execute(
@@ -119,26 +142,24 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
         ).fetchall()
     ]
 
-    def contar(condicion: str) -> int:
+    def contar(condicion: str, *extra: Any) -> int:
         return int(
             conexion.execute(
                 f"SELECT count(*) FROM fact_unidad_venta WHERE valid_to IS NULL AND {condicion}",
-                (corte, corte),
+                (corte, corte, *extra),
             ).fetchone()[0]
         )
 
-    capturas_previas = int(
-        conexion.execute(
-            "SELECT count(DISTINCT valid_from::DATE) FROM fact_unidad_venta WHERE valid_from < ?",
-            (corte,),
-        ).fetchone()[0]
-    )
+    dentro = "microzona_id IN (SELECT UNNEST(?))" if alcance else "FALSE"
+    lista = [sorted(alcance)] if alcance else []
 
     return Reporte(
         cambios=cambios,
-        capturas_previas=capturas_previas,
-        # Estaba antes del corte y ninguna captura nueva la toco: se cayo del portal.
-        desaparecidas=contar("valid_from < ? AND fetched_at < ?"),
+        # Estaba antes del corte, en una microzona QUE SI se volvio a revisar, y ninguna
+        # captura nueva la toco. Esa es la senal: un aviso desaparece cuando se vende.
+        desaparecidas=contar(f"valid_from < ? AND fetched_at < ? AND {dentro}", *lista),
+        # Estaba antes y quedo fuera del alcance de la corrida nueva. No dice nada del mercado.
+        fuera_de_alcance=contar(f"valid_from < ? AND fetched_at < ? AND NOT ({dentro})", *lista),
         # Aparecio despues del corte **y no tiene historia**. La condicion de la version
         # cerrada no es un detalle: una unidad que bajo de precio tambien tiene su version
         # vigente naciendo hoy, y sin este filtro se contaba dos veces —como cambio de precio
@@ -151,4 +172,12 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
         # Estaba antes y sigue, al mismo precio.
         sin_cambio=contar("valid_from < ? AND fetched_at >= ?"),
         corte=corte,
+        capturas_previas=int(
+            conexion.execute(
+                "SELECT count(DISTINCT valid_from::DATE) FROM fact_unidad_venta "
+                "WHERE valid_from < ?",
+                (corte,),
+            ).fetchone()[0]
+        ),
+        microzonas_revisadas=len(alcance),
     )

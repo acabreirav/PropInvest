@@ -241,7 +241,16 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
             )
             return 0
         if desde > a.fetched_at:
-            return 0  # llego una captura mas vieja que la vigente: no reescribe el presente
+            # Llego una captura MAS VIEJA que la version vigente. No debe reescribir el
+            # presente, pero tampoco puede tirarse: es historia, y es justo la que hace
+            # posible el delta.
+            #
+            # Paso de verdad: el usuario recolecto agosto primero y despues ingirio la foto de
+            # mayo. Con el `return 0` de antes, toda unidad que aparecia en las dos capturas
+            # perdia su version de mayo, y el informe salia con cero cambios de precio y cero
+            # confirmadas. El resultado dependia del ORDEN en que se cargaron las fotos, que
+            # es exactamente lo que un almacen versionado no puede permitirse.
+            return _rellenar_pasado(conexion, a, desde, precio_previo, source_id, parser_version)
         if precio_previo == a.precio_uf:
             # Sigue publicada al mismo precio: no se abre version, pero SI se actualiza la
             # procedencia. Dejarla apuntando al documento viejo diria que la evidencia de
@@ -298,6 +307,71 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
             # asi que la regla que ya existe hace el trabajo sin codigo nuevo.
             "E" if a.es_proyecto else "V",
             a.fetched_at,
+            *_procedencia(a, source_id, parser_version),
+        ),
+    )
+    return 1
+
+
+def _rellenar_pasado(
+    conexion: Any,
+    a: Any,
+    desde_vigente: Any,
+    precio_vigente: Any,
+    source_id: str,
+    parser_version: str,
+) -> int:
+    """Inserta hacia atras una captura anterior a la version vigente (§11, SCD tipo 2).
+
+    Dos casos, y la diferencia no es cosmetica:
+
+    - **Mismo precio.** La unidad ya estaba a ese precio en la fecha vieja, asi que no hay dos
+      versiones: hay una que empezo antes. Se retrocede su `valid_from`. Crear una version
+      nueva aca inventaria un cambio de precio que nunca ocurrio.
+    - **Precio distinto.** Es una version cerrada de verdad: `[fecha_vieja, valid_from_actual)`.
+
+    Idempotente: si ya existe una version cubriendo ese instante, no hace nada.
+    """
+    ya_esta = conexion.execute(
+        "SELECT count(*) FROM fact_unidad_venta "
+        "WHERE unidad_key = ? AND valid_from <= ? AND (valid_to IS NULL OR valid_to > ?)",
+        (a.portal_id, a.fetched_at, a.fetched_at),
+    ).fetchone()[0]
+    if ya_esta:
+        return 0
+
+    if precio_vigente == a.precio_uf:
+        conexion.execute(
+            "UPDATE fact_unidad_venta SET valid_from = ? "
+            "WHERE unidad_key = ? AND valid_from = ? AND valid_to IS NULL",
+            (a.fetched_at, a.portal_id, desde_vigente),
+        )
+        return 0
+
+    conexion.execute(
+        """
+        INSERT INTO fact_unidad_venta
+          (unidad_key, numero_unidad, microzona_id, tipologia, dormitorios, banos, m2_utiles,
+           es_vivienda_nueva, antiguedad_anios, precio_uf, disponible, evidence_level,
+           valid_from, valid_to, source_id, source_url, fetched_at, parser_version,
+           raw_blob_path, robots_snapshot_sha)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            a.portal_id,
+            a.portal_id,
+            a.microzona_id,
+            a.tipologia,
+            a.dormitorios,
+            a.banos,
+            float(a.m2_utiles) if a.m2_utiles is not None else None,
+            getattr(a, "es_vivienda_nueva", None),
+            getattr(a, "antiguedad_anios", None),
+            a.precio_uf,
+            True,
+            "E" if a.es_proyecto else "V",
+            a.fetched_at,
+            desde_vigente,  # la version vieja se cierra justo donde empieza la vigente
             *_procedencia(a, source_id, parser_version),
         ),
     )

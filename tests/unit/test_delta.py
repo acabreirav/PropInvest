@@ -146,3 +146,67 @@ def test_confirmar_una_unidad_rellena_una_columna_agregada_despues(con) -> None:
         con.execute("SELECT microzona_id FROM fact_unidad_venta").fetchone()[0]
         == "san-miguel/el-llano"
     )
+
+
+def test_el_orden_en_que_se_cargan_las_fotos_no_cambia_el_resultado(con) -> None:
+    """El bug que aparecio en la maquina del usuario: recolecto agosto primero y despues
+    ingirio la foto de mayo. La captura vieja se descartaba, asi que toda unidad presente en
+    las dos perdia su version de mayo y el informe salia con cero cambios de precio.
+    Un almacen versionado no puede dar resultados distintos segun el orden de carga."""
+    otra = duckdb.connect(":memory:")
+    db.aplicar_esquema(otra)
+    try:
+        mayo = [Aviso("MLC-1", "4000", MAYO), Aviso("MLC-2", "3500", MAYO)]
+        hoy = [Aviso("MLC-1", "3600", HOY), Aviso("MLC-2", "3500", HOY)]
+
+        cargar_avisos(con, mayo, "legado", "v1")
+        cargar_avisos(con, hoy, "vivo", "v1")
+
+        cargar_avisos(otra, hoy, "vivo", "v1")  # el orden inverso
+        cargar_avisos(otra, mayo, "legado", "v1")
+
+        consulta = (
+            "SELECT unidad_key, precio_uf, valid_from, valid_to "
+            "FROM fact_unidad_venta ORDER BY unidad_key, valid_from"
+        )
+        assert con.execute(consulta).fetchall() == otra.execute(consulta).fetchall()
+
+        r = delta.comparar(otra, HOY)
+        assert len(r.bajaron) == 1, "MLC-1 bajo, y se ve cargando en cualquier orden"
+        assert r.sin_cambio == 1
+    finally:
+        otra.close()
+
+
+def test_una_foto_vieja_al_mismo_precio_retrocede_la_version_en_vez_de_duplicarla(con) -> None:
+    """Si ya estaba a ese precio en mayo, no hay dos versiones: hay una que empezo antes.
+    Crear una version nueva inventaria un cambio de precio que nunca ocurrio."""
+    cargar_avisos(con, [Aviso("MLC-2", "3500", HOY)], "vivo", "v1")
+    cargar_avisos(con, [Aviso("MLC-2", "3500", MAYO)], "legado", "v1")
+    filas = con.execute("SELECT precio_uf, valid_from, valid_to FROM fact_unidad_venta").fetchall()
+    assert len(filas) == 1
+    assert filas[0][1] == MAYO, "la version vigente empieza en mayo, no hoy"
+    assert filas[0][2] is None
+
+
+def test_lo_que_no_se_volvio_a_mirar_no_cuenta_como_desaparecido(con) -> None:
+    """El informe del usuario dijo 2.691 desapariciones cuando solo habia recolectado tres
+    comunas y dos paginas de cada una. Un numero que mide el alcance de la corrida disfrazado
+    de senal de mercado es peor que no tener el numero."""
+    cargar_avisos(
+        con,
+        [
+            Aviso("MLC-1", "4000", MAYO, mz="san-miguel/el-llano"),
+            Aviso("MLC-8", "5000", MAYO, mz="las-condes/el-golf"),
+        ],
+        "legado",
+        "v1",
+    )
+    # La corrida nueva solo toca San Miguel. Las Condes ni se miro.
+    cargar_avisos(con, [Aviso("MLC-9", "3000", HOY, mz="san-miguel/el-llano")], "vivo", "v1")
+
+    r = delta.comparar(con, HOY)
+    assert r.desaparecidas == 1, "solo MLC-1, que si estaba en una microzona re-revisada"
+    assert r.fuera_de_alcance == 1, "MLC-8 no desaparecio: no se volvio a mirar"
+    assert "no se volvieron a mirar" in str(r)
+    assert r.microzonas_revisadas == 1

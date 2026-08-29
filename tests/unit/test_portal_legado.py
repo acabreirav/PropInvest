@@ -355,9 +355,14 @@ def test_el_mismo_aviso_en_dos_fechas_genera_versiones_no_duplicados(tmp_path: P
     con.close()
 
 
-def test_una_captura_mas_vieja_no_reescribe_el_presente(tmp_path: Path) -> None:
-    """Los archivos se recorren ordenados por ID, no por fecha: puede llegar una captura
-    del dia 4 despues de haber cargado la del 5. No debe pisar la version vigente."""
+def test_una_captura_mas_vieja_no_pisa_el_presente_pero_si_se_guarda(tmp_path: Path) -> None:
+    """Los archivos se recorren ordenados por ID, no por fecha: puede llegar una captura del
+    dia 4 despues de haber cargado la del 5.
+
+    La version anterior de este test exigia que la captura vieja **no dejara rastro**, y eso
+    resulto ser el bug: el usuario recolecto agosto primero y despues ingirio la foto de mayo,
+    y toda unidad presente en las dos perdio su version de mayo. El informe de delta salio con
+    cero cambios de precio. Lo que hay que proteger es el PRESENTE, no borrar el pasado."""
     import duckdb
 
     from flujocero import db
@@ -393,10 +398,17 @@ def test_una_captura_mas_vieja_no_reescribe_el_presente(tmp_path: Path) -> None:
     pl.cargar_en_duckdb(con, [aviso(datetime(2026, 5, 5, tzinfo=UTC), "3000")])
     pl.cargar_en_duckdb(con, [aviso(datetime(2026, 5, 4, tzinfo=UTC), "9999")])
     vigente = con.execute(
-        "SELECT precio_uf FROM fact_unidad_venta WHERE valid_to IS NULL"
+        "SELECT precio_uf, valid_from FROM fact_unidad_venta WHERE valid_to IS NULL"
     ).fetchone()
-    assert vigente[0] == D("3000.00")
-    assert con.execute("SELECT count(*) FROM fact_unidad_venta").fetchone()[0] == 1
+    assert vigente[0] == D("3000.00"), "el presente no se toca"
+    assert vigente[1] == datetime(2026, 5, 5, tzinfo=UTC)
+
+    historia = con.execute(
+        "SELECT precio_uf, valid_from, valid_to FROM fact_unidad_venta WHERE valid_to IS NOT NULL"
+    ).fetchone()
+    assert historia is not None, "la captura vieja se guarda como version cerrada"
+    assert historia[0] == D("9999.00")
+    assert historia[2] == datetime(2026, 5, 5, tzinfo=UTC), "cierra donde empieza la vigente"
     con.close()
 
 

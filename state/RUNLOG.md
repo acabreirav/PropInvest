@@ -896,3 +896,37 @@ querer dos unidades, y la segunda correria `sin_subsidio`, que es el supuesto co
 
 **Tambien se corrigio `cli capacidad`**, que ofrecia "solo FOGAES (usado?)" como escenario. Ya
 sabemos que ese caso no existe. Las tres lineas ahora son casos reales.
+
+---
+
+## 2026-08-29 · Dos bugs que solo aparecen con dos fotos de verdad
+
+La corrida del usuario cargo la foto de mayo DESPUES de haber recolectado agosto, y el informe
+salio con **cero cambios de precio, cero confirmadas y 2.691 desapariciones**. Los tres
+numeros estaban mal, por dos causas distintas.
+
+**1. El orden de carga decidia el resultado.** Cuando llegaba una captura mas vieja que la
+version vigente, el cargador hacia `return 0` con el comentario "no reescribe el presente".
+La intencion era correcta y la accion no: **tiraba la historia**. Toda unidad presente en las
+dos fotos perdia su version de mayo, y por eso ningun cambio de precio podia detectarse.
+
+Ahora se rellena hacia atras, con dos casos que no son lo mismo:
+- **mismo precio** -> se retrocede el `valid_from` de la version vigente. Ya estaba a ese
+  precio en mayo: no hay dos versiones, hay una que empezo antes. Crear una nueva inventaria
+  un cambio que nunca ocurrio.
+- **precio distinto** -> version cerrada `[fecha_vieja, valid_from_actual)`.
+
+Caso de oro nuevo: cargar mayo->agosto y agosto->mayo tiene que dar tablas **byte a byte
+identicas**. Un almacen versionado no puede depender del orden de carga.
+
+**2. "Ya no estan" medía el alcance de la corrida, no el mercado.** El usuario recolecto tres
+comunas y dos paginas de cada una; la foto de mayo tiene seis comunas paginadas completas.
+Las 2.691 unidades que "desaparecieron" en su mayoria simplemente **no se volvieron a mirar**.
+
+Ahora el cruce se limita a las microzonas que la captura nueva efectivamente toco, y las
+demas se reportan aparte como `fuera_de_alcance`, con el texto que dice que no desaparecieron.
+Un numero que mide el alcance de la corrida disfrazado de senal de mercado es peor que no
+tener el numero: se lee como ventas.
+
+**Un caso de oro que estaba mal.** Exigia que una captura vieja **no dejara rastro**. Eso era
+exactamente el bug. Reescrito: el presente no se toca, y el pasado si se guarda.
