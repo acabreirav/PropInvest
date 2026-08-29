@@ -1116,3 +1116,40 @@ gate lo marco. Detectar una muestra sesgada es exactamente para lo que esta.
 **Correccion de tamano de muestra, medida.** Las medianas de las celdas que antes tenian n=8
 se movieron al crecer: Estadio Nacional 2D2B de 0,285 a 0,262 UF/m2 (-8,1%) con n=123, y 1D1B
 de 0,326 a 0,280 (-14,1%) con n=121. El umbral de 8 del §7.3 es un minimo, no un objetivo.
+
+---
+
+## 2026-08-29 · T-029 · El puente. El motor corre por primera vez sobre datos reales
+
+`src/flujocero/agg/oportunidades.py` + `cli oportunidades`. Hasta hoy el motor financiero solo
+habia corrido sobre departamentos inventados por `demo`.
+
+**La regla de emparejamiento es `(microzona, tipologia, rango_m2)`, y NO hay caida a comuna.**
+Si una unidad no tiene su celda con 8 comparables, no se rankea. Prestarle la mediana de la
+comuna seria exactamente lo que el §2.4 prohibe: dentro de una comuna hay 17% de brecha a
+pocas cuadras, mas que entre dos comunas distintas. Es la regla que mas unidades bota y es la
+correcta.
+
+**Dos cosas que el comando dice y que no son cosmeticas:**
+
+1. **Que parte del score esta INERTE.** `riesgo_microzona` (15%) y `catalizador` (10%) no
+   tienen fuente todavia —falta el Censo y las distancias a Metro, T-014—. Al valer todos lo
+   mismo, la normalizacion los vuelve constante: reparten identico puntaje y no mueven una
+   sola posicion del ranking. **El 25% del score esta muerto y el comando lo declara.** Un
+   score que se presenta como completo cuando un cuarto de su peso no diferencia nada miente
+   por omision.
+2. **Las exclusiones agrupadas por REGLA, no por unidad.** "26 excluidas" obliga a adivinar si
+   el filtro trabaja o se come el universo; "19 sobre el tope de UF 6.000 y 7 sobre el tope de
+   deficit" se lee solo.
+
+**Corrida en esta maquina:** 2.380 unidades con precio verificado, 26 emparejadas, 0
+sobrevivientes — 19 pasan de UF 6.000 y 7 exceden el tope de deficit. Las exclusiones son
+correctas; el universo local es el problema, porque aca solo estan los arriendos publicados en
+UF, que sesgan a Las Condes. En la maquina del usuario hay 115 celdas cubriendo San Miguel y
+Ñuñoa, que es donde vive su ticket.
+
+El DFL2 llega como `None` —por verificar— y no como negativo: el portal lo declara en 16 de
+5.870 avisos, y marcarlo `False` vaciaria el ranking mientras que marcarlo `True` regalaria un
+beneficio sin probar.
+
+12 casos de oro nuevos.

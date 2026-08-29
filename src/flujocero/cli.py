@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal as D
 from decimal import getcontext
@@ -761,6 +762,107 @@ def agregar_arriendo() -> None:
             )
     finally:
         con.close()
+
+
+@app.command()
+def oportunidades(
+    top: int = typer.Option(15, help="cuántas mostrar"),
+    pie: float = typer.Option(0.0, help="pie deseado. 0 = el del perfil"),
+) -> None:
+    """T-029 · cruza cada unidad en venta con el arriendo de su microzona y rankea.
+
+    Es el eslabón que faltaba: hasta ahora el motor solo había corrido sobre departamentos
+    inventados. El emparejamiento usa la clave `(microzona, tipología, rango_m2)` del §2.4,
+    la misma con la que se agregó el arriendo. **No hay caída a comuna**: si una unidad no
+    tiene su celda con 8 comparables, no se rankea. Prestarle la mediana de la comuna sería
+    justo lo que el §2.4 prohíbe.
+    """
+    import duckdb
+
+    from flujocero.agg import oportunidades as op
+    from flujocero.finance.escenarios import escenario_base, evaluar_universo
+
+    p, inv = cargar("params"), cargar("inversionista")
+    con = duckdb.connect(str(db.crear()))
+    try:
+        r = op.emparejar(con, p.crudo("ingresos.rangos_m2"))
+    finally:
+        con.close()
+
+    typer.echo(f"  {r.total} unidades con precio verificado · {len(r.unidades)} rankeables")
+    for motivo, n in r.descartes.items():
+        if n:
+            typer.echo(f"    fuera por {motivo}: {n}")
+    if not r.unidades:
+        typer.echo(
+            "\n✗ Ninguna unidad tiene su celda de arriendo con 8 comparables.\n"
+            "  Corré `agregar-arriendo` primero, y si ya lo hiciste, recolectá más páginas\n"
+            "  de arriendo en esas comunas."
+        )
+        raise typer.Exit(1)
+
+    e = escenario_base(p, inv)
+    if pie:
+        e = replace(e, pie_pct=D(str(pie)), escenario_id=f"pie{int(pie * 100)}")
+    evals = evaluar_universo(r.unidades, e, p, inv)
+
+    # Antes del ranking: qué parte del score está viva. Un score que se presenta como
+    # completo cuando un cuarto de su peso está inerte miente por omisión.
+    inertes = op.componentes_inertes(r.unidades)
+    if inertes:
+        muerto = op.peso_inerte(inertes, p)
+        typer.echo(
+            f"\n  ⚠ {muerto:.0%} del score está INERTE: {', '.join(inertes)} no tienen fuente\n"
+            f"    todavía (falta el Censo 2024 y las distancias a Metro, T-014). Reparten el\n"
+            f"    mismo puntaje a cada unidad y no mueven una sola posición del ranking."
+        )
+
+    vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
+    vivos.sort(key=lambda x: -x[1].score)
+
+    # Agrupado por REGLA, no por unidad. "26 excluidas" obliga a adivinar si el filtro esta
+    # haciendo su trabajo o comiendose el universo; "19 sobre el tope de UF 6.000" se lee solo.
+    from collections import Counter
+
+    reglas = Counter(
+        (ev.motivo_exclusion or "").split(":")[0].split(" UF ")[0].split(" de caja ")[0]
+        for ev in evals
+        if ev.excluido
+    )
+    if reglas:
+        typer.echo(f"\n  {len(evals) - len(vivos)} excluidas por regla dura:")
+        for regla, n in reglas.most_common():
+            typer.echo(f"    {n:4d}  {regla}")
+    typer.echo(f"\n  {len(vivos)} llegan al ranking")
+    if not vivos:
+        typer.echo(
+            "    Ninguna sobrevivio. Las reglas duras son del §12 y del perfil: mira arriba\n"
+            "    cual es la que muerde. Si es el tope de deficit, esta en\n"
+            "    `config/inversionista.yml:restricciones.deficit_mensual_tolerado_clp`."
+        )
+        raise typer.Exit(0)
+
+    uf = p.d("macro.valor_uf_clp")
+    typer.echo(
+        f"\n  Escenario: pie {e.pie_pct:.0%} · {'con' if e.con_subsidio else 'sin'} subsidio\n"
+    )
+    typer.echo(
+        f"    {'unidad':16s} {'UF':>7s} {'UF/m2':>6s} {'yield':>6s} {'cap':>6s} "
+        f"{'tenencia/mes':>13s} {'pie 0':>6s}  microzona"
+    )
+    for u, ev in vivos[:top]:
+        tenencia = ev.costo_tenencia_mensual_uf * uf
+        typer.echo(
+            f"    {u.unidad_key:16s} {u.precio_uf:>7,.0f} {u.precio_uf / u.m2_utiles:>6.1f} "
+            f"{ev.rentabilidad_bruta:>6.2%} {ev.cap_rate:>6.2%} "
+            f"{'$' + format(int(tenencia), ','):>13s} {ev.pie_minimo_flujo_cero:>6.0%}  "
+            f"{u.microzona_id}"
+        )
+
+    typer.echo("\n  De dónde salió el arriendo de las tres primeras:")
+    for u, _ in vivos[:3]:
+        celda, n, arr = r.procedencia_arriendo[u.unidad_key]
+        typer.echo(f"    {u.unidad_key}: UF {arr:.2f}/mes · mediana de {n} avisos en {celda}")
 
 
 @app.command()

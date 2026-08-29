@@ -515,7 +515,7 @@ nota: >
   agrupacion de microzonas: es el instrumento para esta pregunta, no hay que inventarlo.
 
 ## T-029 · El eslabon que falta: cruzar venta x arriendo y rankear
-estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: [T-023]
+estado: hecha · modulo: src/flujocero/agg/oportunidades.py · comando: `cli oportunidades` · agente: motor-financiero · fase: 1 · depende_de: [T-023]
 PRIORIDAD: la mas alta. Es lo unico entre el estado actual y un ranking mirable.
 hallazgo: >
   Estan las dos puntas y no esta el puente. `fact_unidad_venta` tiene 2.696 unidades con
