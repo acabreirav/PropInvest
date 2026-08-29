@@ -531,3 +531,53 @@ criterio_de_aceptacion:
   - [ ] Cada fila expone: yield bruto, cap rate, costo real de tenencia, pie de equilibrio,
         y de donde salio su arriendo (microzona, n, dispersion)
   - [ ] Gate de coherencia: ninguna unidad rankeada sin `evidence_level` V en su precio (§12)
+
+## T-923 · El pie de flujo cero se calculaba con la forma cerrada, y mentia
+estado: hecha · modulo: src/flujocero/finance/modelo.py · agente: motor-financiero · fase: 1 · depende_de: [T-029]
+hallazgo: >
+  `pie_minimo_flujo_cero` es la forma cerrada `1 - (1-opex)*yield/factor`, que parte del yield
+  **BRUTO**: ignora vacancia, incobrabilidad, la erosion intra-anual del §3.3 y los seguros que
+  el banco cobra junto al dividendo. Subestima **siempre**, y de forma desigual: mas donde el
+  opex y la vacancia pesan mas. Medido por biseccion sobre el modelo completo, la diferencia en
+  unidades reales del ranking fue de **+24 a +30 puntos** de pie. Era la metrica insignia del
+  producto (§12, 20% del score) y ordenaba el ranking por un numero sesgado.
+criterio_de_aceptacion:
+  - [x] `pie_flujo_cero_real()` por biseccion sobre el modelo completo, mismo modelo que produce
+        el resto de la fila, para que lo mostrado sea internamente coherente
+  - [x] Devuelve `None` cuando el flujo no cruza cero ni con pie 100%
+  - [x] El score usa la real, no la cerrada
+  - [x] `core.pie_minimo_flujo_cero` se conserva: esta anclada por el §7.2 contra la literatura
+        y sirve para comparar con cifras publicadas
+nota: >
+  Los 43-44% medidos caen dentro del 34-47% que el §2.3 del contrato predecia para el Gran
+  Santiago. Yo le habia dicho al usuario que el contrato se equivocaba, apoyado en la metrica
+  sesgada. Correccion entregada.
+
+## T-924 · El ranking premia micro-unidades y no mide su riesgo
+estado: pendiente · agente: motor-financiero · fase: 2 · depende_de: [T-014]
+hallazgo: >
+  Un tercio del top esta bajo 35 m2 (mediana 40 m2 en el top 15). El §13.3 advierte exactamente
+  de esto: los retornos de dos digitos del mercado chileno son stock usado, chico y barato.
+  Una unidad de 25 m2 tiene mas rotacion, mas vacancia, gastos comunes mas altos por m2 y mucha
+  menos liquidez de salida. **El ranking no mide nada de eso**: hoy solo salta un aviso cuando
+  un tercio o mas del top esta bajo 35 m2.
+criterio_de_aceptacion:
+  - [ ] Medir con datos si la vacancia y la rotacion son peores bajo 35 m2 (no asumirlo)
+  - [ ] Si lo son: entra como componente del riesgo de microzona, con su peso en params.yml
+  - [ ] Si no lo son: se documenta y el aviso se retira, en vez de dejar un miedo sin evidencia
+  - [ ] Los gastos comunes por m2 por tramo de superficie salen de una fuente, no de un supuesto
+
+## T-925 · Cero unidades nuevas llegan al ranking
+estado: pendiente · agente: colector · fase: 2 · depende_de: [T-920]
+hallazgo: >
+  De 1.048 unidades rankeadas, **0 reciben subsidio a la tasa y 0 reciben FOGAES**: todas son
+  usadas y el motor se los niega con razon (§12: el subsidio es condicion del inmueble, exige
+  primera venta). La maquinaria legal que da nombre al proyecto hoy no aplica a ninguna fila.
+  No es un error del motor: es que el universo de avisos que sobrevive a los filtros de calidad
+  es stock usado de portal.
+criterio_de_aceptacion:
+  - [ ] Cuantificar cuantas unidades de `fact_unidad_venta` son de proyecto nuevo y por que se
+        caen: sin celda de arriendo con n>=8, sin precio por unidad, o sin microzona
+  - [ ] Colector de proyectos nuevos con precio POR UNIDAD (PlanOK cotizador, T-042)
+  - [ ] El comando `oportunidades` reporta la composicion nuevo/usado del universo rankeado,
+        no solo del top
