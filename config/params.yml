@@ -125,6 +125,12 @@ ingresos:
   factor_erosion_intra_anual: {v: 0.985, evidence: V, nota: "= 1/(1+pi/2). APLICAR SIEMPRE."}
   rentabilidad_bruta_referencia: {v: 0.045, evidence: V, rango: [0.036, 0.060]}
   min_comparables_por_microzona: 8
+  # Rangos de m2 utiles. El §2.4 fija `(microzona, tipologia, rango_m2)` como la clave de todo
+  # comparable: dentro de una misma microzona y tipologia, un 2D de 45 m2 y uno de 85 m2 no se
+  # arriendan al mismo precio, y mezclarlos corre la mediana hacia donde haya mas oferta.
+  # Los cortes siguen la oferta real del stock chileno: studio, 1D, 2D chico, 2D grande, 3D+.
+  # El tope de 140 no es arbitrario: sobre eso se pierde el regimen DFL2.
+  rangos_m2: [[0, 35], [35, 50], [50, 70], [70, 100], [100, 140]]
 
 vacancia_y_riesgo:
   vacancia_gestion_individual: {v: 0.08, evidence: V, rango: [0.08, 0.10]}

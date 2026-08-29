@@ -156,7 +156,14 @@ criterio_de_aceptacion:
   - Ingesta incremental por `lastmod`
 
 ## T-023 · Agregación de arriendo por microzona × tipología
-estado: pendiente · agente: analista-arriendo · fase: 1 · depende_de: [T-021, T-022, T-013]
+estado: hecha · modulo: src/flujocero/agg/arriendo.py · comando: `cli agregar-arriendo`
+resultado: >
+  Agrupa por (microzona, tipologia, rango_m2) —nunca por comuna— con mediana, p25, p75, UF/m2
+  y dispersion. La conversion CLP->UF usa la UF del DIA DE CADA AVISO, no la de hoy: usar la
+  de hoy mezclaria el movimiento de la UF con el del mercado, que es lo que el §3.3 manda
+  separar. Sin UF de ese dia la fila se descarta y se CUENTA por motivo: una fila que no entra
+  a la mediana tiene que poder explicarse.
+estado_anterior: pendiente · agente: analista-arriendo · fase: 1 · depende_de: [T-021, T-022, T-013]
 criterio_de_aceptacion:
   - `agg_arriendo_microzona` con p25/mediana/p75 y `n`; **`n<8` ⇒ `ND`, sin imputar**
   - Reconciliación contra `docs/00-hallazgos.md §2` dentro de ±25%, o alerta explicada

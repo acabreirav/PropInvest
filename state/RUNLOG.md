@@ -1018,3 +1018,32 @@ el barrio al final. `rebuild --from-raw` la normaliza, porque re-parsea con el p
 
 Se agrego **UF/m2** a cada linea del listado: sin eso, "bajo 12,7%" no se puede comparar
 contra nada. Con eso se ve al instante si el precio nuevo es caro o barato para su microzona.
+
+---
+
+## 2026-08-29 · T-023 · La mediana de arriendo, que es el numerador de todo
+
+`src/flujocero/agg/arriendo.py` + `cli agregar-arriendo`. El yield bruto sale de
+`arriendo_mediano x 12 / precio`, y ese arriendo se calcula aca.
+
+**Tres decisiones que gobiernan el modulo:**
+
+1. **La clave es `(microzona, tipologia, rango_m2)`, nunca la comuna.** El §2.4 lo fija con
+   evidencia: dentro de Estacion Central el mismo producto renta ~$300.000 en una calle y
+   ~$350.000 a pocas cuadras. Agregar por comuna promedia dos mercados distintos y produce un
+   yield que no existe en ninguna de las dos calles. Los rangos de m2 quedan en `params.yml`
+   con el tope en 140, que no es arbitrario: sobre eso se pierde el DFL2.
+2. **La conversion a UF usa la UF del DIA DE CADA AVISO.** Un arriendo de mayo se convierte
+   con la UF de mayo. Con la de hoy se mezclaria el movimiento de la UF con el del mercado,
+   que es justo lo que el §3.3 manda separar trabajando en terminos reales. Si falta la UF de
+   ese dia se retrocede hasta siete dias y no mas; despues, la fila se descarta.
+3. **Mediana, no promedio**, con p25 y p75 al lado. Un aviso mal parseado mueve un promedio y
+   no mueve una mediana. La `dispersion` = (p75-p25)/mediana delata un rango que esconde dos
+   mercados.
+
+**Los descartes se cuentan por motivo y se muestran.** En esta maquina: 2.201 de 2.835 quedan
+fuera por `sin_uf_del_dia`, porque la serie de la CMF esta cargada en la maquina del usuario y
+no aca. El numero hace visible de inmediato que falta un insumo, en vez de producir una
+mediana sobre el 16% de los datos sin decirlo.
+
+**20 casos de oro**, incluido el que compara mediana contra promedio ante un outlier.

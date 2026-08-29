@@ -689,6 +689,54 @@ def delta(
 
 
 @app.command()
+def agregar_arriendo() -> None:
+    """T-023 · calcula la mediana de arriendo por microzona × tipología × rango de m².
+
+    Es el numerador de todo: el yield bruto sale de `arriendo_mediano × 12 / precio`.
+
+    Cada aviso en pesos se convierte con la UF de SU día, no con la de hoy: usar la de hoy
+    mezclaría el movimiento de la UF con el del mercado, que es lo que el §3.3 manda separar.
+    Si falta la UF de ese día, la fila no se convierte y no se usa.
+    """
+    import duckdb
+
+    from flujocero.agg import arriendo as agg
+
+    p = cargar("params")
+    rangos = p.crudo("ingresos.rangos_m2")
+    con = duckdb.connect(str(db.crear()))
+    try:
+        comparables, descartes = agg.comparables_desde_duckdb(con)
+        total = sum(descartes.values()) + len(comparables)
+        typer.echo(f"  {total} comparables activos · {len(comparables)} utilizables")
+        for motivo, n in descartes.items():
+            if n:
+                typer.echo(f"    descartados por {motivo}: {n}")
+        if not comparables:
+            typer.echo(
+                "\n✗ ninguno se pudo usar. Si el motivo es `sin_uf_del_dia`, falta la serie:\n"
+                "  uv run python -m flujocero.cli ingest --fuente cmf_indicadores"
+            )
+            raise typer.Exit(1)
+
+        agregados = agg.agregar(comparables, rangos)
+        n = agg.cargar_en_duckdb(con, agregados, datetime.now(UTC))
+        buenos = [a for a in agregados if a.suficiente]
+        typer.echo(f"✓ {n} celdas (microzona × tipología × rango)")
+        typer.echo(f"✓ {len(buenos)} con n ≥ {agg.MIN_COMPARABLES}: son las que pueden rankear")
+
+        typer.echo("\n  Las más profundas:")
+        for a in sorted(buenos, key=lambda x: -x.n)[:10]:
+            typer.echo(
+                f"    {a.microzona_id:38s} {a.tipologia:6s} {a.rango_m2:>7s} m²  "
+                f"n={a.n:3d}  mediana UF {a.mediana:6.2f}  "
+                f"{a.uf_m2_mediana:.3f} UF/m²  dispersión {a.dispersion:.0%}"
+            )
+    finally:
+        con.close()
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []
