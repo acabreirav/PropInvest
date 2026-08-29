@@ -706,17 +706,24 @@ def agregar_arriendo() -> None:
     rangos = p.crudo("ingresos.rangos_m2")
     con = duckdb.connect(str(db.crear()))
     try:
+        # Se informa ANTES de agregar: "4.099 descartados" sin decir el estado de la serie
+        # obliga a adivinar si falta el insumo o si el codigo esta roto.
+        estado = agg.estado_serie(con)
+        typer.echo(f"  {estado}")
         comparables, descartes = agg.comparables_desde_duckdb(con)
         total = sum(descartes.values()) + len(comparables)
         typer.echo(f"  {total} comparables activos · {len(comparables)} utilizables")
         for motivo, n in descartes.items():
             if n:
                 typer.echo(f"    descartados por {motivo}: {n}")
-        if not comparables:
+        if descartes["sin_uf_del_dia"] and not estado.n:
             typer.echo(
-                "\n✗ ninguno se pudo usar. Si el motivo es `sin_uf_del_dia`, falta la serie:\n"
-                "  uv run python -m flujocero.cli ingest --fuente cmf_indicadores"
+                "\n✗ La serie de UF esta VACIA, por eso no se convirtio ningun arriendo en\n"
+                "  pesos. `rebuild --from-raw` la reconstruye solo si los blobs de la CMF\n"
+                "  estan en data/raw/cmf_indicadores/. Si no estan:\n"
+                "    uv run python -m flujocero.cli ingest --fuente cmf_indicadores"
             )
+        if not comparables:
             raise typer.Exit(1)
 
         agregados = agg.agregar(comparables, rangos)

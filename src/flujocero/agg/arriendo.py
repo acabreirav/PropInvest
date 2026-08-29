@@ -140,6 +140,28 @@ class SinSerieUF(RuntimeError):
     """No hay UF cargada para convertir. Se detiene en vez de inventar un tipo de cambio."""
 
 
+@dataclass(frozen=True)
+class EstadoSerie:
+    """Qué tan cargada está la serie de UF. Sin esto, "4.099 descartados" no dice por qué."""
+
+    n: int
+    desde: date | None
+    hasta: date | None
+
+    def __str__(self) -> str:
+        if not self.n:
+            return "serie UF: VACÍA"
+        return f"serie UF: {self.n} días, {self.desde} → {self.hasta}"
+
+
+def estado_serie(conexion: Any) -> EstadoSerie:
+    fila = conexion.execute(
+        "SELECT count(*), min(fecha), max(fecha) FROM dim_tiempo_financiero "
+        "WHERE serie = 'uf' AND valor IS NOT NULL"
+    ).fetchone()
+    return EstadoSerie(int(fila[0] or 0), fila[1], fila[2])
+
+
 def serie_uf(conexion: Any) -> dict[date, Decimal]:
     """La serie completa de UF, para convertir cada aviso con la UF de SU día."""
     return {
