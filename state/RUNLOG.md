@@ -842,3 +842,14 @@ no habia por donde cruzarlos. Se llegaba a la comuna via `dim_proyecto`, que sol
 obra nueva; un usado de portal no tiene proyecto. Corregido con migracion idempotente.
 Verificado: 2.607 de 2.701 ventas con microzona, 83 distintas, y el cruce ya devuelve filas
 —san-miguel/el-llano con 152 ventas y 111 arriendos, por ejemplo—.
+
+**Correccion tras la corrida del usuario (29-ago-2026).** Su salida destapo dos defectos:
+
+1. **`microzona_id` no se escribia en las ramas de UPDATE, solo en el INSERT.** Una columna
+   agregada despues queda NULL para siempre en las filas que ya existian: la fila se
+   "actualiza" en cada corrida y nunca se llena. Sus 552 filas de la primera corrida quedaron
+   asi. Corregido en las dos ramas, con caso de oro que simula exactamente ese escenario.
+2. **El `delta` imprimia un informe con numeros cuando no habia con que comparar.** Con una
+   sola captura cargada, "266 nuevas" es una tautologia: son todas las que hay, no unidades
+   que aparecieron. Ahora lo dice y explica como conseguir la foto anterior. Un informe que
+   parece significativo y no lo es se lee como 266 oportunidades.

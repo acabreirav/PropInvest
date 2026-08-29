@@ -107,3 +107,42 @@ def test_la_microzona_viaja_a_la_unidad_de_venta(con) -> None:
         con.execute("SELECT microzona_id FROM fact_unidad_venta").fetchone()[0]
         == "nunoa/plaza-egana"
     )
+
+
+def test_con_una_sola_captura_el_informe_dice_que_no_compara_nada(con) -> None:
+    """ "Todo es nuevo" con una sola foto es una tautologia, no un hallazgo. Decirlo evita
+    que alguien lea 266 oportunidades donde solo hay 266 avisos."""
+    cargar_avisos(con, [Aviso("MLC-1", "3000", HOY), Aviso("MLC-2", "4000", HOY)], "x", "v1")
+    r = delta.comparar(con, HOY)
+    assert not r.comparable
+    assert "NO HAY CON QUE COMPARAR" in str(r)
+    assert "ingerir-legado" in str(r), "el informe dice como conseguir la foto anterior"
+
+
+def test_con_dos_capturas_el_informe_si_compara(con) -> None:
+    cargar_avisos(con, [Aviso("MLC-1", "4000", MAYO)], "legado", "v1")
+    cargar_avisos(con, [Aviso("MLC-1", "3600", HOY)], "portal_busqueda", "v1")
+    r = delta.comparar(con, HOY)
+    assert r.comparable
+    assert "bajaron de precio" in str(r)
+
+
+def test_confirmar_una_unidad_rellena_una_columna_agregada_despues(con) -> None:
+    """Las 552 filas de la primera corrida real quedaron con `microzona_id` en NULL porque la
+    columna se agrego despues y el camino de confirmacion no la escribia: la fila se
+    "actualizaba" cada corrida y nunca se llenaba."""
+    cargar_avisos(con, [Aviso("MLC-7", "3000", MAYO)], "x", "v1")
+    con.execute("UPDATE fact_unidad_venta SET microzona_id = NULL")  # simula la fila vieja
+
+    cargar_avisos(con, [Aviso("MLC-7", "3000", HOY)], "x", "v1")  # mismo precio: confirma
+    assert (
+        con.execute("SELECT microzona_id FROM fact_unidad_venta").fetchone()[0]
+        == "san-miguel/el-llano"
+    )
+
+    con.execute("UPDATE fact_unidad_venta SET microzona_id = NULL")
+    cargar_avisos(con, [Aviso("MLC-7", "3000", HOY)], "x", "v1")  # misma fecha: actualiza
+    assert (
+        con.execute("SELECT microzona_id FROM fact_unidad_venta").fetchone()[0]
+        == "san-miguel/el-llano"
+    )

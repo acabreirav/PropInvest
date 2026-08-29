@@ -235,8 +235,9 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
             conexion.execute(
                 "UPDATE fact_unidad_venta SET precio_uf = ?, m2_utiles = ?, dormitorios = ?, "
                 "banos = ?, tipologia = ?, es_vivienda_nueva = ?, antiguedad_anios = ?, "
-                "fetched_at = ?, raw_blob_path = ? WHERE unidad_key = ? AND valid_to IS NULL",
-                (*campos, a.fetched_at, a.raw_blob_path, a.portal_id),
+                "microzona_id = ?, fetched_at = ?, raw_blob_path = ? "
+                "WHERE unidad_key = ? AND valid_to IS NULL",
+                (*campos, a.microzona_id, a.fetched_at, a.raw_blob_path, a.portal_id),
             )
             return 0
         if desde > a.fetched_at:
@@ -246,13 +247,18 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
             # procedencia. Dejarla apuntando al documento viejo diria que la evidencia de
             # esta fila es un blob de mayo, cuando la evidencia es la captura de hoy.
             # `valid_from` conserva cuando se vio por primera vez.
+            # `microzona_id` va en las DOS ramas de UPDATE, no solo en el INSERT. Una columna
+            # agregada despues queda NULL para siempre en las filas que ya existian si el
+            # camino de confirmacion no la escribe: la fila se "actualiza" cada corrida y
+            # nunca se llena. Paso de verdad con las 552 filas de la primera corrida real.
             conexion.execute(
-                "UPDATE fact_unidad_venta SET fetched_at = ?, source_id = ?, source_url = ?, "
-                "parser_version = ?, raw_blob_path = ?, robots_snapshot_sha = ? "
+                "UPDATE fact_unidad_venta SET fetched_at = ?, microzona_id = ?, source_id = ?, "
+                "source_url = ?, parser_version = ?, raw_blob_path = ?, robots_snapshot_sha = ? "
                 "WHERE unidad_key = ? AND valid_to IS NULL",
                 (
                     a.fetched_at,
-                    *_procedencia(a, source_id, parser_version)[:1],
+                    a.microzona_id,
+                    source_id,
                     a.url,
                     parser_version,
                     a.raw_blob_path,

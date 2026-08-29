@@ -45,6 +45,13 @@ class Reporte:
     nuevas: int
     sin_cambio: int
     corte: datetime
+    # Cuantas fechas de captura distintas hay antes del corte. Cero significa que todo lo
+    # cargado es de una sola foto y que el informe, aunque tenga numeros, no compara nada.
+    capturas_previas: int = 0
+
+    @property
+    def comparable(self) -> bool:
+        return self.capturas_previas > 0
 
     @property
     def bajaron(self) -> list[CambioDePrecio]:
@@ -57,6 +64,16 @@ class Reporte:
         )
 
     def __str__(self) -> str:
+        if not self.comparable:
+            # Sin una foto anterior, "todo es nuevo" es una tautologia, no un hallazgo.
+            # Decirlo asi evita que alguien lea 266 oportunidades donde solo hay 266 avisos.
+            return (
+                f"Delta del mercado, corte {self.corte:%d-%m-%Y}\n"
+                f"  NO HAY CON QUE COMPARAR: todo lo cargado es de una sola captura.\n"
+                f"  Las {self.nuevas} unidades no son nuevas en el mercado; son simplemente\n"
+                f"  todas las que hay. Para que este informe signifique algo hace falta una\n"
+                f"  foto anterior: `ingerir-legado` trae la de mayo-2026."
+            )
         lineas = [
             f"Delta del mercado, corte {self.corte:%d-%m-%Y}",
             f"  bajaron de precio : {len(self.bajaron)}",
@@ -110,8 +127,16 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
             ).fetchone()[0]
         )
 
+    capturas_previas = int(
+        conexion.execute(
+            "SELECT count(DISTINCT valid_from::DATE) FROM fact_unidad_venta WHERE valid_from < ?",
+            (corte,),
+        ).fetchone()[0]
+    )
+
     return Reporte(
         cambios=cambios,
+        capturas_previas=capturas_previas,
         # Estaba antes del corte y ninguna captura nueva la toco: se cayo del portal.
         desaparecidas=contar("valid_from < ? AND fetched_at < ?"),
         # Aparecio despues del corte **y no tiene historia**. La condicion de la version
