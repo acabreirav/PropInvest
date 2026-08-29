@@ -493,102 +493,90 @@ def medir_meli() -> None:
 
 @app.command()
 def ingerir_legado(
-    origen: str = typer.Option(
-        ...,
-        help="carpeta con los HTML del proyecto anterior (data/raw/portal_inmobiliario/listings)",
-    ),
-    limite: int = typer.Option(0, help="0 = todos. Util para probar con pocos primero."),
     busqueda: str = typer.Option(
-        "", help="carpeta con las PAGINAS DE LISTADO guardadas (.../portal_inmobiliario/search)"
+        "", help="carpeta `search` — paginas de LISTADO. Es la linea base del delta."
     ),
+    origen: str = typer.Option(
+        "", help="carpeta `listings` — fichas de detalle. OPCIONAL y cara: 3,2 GB."
+    ),
+    limite: int = typer.Option(0, help="0 = todos. Solo aplica a --origen."),
 ) -> None:
-    """T-918 · ingiere la foto de Portal Inmobiliario de mayo-2026 (docs/adr/004-legado-investop.md).
+    """T-918 · ingiere la foto de mayo-2026 del proyecto anterior (docs/adr/004).
 
-    No toca la red. Copia a la zona cruda **anonimizando primero** (§3.4), declara
-    `fetched_at` de mayo —no de hoy— y carga microzonas, ventas y comparables de arriendo.
+    No toca la red. Anonimiza ANTES de escribir (§3.4) y declara `fetched_at` de mayo, no de
+    hoy, asi que el gate de frescura los deja fuera del ranking — que es lo correcto.
 
-    Esos datos NO alimentan el ranking: el gate de frescura del §7.3 los excluye por tener
-    mas de 21 dias, que es lo correcto. Sirven de diccionario de microzonas, de fixtures y de
-    linea base para medir que bajo de precio en cuatro meses (T-919).
+    **Empeza por `--busqueda`.** Son 130 paginas, menos de un minuto, y son el 100% de lo que
+    el delta necesita: la misma superficie que lee el colector vivo. `--origen` son 6.229
+    fichas de 3,2 GB que solo suman antiguedad y gastos comunes, y cuyo precio vive en otra
+    superficie del portal, asi que no sirven de linea base.
     """
-    from pathlib import Path
+    from pathlib import Path as _Path
 
     import duckdb
 
     from flujocero.quality import bitacora
+    from flujocero.sources import portal_busqueda as pb
     from flujocero.sources.base import leer_crudo
-    from flujocero.sources.portal_legado import PortalLegado, cargar_en_duckdb
+    from flujocero.sources.portal_legado import PortalLegado
+    from flujocero.sources.portal_legado import cargar_en_duckdb as cargar_fichas
 
-    carpeta = Path(origen).expanduser()
-    if not carpeta.is_dir():
-        typer.echo(f"✗ no existe la carpeta {carpeta}")
+    if not origen and not busqueda:
+        typer.echo("✗ pasa al menos --busqueda (la linea base del delta) o --origen (fichas).")
         raise typer.Exit(2)
 
-    col = PortalLegado(origen=carpeta)
-    typer.echo(f"  {len(col.archivos())} archivos en el origen")
+    def avance(etiqueta: str, cada: int):
+        def _(hechos: int, total: int) -> None:
+            if hechos % cada == 0 or hechos == total:
+                typer.echo(f"    {etiqueta}: {hechos}/{total} ({hechos / total:.0%})")
 
-    corrida = bitacora.abrir(col.id)
-
-    def avance(hechos: int, total: int) -> None:
-        # Sin esto el comando queda mudo entre diez y veinticinco minutos, y no hay forma de
-        # distinguir "trabajando" de "colgado". Cada 250 archivos alcanza para dar senal.
-        if hechos % 250 == 0 or hechos == total:
-            typer.echo(f"    zona cruda: {hechos}/{total} ({hechos / total:.0%})")
-
-    docs = col.collect(limite=limite or None, progreso=avance)
-    corrida.docs_recolectados = len(docs)
-    typer.echo(f"✓ {len(docs)} documentos a la zona cruda, anonimizados")
-
-    avisos = []
-    for i, d in enumerate(docs, 1):
-        avisos += col.parse(leer_crudo(d.ruta))
-        if i % 500 == 0 or i == len(docs):
-            typer.echo(f"    parseando: {i}/{len(docs)} ({i / len(docs):.0%})")
-    typer.echo(f"✓ {len(avisos)} avisos parseados ({len(avisos) / max(len(docs), 1):.0%})")
+        return _
 
     con = duckdb.connect(str(db.crear()))
     try:
-        corrida.filas_insertadas = cargar_en_duckdb(con, avisos)
-        rep = col.selftest(muestra=min(600, len(col.archivos())))
-        corrida.selftest_ok = rep.ok
-        corrida.notas = rep.detalle.get("cobertura", "")
-        bitacora.cerrar(con, corrida)
-        typer.echo(f"✓ {corrida.filas_insertadas} filas cargadas")
-        typer.echo(f"{'✓' if rep.ok else '✗'} selftest: {rep.detalle.get('cobertura')}")
+        if busqueda:
+            carpeta = _Path(busqueda).expanduser()
+            if not carpeta.is_dir():
+                typer.echo(f"✗ no existe la carpeta {carpeta}")
+                raise typer.Exit(2)
+            typer.echo("  Paginas de listado — la linea base correcta para el delta:")
+            docs = pb.ingerir_guardadas(carpeta, progreso=avance("listados", 25))
+            colector = pb.PortalBusqueda("FlujoCero-ResearchBot/1.0")
+            tarjetas = [t for d in docs for t in colector.parse(d)]
+            n = pb.cargar_en_duckdb(con, tarjetas)
+            typer.echo(f"✓ {len(docs)} paginas, {len(tarjetas)} tarjetas, {n} filas")
+
+        if origen:
+            carpeta = _Path(origen).expanduser()
+            if not carpeta.is_dir():
+                typer.echo(f"✗ no existe la carpeta {carpeta}")
+                raise typer.Exit(2)
+            typer.echo("\n  Fichas de detalle — solo aportan antiguedad y gastos comunes:")
+            col = PortalLegado(origen=carpeta)
+            typer.echo(f"    {len(col.archivos())} archivos en el origen")
+            corrida = bitacora.abrir(col.id)
+            docs_f = col.collect(limite=limite or None, progreso=avance("zona cruda", 250))
+            corrida.docs_recolectados = len(docs_f)
+            avisos = []
+            for i, d in enumerate(docs_f, 1):
+                avisos += col.parse(leer_crudo(d.ruta))
+                if i % 500 == 0 or i == len(docs_f):
+                    typer.echo(f"    parseando: {i}/{len(docs_f)} ({i / len(docs_f):.0%})")
+            corrida.filas_insertadas = cargar_fichas(con, avisos)
+            rep = col.selftest(muestra=min(600, len(col.archivos())))
+            corrida.selftest_ok = rep.ok
+            corrida.notas = rep.detalle.get("cobertura", "")
+            bitacora.cerrar(con, corrida)
+            typer.echo(f"✓ {len(avisos)} avisos, {corrida.filas_insertadas} filas")
+            typer.echo(f"{'✓' if rep.ok else '✗'} selftest: {rep.detalle.get('cobertura')}")
+
         for tabla in ("dim_comuna", "dim_microzona", "fact_unidad_venta", "fact_arriendo_comp"):
-            n = con.execute(f"SELECT count(*) FROM {tabla}").fetchone()[0]
-            typer.echo(f"    {tabla:22s} {n:6d}")
+            total = con.execute(f"SELECT count(*) FROM {tabla}").fetchone()[0]
+            typer.echo(f"    {tabla:22s} {total:6d}")
     finally:
         con.close()
-    if busqueda:
-        from flujocero.sources import portal_busqueda as pb
 
-        carpeta_b = Path(busqueda).expanduser()
-        if not carpeta_b.is_dir():
-            typer.echo(f"✗ no existe la carpeta de busqueda {carpeta_b}")
-            raise typer.Exit(2)
-        typer.echo("\n  Páginas de listado (la línea base correcta para el delta):")
-        docs_b = pb.ingerir_guardadas(carpeta_b, progreso=avance)
-        tarjetas = [
-            x for d in docs_b for x in pb.PortalBusqueda("FlujoCero-ResearchBot/1.0").parse(d)
-        ]
-        con2 = duckdb.connect(str(db.crear()))
-        try:
-            n = pb.cargar_en_duckdb(con2, tarjetas)
-            typer.echo(f"✓ {len(docs_b)} páginas, {len(tarjetas)} tarjetas, {n} filas")
-        finally:
-            con2.close()
-
-    typer.echo(
-        "\n  Recordá: son datos de mayo-2026. El gate de frescura los deja fuera del ranking."
-    )
-    if not busqueda:
-        typer.echo(
-            "  OJO: sin --busqueda, la línea base son FICHAS y el colector vivo lee TARJETAS.\n"
-            "  El portal publica precios distintos en cada superficie (medido: 48 de 2.689\n"
-            "  unidades, una con 22% de diferencia el mismo día), así que el delta compararía\n"
-            "  cosas distintas. Pasá --busqueda con la carpeta `search` del proyecto anterior."
-        )
+    typer.echo("\n  Son datos de mayo-2026: el gate de frescura los deja fuera del ranking.")
 
 
 @app.command()

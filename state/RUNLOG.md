@@ -962,3 +962,37 @@ precio que nunca ocurrieron. La linea base tiene que ser tarjeta contra tarjeta.
    Exonerar por `source_id` funcionaba solo mientras lo viejo y lo fresco vinieran de fuentes
    distintas, y dejo de funcionar en cuanto la misma fuente tuvo las dos cosas. Ahora lo que
    decide es la fecha de cada fila, y las viejas se reportan como excluidas del ranking.
+
+---
+
+## 2026-08-29 · La ingesta cara no hacia falta, y escondia un bug
+
+**El usuario reporto una hora de ingesta para el 20%.** Acá los mismos 6.229 archivos toman
+4 minutos: 74 veces mas rapido. La causa razonable es Windows Defender escaneando 3,2 GB de
+lecturas y 12.400 archivos nuevos, pero el diagnostico importante fue otro: **esos archivos
+no hacen falta para el delta.**
+
+Las 130 paginas de LISTADO son el 2% de los archivos y el 100% de lo que el cruce necesita,
+porque son la misma superficie que lee el colector vivo. Las 6.229 fichas de detalle solo
+suman antiguedad y gastos comunes, y su precio vive en la otra superficie.
+
+`--origen` pasa a ser opcional. La linea base completa toma **69 segundos**.
+
+**Y al correr esa ruta rapida aparecio un bug que habria roto todo el analisis.** El texto de
+ubicacion de la tarjeta es irregular y no hay forma de saber por su forma que parte es que:
+
+    "Milán 1242, El Llano, San Miguel"   -> direccion, barrio, comuna
+    "Apoquindo 4900, Barrio El Golf"     -> direccion, barrio        (sin comuna)
+    "Barrio Italia"                      -> barrio                   (sin comuna)
+
+Contando desde el final salian **46 comunas donde habia 6**: "El Llano", "Plaza Egaña" y
+"Metro Ñuñoa" entraron a `dim_comuna` como si fueran municipios, y 233 microzonas mal armadas.
+La microzona es "la unidad de analisis real" del §2.4: con la comuna mal, todo el cruce entre
+venta y arriendo se desarma en silencio.
+
+**La comuna verdadera siempre estuvo a mano: es el filtro que el propio portal aplico**, en la
+URL (`san-miguel-metropolitana`). Ahora la comuna sale de ahi —dato duro— y el barrio es la
+ultima parte del texto que no sea la comuna. Si lo que queda tiene numeros es una calle, y no
+se inventa un barrio.
+
+Resultado: **6 comunas, 165 microzonas, 62 con n>=8 comparables de arriendo.**

@@ -203,3 +203,59 @@ def test_contra_una_pagina_real_del_portal() -> None:
     unidades = [t for t in ts if not t.es_proyecto]
     assert sum(1 for t in unidades if t.m2_utiles) / len(unidades) >= 0.95
     assert sum(1 for t in ts if t.microzona_id) / len(ts) >= 0.95
+
+
+# ------------------------------------------------------- la comuna sale del filtro, no del texto
+
+URL_SM = "https://x/venta/departamento/propiedades-usadas/san-miguel-metropolitana_Desde_1"
+
+
+@pytest.mark.parametrize(
+    "texto,barrio_esperado",
+    [
+        ("Milán 1242, El Llano, San Miguel", "El Llano"),
+        ("Apoquindo 4900, Barrio El Golf", "Barrio El Golf"),
+        ("Barrio Italia", "Barrio Italia"),
+        ("San Miguel", None),
+        ("Av. Ossa 123", None),
+        ("", None),
+    ],
+)
+def test_la_comuna_sale_de_la_url_y_el_barrio_del_texto(texto: str, barrio_esperado) -> None:
+    """El texto de la tarjeta es irregular y no hay forma de saber por su forma que parte es
+    que. Contando desde el final salian **46 comunas donde habia 6**: "El Llano",
+    "Plaza Egaña" y "Metro Ñuñoa" entraban a dim_comuna como si fueran municipios, y eso
+    rompe la microzona, que es la clave de todo el analisis."""
+    t = parsear(tarjeta_html(ubicacion=texto), url=URL_SM)[0]
+    assert t.comuna_id == "san-miguel"
+    assert t.barrio == barrio_esperado
+
+
+def test_una_direccion_no_se_confunde_con_un_barrio() -> None:
+    """Si lo unico que queda tiene numeros, es una calle. No se inventa un barrio (§3.2)."""
+    t = parsear(tarjeta_html(ubicacion="Gran Avenida 5432"), url=URL_SM)[0]
+    assert t.barrio is None and t.microzona_id is None
+
+
+def test_el_nombre_de_la_comuna_conserva_tildes_cuando_el_texto_los_trae() -> None:
+    url = "https://x/venta/departamento/propiedades-usadas/nunoa-metropolitana_Desde_1"
+    t = parsear(tarjeta_html(ubicacion="Irarrázaval 3400, Plaza Egaña, Ñuñoa"), url=url)[0]
+    assert t.comuna_nombre == "Ñuñoa"
+    assert t.microzona_id == "nunoa/plaza-egana"
+
+
+def test_sin_la_comuna_escrita_el_slug_se_prettifica() -> None:
+    t = parsear(tarjeta_html(ubicacion="El Llano"), url=URL_SM)[0]
+    assert t.comuna_nombre == "San Miguel"
+
+
+@pytest.mark.parametrize(
+    "url,esperado",
+    [
+        (URL_SM, "san-miguel"),
+        ("https://x/arriendo/departamento/las-condes-metropolitana_Desde_49", "las-condes"),
+        ("https://x/sin-formato", None),
+    ],
+)
+def test_la_comuna_se_lee_de_la_ruta_de_busqueda(url: str, esperado) -> None:
+    assert pb.comuna_de_la_url(url) == esperado

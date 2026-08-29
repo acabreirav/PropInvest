@@ -197,19 +197,51 @@ def _texto(nodo: Any, selector: str) -> str:
     return n.text(strip=True) if n else ""
 
 
-def _ubicacion(texto: str) -> tuple[str | None, str | None]:
-    """`'Milán 1242, El Llano, San Miguel'` -> `('San Miguel', 'El Llano')`.
+def comuna_de_la_url(url: str) -> str | None:
+    """`.../propiedades-usadas/san-miguel-metropolitana_Desde_1` -> `'san-miguel'`.
 
-    Las dos últimas partes son siempre barrio y comuna; lo de antes es la dirección, que
-    puede traer sus propias comas (`'Profesor Rodolfo Lenz, 300 - 600, Plaza Ñuñoa, Ñuñoa'`).
-    Por eso se cuenta desde el final, nunca desde el principio.
+    Es el filtro de busqueda: la comuna que el portal aplico, no una deduccion.
     """
-    partes = [p.strip() for p in (texto or "").split(",") if p.strip()]
-    if len(partes) >= 2:
-        return partes[-1], partes[-2]
-    if partes:
-        return partes[0], None
-    return None, None
+    m = re.search(r"/([a-z0-9-]+)-metropolitana_Desde_", url)
+    return m.group(1) if m else None
+
+
+def _ubicacion(texto: str, comuna_url: str | None = None) -> tuple[str | None, str | None]:
+    """Devuelve `(comuna, barrio)` de una tarjeta.
+
+    **La comuna sale del filtro de busqueda, no del texto de la tarjeta.** El texto es
+    irregular y no hay forma de saber por su forma que parte es que:
+
+        "Milán 1242, El Llano, San Miguel"     -> direccion, barrio, comuna
+        "Apoquindo 4900, Barrio El Golf"       -> direccion, barrio       (sin comuna)
+        "Barrio Italia"                        -> barrio                  (sin comuna)
+
+    Contando desde el final salian 46 comunas donde habia 6: "El Llano", "Plaza Egaña" y
+    "Metro Ñuñoa" entraron a `dim_comuna` como si fueran municipios. Eso rompe la microzona,
+    que es la clave de todo el analisis (§2.4).
+
+    El filtro que el portal aplico —`san-miguel-metropolitana` en la URL— es un dato duro y
+    siempre esta. El barrio es la ultima parte del texto que no sea la comuna misma.
+    """
+    partes = [x.strip() for x in (texto or "").split(",") if x.strip()]
+    if not comuna_url:
+        # Sin URL de busqueda no hay ancla; se cae a la heuristica vieja, que es lo unico
+        # disponible. Pasa solo en tests que parsean una tarjeta suelta.
+        if len(partes) >= 2:
+            return partes[-1], partes[-2]
+        return (partes[0], None) if partes else (None, None)
+
+    # Si el texto trae la comuna escrita, se usa esa forma: conserva tildes y la ñ, que el
+    # slug pierde. Si no, se prettifica el slug ("san-miguel" -> "San Miguel").
+    escrita = next((x for x in partes if slug(x) == comuna_url), None)
+    comuna = escrita or comuna_url.replace("-", " ").title()
+
+    candidatos = [x for x in partes if slug(x) != comuna_url]
+    barrio = candidatos[-1] if candidatos else None
+    # Una direccion no es un barrio: si lo unico que queda tiene numeros, no se inventa uno.
+    if barrio and any(ch.isdigit() for ch in barrio):
+        barrio = None
+    return comuna, barrio
 
 
 def _atributos(tarjeta: Any) -> tuple[int | None, int | None, Decimal | None]:
@@ -261,6 +293,7 @@ def parse_busqueda(
 ) -> list[Tarjeta]:
     """Parseo puro de una página de listado: sin I/O, sin reloj, sin red."""
     es_nueva = tipo_de_la_ruta(url_pagina)
+    comuna_url = comuna_de_la_url(url_pagina)
     tree = HTMLParser(html)
     tarjetas = tree.css(".poly-card") or tree.css("li.ui-search-layout__item")
     salida: list[Tarjeta] = []
@@ -286,7 +319,7 @@ def parse_busqueda(
             continue
 
         dorm, banos, m2 = _atributos(c)
-        comuna, barrio = _ubicacion(_texto(c, ".poly-component__location"))
+        comuna, barrio = _ubicacion(_texto(c, ".poly-component__location"), comuna_url)
 
         t = Tarjeta(
             portal_id=portal_id,
