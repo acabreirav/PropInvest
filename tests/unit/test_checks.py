@@ -343,3 +343,29 @@ def test_dos_versiones_de_la_misma_unidad_no_son_un_duplicado() -> None:
         {"proyecto_id": "P", "numero_unidad": "101", "valid_to": None},
     ]
     assert q.duplicados_de_venta(dos_vigentes).severidad == q.Severidad.FALLA
+
+
+def test_la_reconciliacion_de_arriendo_valida_contra_la_tabla_publicada() -> None:
+    """§7.3. Es la validacion externa mas fuerte del pipeline: si nuestra mediana —calculada
+    desde miles de avisos crudos, convertidos uno a uno con la UF de su dia— coincide con una
+    tabla que publico un tercero, es muy improbable que las dos esten mal de la misma forma.
+
+    Numeros reales de la corrida del usuario (29-ago-2026)."""
+    nuestras = {"nunoa": D("0.280"), "san-miguel": D("0.240")}
+    h = q.reconciliacion_arriendo(nuestras, q.ARRIENDO_UF_M2_REFERENCIA)
+    assert h.severidad is q.Severidad.OK
+
+
+def test_una_muestra_sesgada_se_detecta() -> None:
+    """Con solo los arriendos publicados en UF —que sesgan a lujo— Las Condes salio 0,52
+    contra 0,35 publicado. El check lo agarro."""
+    h = q.reconciliacion_arriendo({"las-condes": D("0.525")}, q.ARRIENDO_UF_M2_REFERENCIA)
+    assert h.severidad is q.Severidad.ALERTA
+    assert "las-condes" in h.detalle[0]
+
+
+def test_la_columna_de_referencia_es_la_del_arrendador_individual() -> None:
+    """La tabla trae multifamily y retail/particular, y difieren hasta 26%. El inversionista
+    es un arrendador individual: la columna correcta es la segunda."""
+    assert q.ARRIENDO_UF_M2_REFERENCIA["providencia"] == D("0.31")  # retail, no 0,43 multifamily
+    assert q.ARRIENDO_UF_M2_REFERENCIA["nunoa"] == D("0.30")

@@ -1081,3 +1081,38 @@ fuente externa que todavia no existe; T-909 (fixture real de la CMF) necesita un
 maquina del usuario; T-014 y T-022 son colectores nuevos, no deuda.
 
 11 casos de oro nuevos.
+
+---
+
+## 2026-08-29 · El pipeline se valido contra una fuente externa, y coincidio
+
+Con la serie de UF cargada, la corrida del usuario dio **4.681 de 4.915 comparables
+utilizables (95%)**, **721 celdas** y **115 con n>=8**. Mi advertencia de que "la mayoria no
+va a rankear" era pesimista por un factor grande: estaba mirando el 12% de los datos.
+
+**Y aparecio el gate que estaba escrito y nadie llamaba.** El §7.3 pide reconciliar nuestra
+mediana de arriendo contra la tabla publicada por Colliers/Assetplan (Emol 2-abr-2026), y la
+funcion existia desde el principio sin que ningun comando le pasara datos. Ahora corre dentro
+de `agregar-arriendo`, que es donde nacen las medianas.
+
+**El resultado es la mejor senal que tuvo el proyecto hasta ahora:**
+
+| comuna | nuestro UF/m2 | publicado | desviacion |
+|---|---|---|---|
+| San Miguel | 0,240 | 0,24 | **0,0%** |
+| Ñuñoa | 0,280 | 0,30 | −6,7% |
+
+Nuestra mediana sale de miles de avisos crudos, parseados por nosotros y convertidos uno a uno
+con la UF de su dia. La referencia la publico un tercero con otra metodologia. Que coincidan a
+menos de 7% hace muy improbable que las dos esten mal de la misma forma.
+
+Se uso la columna **"retail / particular"** y no la multifamily: el inversionista es un
+arrendador individual y las dos columnas difieren hasta 26%.
+
+**El check tambien demostro que sirve.** En esta maquina, con solo los arriendos publicados en
+UF —una muestra sesgada a lujo— Las Condes salio en 0,52 contra 0,35 publicado, +50%, y el
+gate lo marco. Detectar una muestra sesgada es exactamente para lo que esta.
+
+**Correccion de tamano de muestra, medida.** Las medianas de las celdas que antes tenian n=8
+se movieron al crecer: Estadio Nacional 2D2B de 0,285 a 0,262 UF/m2 (-8,1%) con n=123, y 1D1B
+de 0,326 a 0,280 (-14,1%) con n=121. El umbral de 8 del §7.3 es un minimo, no un objetivo.

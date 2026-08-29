@@ -40,11 +40,31 @@ UF_M2_REFERENCIA: dict[str, Decimal] = {
     "maipu": Decimal("61.5"),  # punto medio del rango 58-65
 }
 
+# ARRIENDO mensual por m2, columna "retail / particular" de la tabla Colliers/Assetplan que
+# Emol publico el 2-abr-2026 (docs/00-hallazgos.md §2). Es la columna que corresponde: nuestro
+# inversionista es un arrendador individual, no un operador multifamily institucional, y la
+# diferencia entre ambas columnas llega a 26% en Providencia.
+ARRIENDO_UF_M2_REFERENCIA: dict[str, Decimal] = {
+    "las-condes": Decimal("0.35"),
+    "providencia": Decimal("0.31"),
+    "nunoa": Decimal("0.30"),
+    "la-florida": Decimal("0.25"),
+    "santiago": Decimal("0.24"),
+    "san-miguel": Decimal("0.24"),
+    "la-cisterna": Decimal("0.22"),
+    "estacion-central": Decimal("0.20"),
+}
+
+# El §7.3 pide +-25% para el arriendo y +-20% para la venta. La holgura mayor del arriendo no
+# es descuido: la referencia publicada es una sola cifra por comuna, y una comuna contiene
+# microzonas que difieren 17% entre si (§2.4). Exigirle +-20% seria exigirle a un promedio que
+# se parezca a cada una de sus partes.
+DESVIACION_MAX_ARRIENDO = Decimal("0.25")
+
 # Umbrales del §7.3. Viven acá y no repartidos por el código.
 COBERTURA_MINIMA = Decimal("0.80")
 FRESCURA_MAX_DIAS = 21
 DESVIACION_MAX_ANCLA = Decimal("0.20")
-DESVIACION_MAX_ARRIENDO = Decimal("0.25")
 MIN_COMPARABLES = 8
 VENTANA_DEDUP_DIAS = 30
 

@@ -732,6 +732,26 @@ def agregar_arriendo() -> None:
         typer.echo(f"✓ {n} celdas (microzona × tipología × rango)")
         typer.echo(f"✓ {len(buenos)} con n ≥ {agg.MIN_COMPARABLES}: son las que pueden rankear")
 
+        # §7.3, la reconciliacion externa. Estaba escrita y nadie la llamaba: es la
+        # validacion mas fuerte que tiene el pipeline, porque compara una mediana calculada
+        # desde miles de avisos crudos contra una tabla que publico un tercero. Si las dos
+        # coinciden, es muy improbable que esten mal de la misma forma.
+        from flujocero.quality import checks as qc
+
+        por_comuna: dict[str, list] = {}
+        for a in buenos:
+            por_comuna.setdefault(a.microzona_id.split("/")[0], []).append(a.uf_m2_mediana)
+        medianas = {c: agg.percentil(v, D("0.5")) for c, v in por_comuna.items()}
+        hallazgo = qc.reconciliacion_arriendo(medianas, qc.ARRIENDO_UF_M2_REFERENCIA)
+        typer.echo(f"\n  {hallazgo}")
+        for comuna, nuestra in sorted(medianas.items()):
+            ref = qc.ARRIENDO_UF_M2_REFERENCIA.get(comuna)
+            if ref:
+                typer.echo(
+                    f"    {comuna:20s} nuestro {nuestra:.3f}  publicado {ref:.2f}  "
+                    f"({(nuestra - ref) / ref:+.0%})"
+                )
+
         typer.echo("\n  Las más profundas:")
         for a in sorted(buenos, key=lambda x: -x.n)[:10]:
             typer.echo(
