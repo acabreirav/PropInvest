@@ -511,3 +511,70 @@ Nota de realidad, medida ayer: Portal Inmobiliario corre sobre MercadoLibre, y
 `/sites/MLC/search` devuelve 403 desde el 28-ago-2026 (ADR-003). Es posible que el código
 heredado del usuario ya no funcione por esa razón y no por el `robots.txt`. Se verifica al
 revisarlo.
+
+
+---
+
+## D-017 · Las tres respuestas del banco, y la que sigue en conflicto
+**Estado:** dos cerradas, una abierta · **Fecha:** 29-ago-2026
+
+El usuario consultó las preguntas de T-913. Tres volvieron con respuesta.
+
+### 1. FOGAES cubre solo primera venta — CERRADA, y es la que más movió el modelo
+
+El FOGAES tradicional **no cubre viviendas usadas**. Un usado comprado por el mercado
+convencional exige 20% o 30% de pie. La única excepción es el Subsidio Tramo 4.000 (DS1),
+que autoriza combinarlo sobre una usada de hasta UF 4.000 con 10% de pie — pero prohíbe
+arrendar cinco años, así que es incompatible con esta tesis (ya establecido en D-015).
+
+**Consecuencia, implementada:** el stock usado no solo pierde 99 pb de tasa. Pierde el 90%
+de financiamiento, y su pie mínimo pasa de 10% a **20%**. Es el doble de plata sobre la mesa,
+y modelarlo con 10% habría producido oportunidades que ningún banco financiaría.
+
+Sobre el mismo departamento de UF 3.000, manteniendo todo lo demás igual:
+
+| | tasa | pie | capital UF | costo real de tenencia |
+|---|---|---|---|---|
+| nuevo | 3,30% | 10% | 340 | −1,23 UF/mes |
+| usado | 4,29% | 20% | 638 | −2,28 UF/mes |
+
+Esa tabla aísla **solo la penalización de financiamiento**, con el precio fijo. La ventaja
+del usado —mayor yield por m²— es otra cosa y depende de datos que todavía no están
+agregados (T-023). Lo que la tabla dice es cuánto tiene que ganar el usado por el lado del
+arriendo para dar vuelta esto.
+
+**Implementado:** `Escenario.con_fogaes` separado de `con_subsidio`, `fogaes_aplicable()` como
+condición del inmueble, y el pie efectivo como `max(pie_deseado, pie_mínimo_exigido)`. El
+capital invertido y el cash-on-cash van sobre el pie efectivo: con el deseado, el retorno de
+un usado salía inflado al doble. Cierra **T-915**.
+
+### 2. La tasa es plana entre tramos — CERRADA, cierra D-009
+
+No hay tasa preferente por elegir un ticket más chico. El subsidio opera como rebaja plana,
+igual para una propiedad de UF 3.000 que para una de UF 5.000. Registrado como
+`tasa_uniforme_entre_tramos: true`.
+
+Sigue siendo cierto que un ticket menor da un dividendo menor y por lo tanto más chance de
+que el arriendo lo cubra — pero eso el motor ya lo calcula; no era una ventaja de tasa.
+
+### 3. ¿Una sola unidad por persona? — SIGUE ABIERTA, y no por terquedad
+
+La respuesta afirma un límite estricto de **una unidad**, por el requisito de "primera
+vivienda", con cruce SII/CBR que bloquea si el RUT ya registra propiedades habitacionales.
+
+**Queda en `evidence: C` (fuentes en conflicto), no en `V`, por dos razones concretas:**
+
+1. **Llegó sin fuente primaria.** Las otras dos respuestas venían con enlaces; esta no.
+2. **Contradice el texto del reglamento.** El Decreto 180 art. 3 ata el beneficio del tramo
+   general a la *"primera **venta** de la vivienda"* — condición del **inmueble**. El art. 4
+   reserva el tramo ≤ UF 3.000 exigiendo *primera vivienda del solicitante* — condición del
+   **comprador**. Que el art. 4 lo diga explícitamente sugiere que el art. 3 no lo exige; si
+   lo exigiera para todos, el art. 4 sería redundante. Esa es la disputa D-001, que sigue viva.
+
+**Por qué no bloquea nada hoy:** el inversionista no declaró querer dos unidades
+(`objetivo_unidades: null`), así que el modelo no depende de la respuesta. Si alguna vez
+quiere una segunda, la forma de zanjarlo es pedir por escrito al banco o al Minvu el
+fundamento normativo, no la interpretación de un ejecutivo.
+
+**Cómo lo trata el modelo mientras tanto:** ambos escenarios ya se calculan. La segunda
+unidad, si existiera, correría `sin_subsidio` — que es el supuesto conservador.

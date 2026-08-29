@@ -46,6 +46,11 @@ class Escenario:
     # mercado sin subsidio mete 67 pb de castigo donde la norma solo quita 60, y confunde
     # "no tiene subsidio" con "es peor banco". None = usar la misma del escenario.
     tasa_sin_subsidio: Decimal | None = None
+    # FOGAES es un beneficio SEPARADO del subsidio a la tasa, y tratarlos como uno solo
+    # costaba dos errores a la vez: el subsidio baja la tasa 60 pb, y FOGAES habilita el 90%
+    # de financiamiento —o sea decide si el pie minimo es 10% o 20%—. Un inmueble puede tener
+    # los dos, uno, o ninguno. El escenario lo OFRECE; el motor decide si la unidad califica.
+    con_fogaes: bool = True
 
 
 @dataclass
@@ -80,6 +85,10 @@ class Evaluacion:
     tasa_aplicada: Decimal = D(0)
     subsidio_aplicado: bool = False
     motivo_sin_subsidio: str | None = None
+    fogaes_aplicado: bool = False
+    motivo_sin_fogaes: str | None = None
+    pie_minimo_exigido: Decimal = D(0)
+    pie_efectivo: Decimal = D(0)
     excluido: bool = False
     motivo_exclusion: str | None = None
     score: Decimal = D(0)
@@ -139,6 +148,35 @@ def tasa_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[Decimal, bool, s
     if u.precio_uf > tope:
         return caida, False, f"precio sobre el tope de UF {tope}"
     return e.tasa_anual, True, None
+
+
+def fogaes_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[bool, str | None]:
+    """¿Esta unidad puede usar la garantia FOGAES? Devuelve `(aplica, motivo_si_no)`.
+
+    Igual que el subsidio a la tasa, **es condicion del inmueble**: el FOGAES tradicional
+    cubre solo viviendas nuevas en primera venta (confirmado el 29-ago-2026 contra
+    fogaes.cl y BancoEstado). Un usado comprado por el mercado convencional no accede, y el
+    banco exige 20% o 30% de pie.
+
+    Esto NO es un detalle de tasa: cambia el pie minimo de 10% a 20%, o sea **duplica la
+    plata que hay que poner**. Modelar un usado con 10% de pie produciria una oportunidad que
+    ningun banco financiaria.
+
+    La unica excepcion —el Subsidio Tramo 4.000 (DS1), que autoriza FOGAES sobre una usada de
+    hasta UF 4.000— prohibe arrendar la vivienda 5 anos, asi que es incompatible con este
+    inversionista y no entra al modelo. Ver D-015.
+    """
+    if not e.con_fogaes:
+        return False, None
+    if not u.es_vivienda_nueva and not p.crudo("fogaes")["cubre_vivienda_usada"]["v"]:
+        return False, "vivienda usada: el FOGAES tradicional cubre solo primera venta"
+    return True, None
+
+
+def pie_minimo_exigido(con_fogaes: bool, p: Config) -> Decimal:
+    """El pie que el banco exige, que no es el mismo que el inversionista quiere poner."""
+    ltv = "financiamiento.ltv_con_fogaes" if con_fogaes else "financiamiento.ltv_sin_fogaes"
+    return D(1) - p.d(ltv)
 
 
 # ----------------------------------------------------------------------- exclusiones duras
@@ -245,8 +283,16 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
     plazo = int(p.d("financiamiento.plazo_anios"))
 
     ev.tasa_aplicada, ev.subsidio_aplicado, ev.motivo_sin_subsidio = tasa_aplicable(u, e, p)
+    ev.fogaes_aplicado, ev.motivo_sin_fogaes = fogaes_aplicable(u, e, p)
+    ev.pie_minimo_exigido = pie_minimo_exigido(ev.fogaes_aplicado, p)
 
-    ev.credito_uf = u.precio_uf * (D(1) - e.pie_pct)
+    # El pie del escenario es lo que el inversionista QUIERE poner; el minimo exigido es lo
+    # que el banco acepta. Manda el mayor. Sin esto, un usado se evaluaria con 10% de pie
+    # —que ninguna institucion financiaria— y apareceria en el ranking como una oportunidad
+    # que no existe. El pie efectivo queda escrito para que la ficha lo pueda mostrar.
+    ev.pie_efectivo = max(e.pie_pct, ev.pie_minimo_exigido)
+
+    ev.credito_uf = u.precio_uf * (D(1) - ev.pie_efectivo)
     ev.dividendo_uf = f.dividendo_frances(ev.credito_uf, ev.tasa_aplicada, plazo)
     seguros_mensuales = ev.credito_uf * p.d(
         "gastos_operativos.seguro_desgravamen_pct_mensual_saldo"
@@ -283,7 +329,10 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
             D(1), ev.amortizacion_mensual_uf / -ev.btcf_mensual_uf
         )
 
-    ev.capital_invertido_uf = u.precio_uf * e.pie_pct + cierre
+    # El capital invertido va sobre el pie EFECTIVO, no sobre el deseado: si el banco
+    # exige 20%, el cash-on-cash se calcula sobre esos 20%, no sobre los 10% que uno
+    # hubiera querido poner. Con el pie deseado, el retorno saldria inflado al doble.
+    ev.capital_invertido_uf = u.precio_uf * ev.pie_efectivo + cierre
     ev.cash_on_cash = ev.btcf_mensual_uf * D(12) / ev.capital_invertido_uf
     ev.arriendo_equilibrio_uf = f.arriendo_equilibrio_uf(
         servicio_anual, ev.opex_anual_uf, e.vacancia, pi

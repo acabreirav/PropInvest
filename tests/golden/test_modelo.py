@@ -12,6 +12,7 @@ from flujocero.finance.modelo import (
     Unidad,
     contribuciones_anuales_uf,
     evaluar,
+    gastos_de_cierre_uf,
     tasa_aplicable,
 )
 
@@ -214,15 +215,55 @@ def test_la_tasa_negada_manda_en_TODO_el_calculo_no_solo_en_el_dividendo(cfg) ->
     assert usado.pie_minimo_flujo_cero > nuevo.pie_minimo_flujo_cero
 
 
-def test_sin_subsidio_en_el_escenario_el_usado_y_el_nuevo_son_identicos(cfg) -> None:
-    """Sin subsidio de por medio, ser usado no debe cambiar NADA por si solo. Si cambia,
-    es que se colo una penalizacion encubierta en vez de un supuesto declarado."""
+def test_sin_subsidio_NI_fogaes_el_usado_y_el_nuevo_son_identicos(cfg) -> None:
+    """La version anterior de este caso exigia que fueran identicos con solo quitar el
+    subsidio. Era falso: sin subsidio el nuevo TODAVIA accede a FOGAES y el usado no, asi que
+    uno financia el 90% y el otro el 80%. Quitados los dos beneficios, ser usado no debe
+    cambiar nada por si solo — si cambia, se colo una penalizacion encubierta en vez de un
+    supuesto declarado."""
     p, inv = cfg
-    e = escenario(con_subsidio=False, tasa_anual=p.d("financiamiento.tasa_anual_sin_subsidio"))
-    nuevo = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
+    e = escenario(
+        con_subsidio=False,
+        con_fogaes=False,
+        tasa_anual=p.d("financiamiento.tasa_anual_sin_subsidio"),
+        pie_pct=D("0.20"),
+    )
+    nuevo_ = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
     usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
-    assert usado.dividendo_uf == nuevo.dividendo_uf
-    assert usado.pie_minimo_flujo_cero == nuevo.pie_minimo_flujo_cero
+    assert usado.dividendo_uf == nuevo_.dividendo_uf
+    assert usado.pie_efectivo == nuevo_.pie_efectivo
+    assert usado.pie_minimo_flujo_cero == nuevo_.pie_minimo_flujo_cero
+
+
+def test_el_usado_no_accede_a_FOGAES_y_por_eso_su_pie_minimo_se_duplica(cfg) -> None:
+    """La respuesta que mas movio el modelo (29-ago-2026): el FOGAES tradicional cubre solo
+    primera venta. No es un detalle de tasa — es el doble de plata sobre la mesa."""
+    p, inv = cfg
+    e = escenario(con_subsidio=True, con_fogaes=True, pie_pct=D("0.10"))
+    nuevo_ = evaluar(unidad(es_vivienda_nueva=True), e, p, inv)
+    usado = evaluar(unidad(es_vivienda_nueva=False), e, p, inv)
+
+    assert nuevo_.fogaes_aplicado and nuevo_.pie_efectivo == D("0.10")
+    assert not usado.fogaes_aplicado
+    assert "primera venta" in usado.motivo_sin_fogaes
+    assert usado.pie_efectivo == D("0.20"), "el banco exige 20% sin garantia estatal"
+    assert usado.capital_invertido_uf > nuevo_.capital_invertido_uf
+
+
+def test_el_pie_deseado_manda_cuando_supera_al_exigido(cfg) -> None:
+    """Pedir 30% de pie sobre una unidad que solo exige 10% no se recorta al minimo."""
+    p, inv = cfg
+    ev = evaluar(unidad(), escenario(pie_pct=D("0.30")), p, inv)
+    assert ev.pie_efectivo == D("0.30")
+
+
+def test_el_cash_on_cash_se_calcula_sobre_el_pie_que_de_verdad_se_pone(cfg) -> None:
+    """Con el pie deseado en vez del exigido, el retorno de un usado saldria inflado al doble:
+    se dividiria el flujo por la mitad del capital que el banco obliga a poner."""
+    p, inv = cfg
+    ev = evaluar(unidad(es_vivienda_nueva=False), escenario(pie_pct=D("0.10")), p, inv)
+    cierre = gastos_de_cierre_uf(D(3000), ev.credito_uf, p)
+    assert ev.capital_invertido_uf == D(3000) * D("0.20") + cierre
 
 
 def test_el_subsidio_tampoco_se_aplica_sobre_el_tope_de_uf6000(cfg) -> None:

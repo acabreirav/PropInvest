@@ -61,8 +61,14 @@ subsidio_ley_21748:
   plazo_solicitud_hasta: "2028-05-31"
   plazo_escritura_extra_meses: 3
   promesa_debe_ser_posterior_a: "2024-12-31"
-  exige_primera_vivienda: {v: null, evidence: C, nota: "DISPUTADO. Ver CLAUDE.md §2.2. Modelar ambos escenarios."}
-  limite_subsidios_por_persona: {v: null, evidence: C}
+  exige_primera_vivienda: {v: null, evidence: C, nota: "DISPUTADO. Ver CLAUDE.md §2.2 y D-017. Modelar ambos escenarios."}
+  # Respuesta recibida el 29-ago-2026: UNA unidad por persona, por el requisito de primera
+  # vivienda, con cruce SII/CBR que bloquea si el RUT ya registra propiedades habitacionales.
+  # Queda en `C` y NO en `V` porque llego SIN fuente primaria y contradice la lectura del
+  # Decreto 180 art. 3, que ata el beneficio a la "primera VENTA de la vivienda" —condicion
+  # del inmueble— y no al comprador. Una de las dos lecturas esta mal y no la decide el modelo.
+  limite_subsidios_por_persona: {v: 1, evidence: C, nota: "sin fuente primaria; ver D-017"}
+  tasa_uniforme_entre_tramos: {v: true, evidence: V, fuente: "consulta 29-ago-2026; cierra D-009"}
   aplica_a_renegociados: {v: false, evidence: V}
 
 # Instrumento DISTINTO del subsidio a la tasa, y la prensa los mezcla en un solo titular.
@@ -87,6 +93,12 @@ subsidio_ds1_tramo4:
 fogaes:
   cobertura_pct_saldo_insoluto: {v: 0.50, evidence: V}
   ltv_habilitado: {v: 0.90, evidence: V}
+  # RESPONDIDO el 29-ago-2026, y es la respuesta que mas mueve el modelo:
+  # el FOGAES tradicional cubre SOLO viviendas nuevas (primera venta). Un usado comprado por
+  # el mercado convencional NO accede, y el banco exige 20% o 30% de pie.
+  # Unica excepcion: el Subsidio Tramo 4.000 (DS1) autoriza combinarlo para una usada de
+  # hasta UF 4.000 con 10% de pie — pero prohibe arrendar 5 anos, asi que no sirve aca (D-015).
+  cubre_vivienda_usada: {v: false, evidence: V, fuente: "fogaes.cl/sitio/requisitos + BancoEstado 29-ago-2026"}
   vigencia_programa_hasta: "2030-12-31"
   costo_directo_al_deudor: {v: 0, evidence: C, nota: "se internaliza en la tasa ofertada; verificar con el banco"}
 

@@ -853,3 +853,46 @@ Verificado: 2.607 de 2.701 ventas con microzona, 83 distintas, y el cruce ya dev
    sola captura cargada, "266 nuevas" es una tautologia: son todas las que hay, no unidades
    que aparecieron. Ahora lo dice y explica como conseguir la foto anterior. Un informe que
    parece significativo y no lo es se lee como 266 oportunidades.
+
+---
+
+## 2026-08-29 · D-017 · Tres respuestas del banco, y la deuda mas alta se cierra
+
+**La que mas movio el modelo: el FOGAES cubre solo primera venta.** Un usado no accede, y el
+banco le exige 20% o 30% de pie. No es un detalle de tasa: **es el doble de plata sobre la
+mesa**, y modelarlo con 10% habria producido oportunidades que ningun banco financiaria.
+
+Sobre el mismo depto de UF 3.000, aislando solo la penalizacion de financiamiento:
+
+| | tasa | pie | capital UF | costo de tenencia |
+|---|---|---|---|---|
+| nuevo | 3,30% | 10% | 340 | -1,23 UF/mes |
+| usado | 4,29% | 20% | 638 | -2,28 UF/mes |
+
+Eso NO dice que el usado pierda: dice cuanto tiene que ganar por el lado del arriendo para dar
+vuelta la cuenta. La ventaja de yield del usado depende de T-023, que todavia no esta.
+
+**T-915 cerrada.** `Escenario.con_fogaes` separado de `con_subsidio`; `fogaes_aplicable()` como
+condicion del INMUEBLE igual que el subsidio; y el pie efectivo pasa a ser
+`max(pie_deseado, pie_minimo_exigido)`. El capital invertido y el cash-on-cash van sobre el pie
+efectivo: con el deseado, el retorno de un usado salia **inflado al doble**.
+
+**Un caso de oro que resulto estar mal, y la correccion importa.** Afirmaba que "sin subsidio,
+un usado y un nuevo identicos dan lo mismo". Falso: sin subsidio el nuevo TODAVIA accede a
+FOGAES y el usado no, asi que uno financia 90% y el otro 80%. Reescrito como "sin subsidio NI
+FOGAES son identicos", que es el invariante que de verdad protege contra penalizaciones
+encubiertas.
+
+**D-009 cerrada:** la tasa es plana entre tramos. Apuntar a <= UF 3.000 no da mejor tasa. Sigue
+dando menor dividendo, pero eso el motor ya lo calculaba; no era una ventaja de tasa.
+
+**La tercera respuesta NO se acepto como verificada.** Afirma un limite de una unidad por
+persona por el requisito de "primera vivienda". Queda en `evidence: C` porque llego sin fuente
+primaria —las otras dos traian enlaces— y porque contradice el Decreto 180 art. 3, que ata el
+tramo general a la *primera VENTA de la vivienda*, condicion del inmueble. Que el art. 4 exija
+explicitamente primera vivienda del solicitante para el tramo <= UF 3.000 sugiere que el art. 3
+no lo hace: si lo hiciera, el art. 4 sobraria. No bloquea nada: el inversionista no declaro
+querer dos unidades, y la segunda correria `sin_subsidio`, que es el supuesto conservador.
+
+**Tambien se corrigio `cli capacidad`**, que ofrecia "solo FOGAES (usado?)" como escenario. Ya
+sabemos que ese caso no existe. Las tres lineas ahora son casos reales.

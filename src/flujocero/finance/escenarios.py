@@ -42,6 +42,9 @@ def construir_escenarios(p: Config, inv: Config) -> list[Escenario]:
                 vacancia=vac,
                 tasa_anual=tasa,
                 tasa_sin_subsidio=caida,
+                # El escenario OFRECE FOGAES; el motor decide si el inmueble califica.
+                # Es la misma regla que el subsidio: condicion del inmueble, no del deseo.
+                con_fogaes=con_sub,
             )
         )
     return salida
@@ -58,6 +61,7 @@ def escenario_base(p: Config, inv: Config) -> Escenario:
         vacancia=p.d("vacancia_y_riesgo.vacancia_gestion_individual"),
         tasa_anual=p.d("financiamiento.tasa_mejor_caso_fogaes"),
         tasa_sin_subsidio=p.d("financiamiento.tasa_mejor_sin_subsidio"),
+        con_fogaes=True,
     )
 
 

@@ -339,9 +339,11 @@ nota: >
 ## T-913 · Preguntas al banco (bloquean dos decisiones)
 estado: bloqueada_por_humano · agente: - · fase: 1
 criterio_de_aceptacion:
-  - [ ] ¿FOGAES cubre viviendas USADAS o solo primera venta? (D-015 — la que mas mueve la aguja)
-  - [ ] ¿El subsidio a la tasa tiene limite de unidades por persona? (params: null, evidence C)
-  - [ ] ¿Tasa del tramo <= UF 3.000 vs tramo general? (D-009)
+  - [x] ¿FOGAES cubre viviendas USADAS? **NO, solo primera venta.** Ver D-017. Cierra T-915.
+  - [~] ¿Limite de unidades por persona? Respuesta: una. **Sin fuente primaria y contra el
+        texto del Decreto 180 art. 3**, asi que queda en `C`. No bloquea: el inversionista no
+        declaro querer dos. Ver D-017 punto 3.
+  - [x] ¿Tasa del tramo <= UF 3.000 vs general? **Plana, sin diferencia.** Cierra D-009.
   - [ ] ¿Acepta conyuge como codeudora solidaria SIN copropiedad? (D-011 pregunta 4)
 
 ## T-914 · Las tasas de params.yml no aislan el efecto del subsidio
@@ -362,7 +364,8 @@ nota: >
   revision adversarial de D-015, porque de ese par depende si el stock usado gana o pierde.
 
 ## T-915 · El motor no distingue FOGAES de subsidio a la tasa
-estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: [T-913]
+estado: hecha · agente: motor-financiero · fase: 1 · depende_de: [T-913]
+resuelto_por: "D-017 — el usuario confirmo que FOGAES cubre solo primera venta"
 criterio_de_aceptacion:
   - [ ] `Escenario` gana `con_fogaes` separado de `con_subsidio`
   - [ ] El pie minimo del escenario sale del LTV que corresponde (0,90 con FOGAES / 0,80 sin)

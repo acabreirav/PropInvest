@@ -108,10 +108,12 @@ def capacidad() -> None:
     sin_sub = p.d("financiamiento.tasa_mejor_sin_subsidio")
     ltv_con = p.d("financiamiento.ltv_con_fogaes")
     ltv_sin = p.d("financiamiento.ltv_sin_fogaes")
+    # Los tres casos que EXISTEN, ya sin condicionales: confirmado el 29-ago-2026 que el
+    # FOGAES tradicional cubre solo primera venta, asi que "usado con FOGAES" no es un caso.
     for etiqueta, tasa, ltv in [
-        ("subsidio + FOGAES", con_sub, ltv_con),
-        ("solo FOGAES (usado?)", sin_sub, ltv_con),
-        ("ni subsidio ni FOGAES", sin_sub, ltv_sin),
+        ("nuevo, subsidio+FOGAES", con_sub, ltv_con),
+        ("nuevo, cupo agotado", sin_sub, ltv_con),
+        ("usado (sin ninguno)", sin_sub, ltv_sin),
     ]:
         r = ticket_maximo_uf(
             D(str(renta)),
