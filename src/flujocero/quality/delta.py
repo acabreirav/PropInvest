@@ -49,6 +49,18 @@ class Reporte:
     # volvieron a mirar. Se cuentan aparte para que nadie las lea como ventas.
     fuera_de_alcance: int = 0
     microzonas_revisadas: int = 0
+    # Unidades que la foto vieja tenia dentro del alcance, contra las que la corrida nueva
+    # encontro ahi. Si la corrida trajo menos, la paginacion quedo corta y "ya no estan"
+    # cuenta unidades que siguen publicadas en una pagina que nadie pidio.
+    vistas_antes_en_alcance: int = 0
+    vistas_ahora_en_alcance: int = 0
+
+    @property
+    def cobertura(self) -> float:
+        if not self.vistas_antes_en_alcance:
+            return 1.0
+        return self.vistas_ahora_en_alcance / self.vistas_antes_en_alcance
+
     # Cuantas fechas de captura distintas hay antes del corte. Cero significa que todo lo
     # cargado es de una sola foto y que el informe, aunque tenga numeros, no compara nada.
     capturas_previas: int = 0
@@ -67,6 +79,17 @@ class Reporte:
             (c for c in self.cambios if c.variacion > 0), key=lambda c: c.variacion, reverse=True
         )
 
+    def _nota_desaparecidas(self) -> str:
+        """Un aviso desaparece cuando se vende — pero solo si de verdad se volvio a mirar."""
+        if self.cobertura >= 0.9:
+            return "(un aviso desaparece al venderse)"
+        return (
+            f"<- POCO FIABLE: la corrida nueva trajo {self.cobertura:.0%} de las unidades\n"
+            f"                      que la foto vieja tenia en esas mismas microzonas. La\n"
+            f"                      mayoria de estas sigue publicada en una pagina que no se\n"
+            f"                      pidio. Subi --paginas para que el numero signifique algo."
+        )
+
     def __str__(self) -> str:
         if not self.comparable:
             # Sin una foto anterior, "todo es nuevo" es una tautologia, no un hallazgo.
@@ -83,7 +106,7 @@ class Reporte:
             f"  bajaron de precio : {len(self.bajaron)}",
             f"  subieron          : {len(self.subieron)}",
             f"  sin cambio        : {self.sin_cambio}",
-            f"  ya no estan       : {self.desaparecidas}   (un aviso desaparece al venderse)",
+            f"  ya no estan       : {self.desaparecidas}   {self._nota_desaparecidas()}",
             f"  nuevas            : {self.nuevas}",
             f"\n  alcance: {self.microzonas_revisadas} microzonas re-revisadas.",
         ]
@@ -96,9 +119,15 @@ class Reporte:
         if self.bajaron:
             lineas.append("\n  Las que mas bajaron:")
             for c in self.bajaron[:10]:
+                uf_m2 = (
+                    f"{c.precio_ahora_uf / Decimal(str(c.m2_utiles)):>5,.0f} UF/m2"
+                    if c.m2_utiles
+                    else "     sin m2"
+                )
                 lineas.append(
                     f"    {c.unidad_key:18s} UF {c.precio_antes_uf:>8,.0f} -> "
-                    f"{c.precio_ahora_uf:>8,.0f}  {c.variacion:+7.1%}   {c.microzona_id or '-'}"
+                    f"{c.precio_ahora_uf:>8,.0f}  {c.variacion:+7.1%}  {uf_m2}  "
+                    f"{c.microzona_id or 'sin microzona'}"
                 )
         return "\n".join(lineas)
 
@@ -150,11 +179,24 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
             ).fetchone()[0]
         )
 
-    dentro = "microzona_id IN (SELECT UNNEST(?))" if alcance else "FALSE"
+    dentro = "list_contains(?::VARCHAR[], microzona_id)" if alcance else "FALSE"
     lista = [sorted(alcance)] if alcance else []
+
+    def contar_en_alcance(condicion: str) -> int:
+        if not alcance:
+            return 0
+        return int(
+            conexion.execute(
+                "SELECT count(*) FROM fact_unidad_venta WHERE valid_to IS NULL "
+                f"AND list_contains(?::VARCHAR[], microzona_id) AND {condicion}",
+                (sorted(alcance), corte),
+            ).fetchone()[0]
+        )
 
     return Reporte(
         cambios=cambios,
+        vistas_antes_en_alcance=contar_en_alcance("valid_from < ?"),
+        vistas_ahora_en_alcance=contar_en_alcance("fetched_at >= ?"),
         # Estaba antes del corte, en una microzona QUE SI se volvio a revisar, y ninguna
         # captura nueva la toco. Esa es la senal: un aviso desaparece cuando se vende.
         desaparecidas=contar(f"valid_from < ? AND fetched_at < ? AND {dentro}", *lista),

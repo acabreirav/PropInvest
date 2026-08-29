@@ -257,3 +257,48 @@ def test_dos_tarjetas_de_fechas_distintas_SI_versionan(con) -> None:
     cargar_avisos(con, [_aviso_superficie("MLC-1", "4000", MAYO)], "vivo", "portal_busqueda/1.0.0")
     cargar_avisos(con, [_aviso_superficie("MLC-1", "3600", HOY)], "vivo", "portal_busqueda/1.0.0")
     assert len(delta.comparar(con, HOY).bajaron) == 1
+
+
+def test_si_la_corrida_nueva_cubrio_poco_lo_dice_en_vez_de_afirmar_ventas(con) -> None:
+    """ "Ya no esta" solo significa "se vendio" si de verdad se volvio a mirar. Con 20 paginas
+    contra una foto paginada completa, la mayoria sigue publicada en una pagina que nadie
+    pidio, y el numero se lee como ventas que no ocurrieron."""
+    viejas = [Aviso(f"MLC-V{i}", "3000", MAYO) for i in range(20)]
+    cargar_avisos(con, viejas, "legado", "portal_busqueda/1.0.0")
+    # La corrida nueva solo alcanza a ver 2 de las 20.
+    cargar_avisos(
+        con,
+        [Aviso("MLC-V0", "3000", HOY), Aviso("MLC-V1", "3000", HOY)],
+        "vivo",
+        "portal_busqueda/1.0.0",
+    )
+    r = delta.comparar(con, HOY)
+    assert r.cobertura < D("0.9")
+    assert "POCO FIABLE" in str(r)
+
+
+def test_con_cobertura_completa_el_numero_se_afirma(con) -> None:
+    cargar_avisos(
+        con,
+        [Aviso("MLC-1", "3000", MAYO), Aviso("MLC-2", "4000", MAYO)],
+        "legado",
+        "portal_busqueda/1.0.0",
+    )
+    cargar_avisos(
+        con,
+        [Aviso("MLC-1", "3000", HOY), Aviso("MLC-3", "2500", HOY)],
+        "vivo",
+        "portal_busqueda/1.0.0",
+    )
+    r = delta.comparar(con, HOY)
+    assert r.cobertura >= 1.0
+    assert "un aviso desaparece al venderse" in str(r)
+    assert "POCO FIABLE" not in str(r)
+
+
+def test_el_listado_muestra_UF_por_m2_que_es_lo_que_permite_comparar(con) -> None:
+    cargar_avisos(con, [Aviso("MLC-1", "4000", MAYO)], "legado", "portal_busqueda/1.0.0")
+    cargar_avisos(con, [Aviso("MLC-1", "3600", HOY)], "vivo", "portal_busqueda/1.0.0")
+    salida = str(delta.comparar(con, HOY))
+    assert "UF/m2" in salida
+    assert "62 UF/m2" in salida, "3600 UF sobre 58 m2"

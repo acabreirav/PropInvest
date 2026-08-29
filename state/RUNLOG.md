@@ -996,3 +996,25 @@ ultima parte del texto que no sea la comuna. Si lo que queda tiene numeros es un
 se inventa un barrio.
 
 Resultado: **6 comunas, 165 microzonas, 62 con n>=8 comparables de arriendo.**
+
+---
+
+## 2026-08-29 · El primer delta real, y dos cosas que el numero todavia no decia
+
+La corrida del usuario cruzo por fin las dos fotos: **26 bajadas de precio, 3 alzas, 5 sin
+cambio**, con caidas de hasta 12,7% en cuatro meses. Esa parte es observacion directa de la
+misma unidad dos veces y es confiable.
+
+**Lo que no era confiable: las 852 "ya no estan".** Recolecto 20 paginas contra una foto
+paginada completa, asi que la mayoria de esas unidades sigue publicada — en una pagina que
+nadie pidio. Scoping por microzona no alcanzaba: hay que mirar la cobertura DENTRO de cada
+microzona. Ahora el informe compara cuantas unidades tenia la foto vieja en el alcance contra
+cuantas trajo la corrida nueva, y cuando cae bajo el 90% marca el numero como POCO FIABLE con
+la razon y el remedio. Un numero que se lee como ventas y no lo es era el peor de los dos.
+
+**Y aparecio una microzona invertida en su salida: `estadio-nacional/nunoa`.** Es una fila
+vieja, parseada antes del arreglo de comuna: confirma que el texto de la tarjeta a veces pone
+el barrio al final. `rebuild --from-raw` la normaliza, porque re-parsea con el parser nuevo.
+
+Se agrego **UF/m2** a cada linea del listado: sin eso, "bajo 12,7%" no se puede comparar
+contra nada. Con eso se ve al instante si el precio nuevo es caro o barato para su microzona.
