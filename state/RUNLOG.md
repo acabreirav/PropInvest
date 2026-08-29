@@ -759,3 +759,46 @@ parser nunca lee, asi que la reconstruccion queda intacta.
 **Lo que esto desbloquea.** T-013 (microzonas) ya no depende de la API caida de MELI: hay 84
 barrios reales con el nombre que usa el portal. T-919 tiene su linea base de precios.
 `tests/integration/` dejo de estar vacio con 6 fichas reales y 20 tests.
+
+---
+
+## 2026-08-29 · T-920 · Colector vivo, por la puerta que si esta abierta
+
+**Que se hizo.** `portal_busqueda`: recolecta Portal Inmobiliario usando **solo** las rutas
+`_Desde_` que el `robots.txt` permite. Reemplaza al scraper heredado. `docs/adr/005`.
+
+**Lo que cambia respecto del legado, que es el punto de la tarea:**
+
+| | legado | este |
+|---|---|---|
+| ruta | fichas `/MLC-` (prohibidas) | listados `_Desde_` (permitidas) |
+| identidad | UA de Chrome falso | el UA declarado de Flujo Cero |
+| navegador | `--disable-blink-features` | ninguno: httpx a secas |
+| sesion | autenticado con la cuenta del usuario | anonimo |
+| moneda | float, UF fija en 38.000 | Decimal, sin conversion en el parser |
+| procedencia | ninguna | las seis columnas |
+
+El constructor **rechaza** cualquier User-Agent que contenga "Mozilla": disfrazarse no es un
+detalle de configuracion que se pueda dejar a mano. Un 403 levanta `Bloqueado` y detiene la
+corrida; no hay segundo intento por otra via.
+
+**Verificado contra las 130 paginas reales del corpus, no contra fixtures inventadas:**
+6.076 tarjetas parseadas, 5.608 unidades y 468 proyectos. microzona 99,8%, m2 99,3% sobre
+unidades, dormitorios 98,9%.
+
+**Detalle que no es cosmetico.** La pagina 1 se pide con `_Desde_1`. El portal la sirve sin
+sufijo, pero esa forma no calza con `/*_Desde_` y quedaria fuera de lo permitido. Devuelve lo
+mismo. Elegir la URL permitida cuando existe una equivalente no cuesta nada.
+
+**Refactor que salio de aca.** `portal_comun`: anonimizacion, numeros chilenos, slugs y el
+cargador SCD tipo 2, compartidos por el colector historico y el vivo. Tener el versionado
+duplicado seria peor que tenerlo lejos: se corrige una copia y el error queda escondido en la
+que nadie mira. Efecto colateral util: la primera corrida real cruza contra la foto de mayo y
+produce el delta de T-919 **sin codigo adicional**, porque la unidad que bajo de precio abre
+version nueva y la anterior se cierra sola.
+
+**Lo que falta y por que.** La primera corrida real. Dos cosas solo se miden contra el portal
+vivo desde IP chilena: si el listado exige JavaScript (las 130 paginas del corpus se
+capturaron con Playwright, asi que no prueban que un GET simple alcance) y si el portal acepta
+a un cliente honesto sin sesion. Si vuelve una cascara sin tarjetas, el selftest falla con
+"ninguna tarjeta parseo" y ahi se justifica Playwright en el ADR, no antes.

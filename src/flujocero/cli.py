@@ -550,6 +550,76 @@ def ingerir_legado(
 
 
 @app.command()
+def recolectar_portal(
+    comunas: str = typer.Option("", help="separadas por coma. Vacio = las de config/zonas.yml"),
+    operaciones: str = typer.Option("venta,arriendo"),
+    paginas: int = typer.Option(3, help="paginas por comuna y operacion (48 avisos c/u)"),
+    tipo: str = typer.Option("usadas", help="usadas | nuevas | proyectos | '' para todo"),
+) -> None:
+    """T-920 · recolecta Portal Inmobiliario por la ruta que el robots.txt PERMITE.
+
+    Solo listados `_Desde_`; nunca fichas `/MLC-`. User-Agent honesto, sin sesion y sin
+    disfraz de navegador: lo que el scraper anterior arriesgaba no era una IP, era tu cuenta
+    de MercadoLibre. Si el portal responde 403 a un cliente honesto, se detiene y lo dice.
+
+    Pausa de 3 a 5 segundos entre paginas. Con los valores por defecto son ~10 minutos.
+    """
+    import os
+
+    import duckdb
+    from dotenv import load_dotenv
+
+    from flujocero.quality import bitacora
+    from flujocero.sources import portal_busqueda as pb
+
+    load_dotenv(RAIZ / ".env")
+    ua = os.environ.get("USER_AGENT", "").strip()
+    if not ua:
+        typer.echo("✗ falta USER_AGENT en el .env. Es la identidad con la que nos presentamos.")
+        raise typer.Exit(2)
+
+    lista = [c.strip() for c in comunas.split(",") if c.strip()] or [
+        z["comuna"] for z in cargar("zonas").crudo("fase_1")
+    ]
+    ops = tuple(o.strip() for o in operaciones.split(",") if o.strip())
+    typer.echo(f"  comunas: {', '.join(lista)}\n  operaciones: {', '.join(ops)}")
+
+    col = pb.PortalBusqueda(user_agent=ua)
+    veredicto = col.robots_ok()
+    typer.echo(f"{'✓' if veredicto.allowed else '✗'} robots.txt: {veredicto.motivo}")
+    if not veredicto.allowed:
+        raise typer.Exit(2)
+
+    con = duckdb.connect(str(db.crear()))
+    corrida = bitacora.abrir(col.id)
+    try:
+        anterior = bitacora.filas_de_la_ultima_corrida_exitosa(con, col.id)
+        docs = col.collect(lista, ops, max_paginas=paginas, tipo=tipo or None)
+        corrida.docs_recolectados = len(docs)
+        tarjetas = [t for d in docs for t in col.parse(d)]
+        typer.echo(f"✓ {len(docs)} paginas, {len(tarjetas)} avisos")
+
+        corrida.filas_insertadas = pb.cargar_en_duckdb(con, tarjetas)
+        rep = col.selftest(docs, filas_corrida_anterior=anterior)
+        corrida.selftest_ok = rep.ok
+        corrida.notas = rep.detalle.get("cobertura", "")
+        typer.echo(f"✓ {corrida.filas_insertadas} filas nuevas o versionadas")
+        typer.echo(f"{'✓' if rep.ok else '✗'} selftest: {rep.detalle.get('cobertura')}")
+        if not rep.ok:
+            for k, v in rep.detalle.items():
+                if k not in ("cobertura", "proyectos"):
+                    typer.echo(f"    {k}: {v}")
+    except pb.Bloqueado as exc:
+        corrida.notas = str(exc)
+        typer.echo(f"✗ {exc}")
+        raise typer.Exit(3) from exc
+    finally:
+        bitacora.cerrar(con, corrida, filas_corrida_anterior=None)
+        con.close()
+        col.cerrar()
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []

@@ -83,6 +83,32 @@ fuentes:
     adr: "docs/adr/003-meli.md"
     razon_deshabilitada: "misma que meli_venta: HTTP 403 en /sites/MLC/search"
 
+  - id: portal_busqueda
+    capa: 3
+    legal_tier: html_permitido      # SOLO rutas `_Desde_`, que el robots.txt permite
+    enabled: true
+    base: "https://www.portalinmobiliario.com"
+    patron_permitido: "/{operacion}/departamento/{tipo}/{comuna}-metropolitana_Desde_{offset}"
+    modulo: "src/flujocero/sources/portal_busqueda.py"
+    adr: "docs/adr/005-portal-busqueda.md"
+    parser_version: "portal_busqueda/1.0.0"
+    produce: "fact_unidad_venta + fact_arriendo_comp + dim_microzona"
+    cadencia: semanal
+    rate_limit: "3 a 5 s entre paginas, aleatorio"
+    auth: ninguna                   # anonimo a proposito: ver nota
+    nota_identidad: >
+      NO se autentica y NO usa User-Agent de navegador. El scraper del proyecto anterior hacia
+      las dos cosas mas `--disable-blink-features=AutomationControlled`, y lo que arriesgaba
+      no era una IP: era la cuenta de MercadoLibre del usuario. D-016 es explicita en que la
+      aprobacion cubre recolectar, no esquivar. Si el portal devuelve 403 a un cliente honesto,
+      el colector se detiene y lo reporta.
+    nota_ruta: >
+      La pagina 1 tambien se pide con `_Desde_1`. El portal la sirve sin sufijo, pero esa forma
+      no calza con `/*_Desde_` y quedaria fuera de lo permitido. Devuelve lo mismo.
+    cobertura_verificada: >
+      Contra las 130 paginas reales del corpus de mayo-2026: 6.076 tarjetas, 5.608 unidades y
+      468 proyectos. microzona 99,8%, m2 99,3% y dormitorios 98,9% sobre unidades.
+
   - id: portal_legado_2026_05
     capa: 3
     legal_tier: html_prohibido      # fichas /MLC-, no permitidas por robots

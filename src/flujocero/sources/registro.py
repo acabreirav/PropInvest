@@ -71,10 +71,24 @@ def _portal_legado() -> EntradaRegistro:
     )
 
 
+def _portal_busqueda() -> EntradaRegistro:
+    from flujocero.sources.portal_busqueda import SOURCE_ID, PortalBusqueda, cargar_en_duckdb
+
+    colector = PortalBusqueda(user_agent="FlujoCero-ResearchBot/1.0 (rebuild)")
+    return EntradaRegistro(
+        source_id=SOURCE_ID,
+        tabla="fact_unidad_venta + fact_arriendo_comp",
+        parse=colector.parse,
+        cargar=cargar_en_duckdb,
+        descripcion="listados permitidos de Portal Inmobiliario",
+    )
+
+
 # La construcción es perezosa: importar el registro no debe arrastrar todos los colectores.
 _CONSTRUCTORES: dict[str, Callable[[], EntradaRegistro]] = {
     "cmf_indicadores": _cmf_indicadores,
     "portal_legado_2026_05": _portal_legado,
+    "portal_busqueda": _portal_busqueda,
     "cmf_tasas_hipotecarias": _cmf_tasas,
 }
 

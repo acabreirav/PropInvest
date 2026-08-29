@@ -430,13 +430,24 @@ criterio_de_aceptacion:
 nota: "Un aviso desaparece cuando se vende: esa foto de mayo no se puede volver a tomar."
 
 ## T-920 · Colector Portal Inmobiliario por la ruta PERMITIDA
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-916]
+estado: en_curso · agente: colector · fase: 1 · depende_de: [T-916]
 criterio_de_aceptacion:
-  - [ ] Solo rutas `_Desde_` que el robots.txt permite. `robots_check` pasa ANTES de recolectar
-  - [ ] `USER_AGENT` honesto de Flujo Cero. **Sin** `--disable-blink-features`, sin UA falso,
-        **sin sesion autenticada** (lo que se arriesga no es una IP: es la cuenta del usuario)
-  - [ ] Separa `unidad_unica` de `proyecto_multiple`: el proyecto publica rangos, no precios
-  - [ ] Seis columnas de procedencia, zona cruda, idempotencia, deteccion de parser roto
-  - [ ] `Decimal` para todo monto; `datetime` con tzinfo=UTC
-  - [ ] La UF sale de `dim_tiempo_financiero`, NUNCA hardcodeada (el legado tenia 38.000 fijo
-        y hoy la UF esta en ~40.800: 7% de error silencioso en cada arriendo publicado en UF)
+  - [x] Solo rutas `_Desde_`. La pagina 1 tambien se pide con `_Desde_1`, porque servida sin
+        sufijo no calza con `/*_Desde_` y quedaria fuera de lo permitido.
+  - [x] `robots_check` corre ANTES de recolectar, contra una URL `_Desde_` real y no contra
+        la raiz del sitio: lo que importa es si la RUTA esta permitida.
+  - [x] El constructor RECHAZA cualquier User-Agent con "Mozilla". Sin sesion, sin Playwright,
+        sin banderas de evasion. Un 403 levanta `Bloqueado` y detiene: no se reintenta disfrazado.
+  - [x] Separa unidad de proyecto. El proyecto va con `evidence_level` E y sus rangos en ND.
+  - [x] Seis columnas de procedencia, zona cruda anonimizada, SCD tipo 2, detector de parser roto
+  - [x] `Decimal` en todo monto; `datetime` con tzinfo=UTC
+  - [x] Sin UF hardcodeada: el parser no convierte monedas (§11). Guarda monto + moneda.
+  - [x] Verificado contra las 130 paginas reales: 6.076 tarjetas, microzona 99,8%, m2 99,3%
+  - [x] ADR escrito: `docs/adr/005-portal-busqueda.md`
+  - [ ] **Primera corrida real** en la maquina del usuario (unica IP chilena disponible)
+bloqueo: >
+  Falta ejecutar. Dos cosas solo se pueden medir contra el portal vivo y desde IP chilena:
+  (a) si el listado se sirve renderizado o exige JavaScript —las 130 paginas del corpus se
+  capturaron con Playwright, asi que no prueban que un GET simple alcance—, y (b) si el portal
+  acepta a un cliente honesto sin sesion. Comando:
+  `uv run python -m flujocero.cli recolectar-portal --paginas 2`
