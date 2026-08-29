@@ -802,3 +802,43 @@ vivo desde IP chilena: si el listado exige JavaScript (las 130 paginas del corpu
 capturaron con Playwright, asi que no prueban que un GET simple alcance) y si el portal acepta
 a un cliente honesto sin sesion. Si vuelve una cascara sin tarjetas, el selftest falla con
 "ninguna tarjeta parseo" y ahi se justifica Playwright en el ADR, no antes.
+
+---
+
+## 2026-08-29 · T-920 corrida real, y T-919 · el delta
+
+**La corrida del usuario respondio las dos incognitas del ADR-005, y las dos a favor:**
+
+```
+✓ robots.txt: permitido por robots.txt
+✓ 12 paginas, 571 avisos
+✓ 552 filas nuevas o versionadas
+✓ selftest: precio 100% · m2 99,8% · dormitorios 99,1% · comuna 100% · microzona 100%
+```
+
+1. **No necesita JavaScript.** `httpx` a secas trae el listado completo. Playwright no se
+   justifica y no se agrega: el §5 lo admite solo cuando el ADR de la fuente lo justifica.
+2. **El portal acepta un cliente anonimo y honesto.** HTTP 200 sin sesion, sin UA de navegador
+   y sin banderas de evasion. Todo el disfraz del scraper anterior era innecesario para esta
+   ruta, y arriesgaba la cuenta de MercadoLibre del usuario a cambio de nada.
+
+**T-919: `quality/delta.py` + `cli delta`.** Cruza las versiones que el SCD tipo 2 ya guarda y
+reporta cinco categorias. No hizo falta codigo de recoleccion: el cargador compartido ya
+versionaba.
+
+**Dos decisiones que costaron un bug cada una:**
+
+- **La clasificacion va por fechas, no por `source_id`.** Cuando una unidad sigue publicada al
+  mismo precio, el cargador actualiza su procedencia a la captura de hoy —dejarla apuntando al
+  blob de mayo diria que la evidencia de esa fila es un documento viejo—. Clasificar por fuente
+  habria dicho que esa unidad desaparecio, exactamente lo contrario de lo que paso.
+- **Una unidad que bajo de precio se contaba TAMBIEN como nueva**, porque su version vigente
+  nace hoy igual que la de un aviso nuevo. Lo que las separa es tener una version cerrada
+  detras. Sin ese filtro, el universo se infla con unidades que ya estaban.
+
+**Hueco que aparecio al escribir la consulta (T-921).** `fact_unidad_venta` **no tenia
+`microzona_id`**. Sin ella no hay yield: el arriendo comparable esta indexado por microzona y
+no habia por donde cruzarlos. Se llegaba a la comuna via `dim_proyecto`, que solo existe para
+obra nueva; un usado de portal no tiene proyecto. Corregido con migracion idempotente.
+Verificado: 2.607 de 2.701 ventas con microzona, 83 distintas, y el cruce ya devuelve filas
+—san-miguel/el-llano con 152 ventas y 111 arriendos, por ejemplo—.

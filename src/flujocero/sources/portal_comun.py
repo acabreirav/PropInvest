@@ -242,10 +242,23 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
         if desde > a.fetched_at:
             return 0  # llego una captura mas vieja que la vigente: no reescribe el presente
         if precio_previo == a.precio_uf:
+            # Sigue publicada al mismo precio: no se abre version, pero SI se actualiza la
+            # procedencia. Dejarla apuntando al documento viejo diria que la evidencia de
+            # esta fila es un blob de mayo, cuando la evidencia es la captura de hoy.
+            # `valid_from` conserva cuando se vio por primera vez.
             conexion.execute(
-                "UPDATE fact_unidad_venta SET fetched_at = ? "
+                "UPDATE fact_unidad_venta SET fetched_at = ?, source_id = ?, source_url = ?, "
+                "parser_version = ?, raw_blob_path = ?, robots_snapshot_sha = ? "
                 "WHERE unidad_key = ? AND valid_to IS NULL",
-                (a.fetched_at, a.portal_id),
+                (
+                    a.fetched_at,
+                    *_procedencia(a, source_id, parser_version)[:1],
+                    a.url,
+                    parser_version,
+                    a.raw_blob_path,
+                    a.robots_snapshot_sha,
+                    a.portal_id,
+                ),
             )
             return 0
         conexion.execute(
@@ -256,15 +269,16 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
     conexion.execute(
         """
         INSERT INTO fact_unidad_venta
-          (unidad_key, numero_unidad, tipologia, dormitorios, banos, m2_utiles,
+          (unidad_key, numero_unidad, microzona_id, tipologia, dormitorios, banos, m2_utiles,
            es_vivienda_nueva, antiguedad_anios, precio_uf, disponible, evidence_level,
            valid_from, source_id, source_url, fetched_at, parser_version, raw_blob_path,
            robots_snapshot_sha)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             a.portal_id,
             a.portal_id,
+            a.microzona_id,
             campos[4],
             campos[2],
             campos[3],

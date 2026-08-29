@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS dim_proyecto (
 CREATE TABLE IF NOT EXISTS fact_unidad_venta (
   unidad_key      VARCHAR,               -- hash(proyecto_id, numero_unidad)
   proyecto_id     VARCHAR REFERENCES dim_proyecto(proyecto_id),
+  -- Sin esto no hay yield: el arriendo comparable vive en `fact_arriendo_comp` por microzona,
+  -- y una unidad en venta sin microzona no se puede cruzar con el. Llegar a la microzona por
+  -- `dim_proyecto` solo funciona para obra nueva; un usado de portal no tiene proyecto.
+  microzona_id    VARCHAR REFERENCES dim_microzona(microzona_id),
   numero_unidad   VARCHAR,
   tipologia       VARCHAR,               -- '1D1B','2D1B','2D2B','3D2B','studio'
   dormitorios     INTEGER, banos INTEGER,
@@ -180,5 +184,6 @@ CREATE TABLE IF NOT EXISTS run_log (
 -- Migraciones idempotentes. `CREATE TABLE IF NOT EXISTS` no agrega columnas a una tabla que
 -- ya existe, asi que una base creada antes de D-015 se quedaba sin estas dos y fallaba al
 -- insertar. Correr el esquema completo tiene que dejar cualquier base al dia, no solo una nueva.
+ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS microzona_id      VARCHAR;
 ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS es_vivienda_nueva BOOLEAN;
 ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS antiguedad_anios  INTEGER;

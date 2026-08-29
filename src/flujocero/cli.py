@@ -620,6 +620,45 @@ def recolectar_portal(
 
 
 @app.command()
+def delta(
+    corte: str = typer.Option(
+        "", help="fecha ISO del corte. Vacio = la fecha de la ultima recoleccion"
+    ),
+) -> None:
+    """T-919 · que cambio de precio, que desaparecio y que es nuevo desde el corte.
+
+    Un aviso desaparece del portal cuando se vende, asi que "estaba antes y hoy no esta" es
+    la senal mas fuerte de este cruce. Y una unidad que baja de precio es, segun el §11 del
+    contrato, senal de compra.
+
+    No necesita nada especial: el colector ya versiona con SCD tipo 2. Esto solo lo lee.
+    """
+    from datetime import date as _date
+
+    import duckdb
+
+    from flujocero.quality import delta as dl
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        if corte:
+            momento = datetime.fromisoformat(corte).replace(tzinfo=UTC)
+        else:
+            fila = con.execute("SELECT max(fetched_at) FROM fact_unidad_venta").fetchone()
+            if fila is None or fila[0] is None:
+                typer.echo("No hay datos cargados todavia. Corre `recolectar-portal` primero.")
+                raise typer.Exit(1)
+            # El corte es el DIA de la ultima captura: dentro de una misma corrida las filas
+            # llevan la misma marca, y comparar contra el instante exacto dejaria fuera todo.
+            momento = datetime.combine(
+                _date.fromisoformat(str(fila[0])[:10]), datetime.min.time(), tzinfo=UTC
+            )
+        typer.echo(str(dl.comparar(con, momento)))
+    finally:
+        con.close()
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []

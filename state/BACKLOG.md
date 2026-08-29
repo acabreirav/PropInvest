@@ -422,15 +422,33 @@ bugs_encontrados_y_corregidos:
     solo si el precio cambio, y la vieja se cierra.
 
 ## T-919 · Delta de precios: cuatro meses de senal de compra
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-918, T-920]
+estado: en_curso · agente: colector · fase: 1 · depende_de: [T-918, T-920]
 criterio_de_aceptacion:
-  - [ ] Re-scrapear las 6 comunas por la ruta permitida `_Desde_`
-  - [ ] Cruce contra la foto de may-2026 por `portal_id`
-  - [ ] Reporte: siguen a la venta / vendidas / **bajaron de precio** (SCD tipo 2)
-nota: "Un aviso desaparece cuando se vende: esa foto de mayo no se puede volver a tomar."
+  - [x] Re-scrapear por la ruta permitida `_Desde_` -> T-920, corrida real 29-ago-2026
+  - [x] `quality/delta.py` + `cli delta`: cruza por `unidad_key` sobre las versiones SCD
+  - [x] Cuatro categorias: bajaron / subieron / sin cambio / **ya no estan** / nuevas
+  - [x] La clasificacion va por FECHAS (`valid_from` vs `fetched_at`), no por `source_id`:
+        al confirmar una unidad su procedencia pasa a la captura de hoy, asi que clasificar
+        por fuente diria que desaparecio, justo lo contrario de lo que paso.
+  - [ ] Correr el cruce completo en la maquina del usuario (necesita la foto de mayo ingerida)
+bloqueo: >
+  Falta que el usuario ingiera la foto de mayo en SU base. Los 6.229 HTML estan en su disco,
+  en la carpeta del proyecto anterior. Dos comandos:
+  `uv run python -m flujocero.cli ingerir-legado --origen <ruta>\data\raw\portal_inmobiliario\listings`
+  `uv run python -m flujocero.cli delta`
+
+## T-921 · `fact_unidad_venta` no tenia microzona (corregido)
+estado: hecha · agente: colector · fase: 1
+hallazgo: >
+  Aparecio al escribir la consulta del delta: la tabla de unidades en venta no tenia
+  `microzona_id`. Sin ella no hay yield — el arriendo comparable esta indexado por microzona
+  y no habia por donde cruzarlos. Se llegaba a la comuna via `dim_proyecto`, que solo existe
+  para obra nueva; un usado de portal no tiene proyecto. Corregido en el esquema con migracion
+  idempotente y en el cargador. Verificado: 2.607 de 2.701 ventas con microzona, 83 distintas,
+  y el cruce venta x arriendo por microzona ya devuelve filas.
 
 ## T-920 · Colector Portal Inmobiliario por la ruta PERMITIDA
-estado: en_curso · agente: colector · fase: 1 · depende_de: [T-916]
+estado: hecha · agente: colector · fase: 1 · depende_de: [T-916]
 criterio_de_aceptacion:
   - [x] Solo rutas `_Desde_`. La pagina 1 tambien se pide con `_Desde_1`, porque servida sin
         sufijo no calza con `/*_Desde_` y quedaria fuera de lo permitido.
@@ -444,10 +462,12 @@ criterio_de_aceptacion:
   - [x] Sin UF hardcodeada: el parser no convierte monedas (§11). Guarda monto + moneda.
   - [x] Verificado contra las 130 paginas reales: 6.076 tarjetas, microzona 99,8%, m2 99,3%
   - [x] ADR escrito: `docs/adr/005-portal-busqueda.md`
-  - [ ] **Primera corrida real** en la maquina del usuario (unica IP chilena disponible)
-bloqueo: >
-  Falta ejecutar. Dos cosas solo se pueden medir contra el portal vivo y desde IP chilena:
-  (a) si el listado se sirve renderizado o exige JavaScript —las 130 paginas del corpus se
-  capturaron con Playwright, asi que no prueban que un GET simple alcance—, y (b) si el portal
-  acepta a un cliente honesto sin sesion. Comando:
-  `uv run python -m flujocero.cli recolectar-portal --paginas 2`
+  - [x] **Primera corrida real, 29-ago-2026**: 12 paginas, 571 avisos, 552 filas.
+        selftest verde: precio 100%, m2 99,8%, dormitorios 99,1%, comuna y microzona 100%.
+medido: >
+  Las dos incognitas quedaron resueltas y las dos a favor:
+  (a) NO necesita JavaScript. httpx a secas trae el listado completo. Playwright no se
+      justifica y no se agrega (§5).
+  (b) El portal acepta un cliente ANONIMO y honesto: HTTP 200 sin sesion, sin UA de navegador
+      y sin banderas de evasion. Todo el disfraz del scraper anterior era innecesario para
+      esta ruta, y arriesgaba la cuenta del usuario a cambio de nada.

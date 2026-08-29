@@ -56,16 +56,31 @@ y `"35 - 61 m² útiles"`. El §B1 exige el precio **real por unidad**, así que
 - la fila se carga con `evidence_level = 'E'`, y el §12 ya excluye del ranking todo precio
   estimado. La regla que existe hace el trabajo sin código nuevo.
 
-## Lo que queda por verificar en la máquina del usuario
+## Medido en la primera corrida real — 29-ago-2026
 
-**Si el listado se sirve renderizado o necesita JavaScript.** Las 130 páginas del corpus
-fueron capturadas con Playwright, así que no prueban que un `GET` simple alcance. El colector
-usa `httpx` —lo mínimo, según el §5— y la primera corrida real lo dirá. Si vuelve una cáscara
-sin tarjetas, el `selftest` falla con "ninguna tarjeta parseó" y ahí se justifica Playwright
-en este mismo ADR, no antes.
+Ejecutado desde la máquina del usuario, IP residencial chilena, 3 comunas × 2 operaciones ×
+2 páginas:
 
-**Si el portal acepta a un cliente honesto desde una IP residencial chilena.** No se puede
-medir desde el contenedor: no tiene IP chilena y el portal ya devolvió 403 a datacenter.
+```
+✓ robots.txt: permitido por robots.txt
+✓ 12 paginas, 571 avisos
+✓ 552 filas nuevas o versionadas
+✓ selftest: precio 100,0% · m2_utiles 99,8% · dormitorios 99,1% · comuna 100,0% · microzona 100,0%
+```
+
+Las dos preguntas que quedaban abiertas están respondidas, y las dos a favor:
+
+**No necesita JavaScript.** `httpx` a secas devuelve el listado completo con sus 48 tarjetas.
+Las 130 páginas del corpus se habían capturado con Playwright y no probaban esto. **Playwright
+no se justifica y no se agrega**: el §5 lo admite solo cuando está justificado en el ADR de la
+fuente, y acá no lo está.
+
+**El portal acepta a un cliente honesto.** Sin sesión, sin User-Agent de navegador, sin
+banderas de evasión: HTTP 200. Todo el aparato de disfraz del scraper anterior era innecesario
+para esta ruta. Lo que aquel código arriesgaba —la cuenta de MercadoLibre del usuario— se
+arriesgaba a cambio de nada.
+
+La cobertura en vivo confirma la medida sobre el corpus: **microzona 100%**, m² 99,8%.
 
 ## Consecuencias
 
