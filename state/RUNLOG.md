@@ -1233,3 +1233,68 @@ impuesto a la renta sobre el arriendo, UF 37,8 al ano. El §2.5 dice que el DFL2
 el subsidio en valor presente; esto lo cuantifica. Y como el portal declara DFL2 en el 0,3% de
 los avisos, **el ranking de hoy es sistematicamente pesimista justo en la dimension que mas
 importa**. Verificar el DFL2 en la escritura pasa a ser la accion de mayor valor del proyecto.
+
+---
+
+## 2026-08-29 · T-908 · La UF tenia una sola fuente, y esa fuente esta medida como inestable
+
+Sin el valor de la UF no se convierte ni un arriendo publicado en pesos, y el **83% de los
+avisos de arriendo se publican en pesos**. La serie de UF es el unico dato del que depende,
+literalmente, todo lo demas — y hasta hoy venia de una sola API que `cli probe` midio
+cortando la conexion al azar el 28-ago: la misma URL de 32 meses fallo y minutos despues
+devolvio 974 registros.
+
+Se agrego **Gael Cloud como respaldo** (ADR 006). Cuatro decisiones que no son de estilo:
+
+**1. El respaldo NUNCA pisa a la fuente primaria.** `gael_indicadores.cargar_en_duckdb` hace
+`ON CONFLICT DO NOTHING`; el de la CMF hace `DO UPDATE`. Una fuente de respaldo que
+sobrescribe a la primaria convierte **una caida pasajera de la CMF en un cambio permanente
+de los datos**, sin que nadie lo pida y sin que quede rastro. Efecto lateral bueno: como el
+respaldo solo inserta si falta y la primaria sobrescribe siempre, la CMF gana venga en el
+orden que venga, y eso hace que `make rebuild --from-raw` sea determinista sin ordenar las
+fuentes. Hay test.
+
+**2. Una discrepancia entre fuentes se reporta, no se resuelve.** Si las dos tienen el mismo
+`(fecha, serie)` y no coinciden mas alla del redondeo, sale una `Discrepancia` en pantalla y
+la fila que ya estaba no se toca. Dos fuentes oficiales que dicen cosas distintas del mismo
+dia es un hallazgo, no algo que un cargador deba decidir solo.
+
+**3. El cupo se respeta del lado del cliente y un 429 no se reintenta nunca.** El limite de
+Gael es >9 peticiones en 10 s = **IP baneada una hora**. El limitador frena ANTES de pedir
+con cupo 6, no 9, porque no sabemos si el servidor cuenta la ventana igual que nosotros. Y
+un 429 corta de inmediato: es la diferencia deliberada con la CMF, donde el corte SI es
+transitorio. Reintentar un baneo solo lo prolonga.
+
+**4. Gael NO reemplaza a la CMF para el historico.** El endpoint publico no toma fechas:
+entrega el valor vigente. `collect()` **falla** si se le pide un periodo, en vez de devolver
+un dia y dejar creer que devolvio treinta. Un hoyo silencioso en la serie es peor que un
+error.
+
+**Lo que este colector todavia no puede afirmar.** El egreso hacia `api.gael.cloud` esta
+bloqueado en este entorno (comprobado: `EGRESS_BLOCKED`), asi que la forma de la respuesta
+viene de documentacion y `forma_verificada` queda en `false`. El parser esta escrito para
+**fallar ruidosamente** si la forma difiere, nunca para adivinar: nombres de campo por
+niveles de preferencia, formato de miles resuelto por rango de plausibilidad (y rechazado si
+las dos lecturas caben), y fecha ambigua rechazada. `05-08-2026` es 5 de agosto en Chile y
+8 de mayo en formato gringo, y una UF con tres meses de error corrompe toda conversion de
+ese dia sin que se note mirando la tabla.
+
+### Auto-critica §7.6 — cuatro hallazgos sobre codigo mio, uno era un bug
+
+1. **`"1.234.567"` se rechazaba.** La rama de "solo punto" calculaba las dos lecturas
+   siempre, y `Decimal("1.234.567")` revienta. Un valor perfectamente legible fallaba porque
+   la lectura decimal ni siquiera existe con dos puntos. Corregido: mas de un punto = todos
+   son separadores de miles, sin ambiguedad.
+2. **La consulta de robots.txt no pasaba por el limitador.** El servidor cuenta TODOS los
+   GET. Con 2 series + robots eran 3 peticiones y el contador veia 2. Con cupo 6 sobre un
+   limite real de 9 no llegaba a banear, pero un contador que ignora una de cada tres
+   peticiones no es un contador.
+3. **Una `ValidationError` de pydantic se escapaba del fallback.** Hereda de `ValueError`,
+   no de `ErrorDeFuente`, asi que una fila mal formada mataba con traceback justo al
+   colector que queda cuando la CMF ya fallo.
+4. **La conexion a DuckDB podia quedar abierta** si el fallback reventaba, y el siguiente
+   comando no habria podido ni abrir la base. Ahora va en `try/finally`.
+
+Los cuatro con test de regresion.
+
+**Gates:** VERDE. 445 tests (eran 382).

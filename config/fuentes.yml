@@ -26,7 +26,21 @@ fuentes:
     base: "https://api.gael.cloud/general/public/monedas"
     auth: ninguna
     rate_limit_duro: "máx 9 req / 10 s — se excede y la IP queda baneada 1 hora"
+    cupo_cliente: "6 req / 10 s — margen deliberado: no sabemos si el servidor cuenta igual"
     cadencia: diaria
+    rol: respaldo               # NO es fuente alternativa: rellena huecos, nunca pisa
+    respalda_a: cmf_indicadores
+    series: [uf, utm]
+    modulo: "src/flujocero/sources/gael_indicadores.py"
+    adr: "docs/adr/006-gael-indicadores.md"
+    parser_version: "gael_indicadores/1.0.0"
+    produce: dim_tiempo_financiero
+    selftest: "verde contra fixture sintética; forma_verificada=false — falta muestra viva"
+    limitacion: >
+      El endpoint público NO toma fechas: entrega el valor VIGENTE, no serie histórica.
+      Cubre "hoy la CMF no responde"; para el backfill la única fuente sigue siendo la CMF.
+      `collect()` falla explícitamente si se le pide un período, en vez de devolver un día
+      y dejar creer que devolvió treinta.
 
   - id: cmf_tasas_hipotecarias
     capa: 6

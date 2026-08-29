@@ -120,6 +120,8 @@ o a la sala de ventas.
 
 ### Fase 1 · Un extremo a otro sobre 3 comunas
 - [ ] UF, UTM y tasas ingestadas desde CMF con fallback a Gael Cloud.
+      *(29-ago-2026: UF y UTM listas, fallback implementado (T-908, ADR 006). Falta
+      la parte de **tasas**: la CMF no tiene fuente vigente por banco — T-907.)*
 - [ ] Diccionario de microzonas de MELI materializado y unido a manzanas INE.
 - [ ] ≥300 unidades con precio real en San Miguel, La Florida y Ñuñoa.
 - [ ] ≥8 comparables de arriendo por `(microzona × tipología)` en el 70% de las microzonas activas.

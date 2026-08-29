@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal as D
 from decimal import getcontext
+from typing import Any
 
 import typer
 
@@ -279,16 +280,85 @@ def demo() -> None:
     )
 
 
+def _ingerir_gael(con: Any, ahora: Any, raiz_cruda: Any = None) -> bool:
+    """T-908 · segunda fuente de UF y UTM. Devuelve True si cargo o confirmo algun valor.
+
+    Rellena huecos y **nunca pisa** una fila que ya exista: eso lo garantiza
+    `gael_indicadores.cargar_en_duckdb`, no este comando. Aca solo se imprime lo que paso,
+    incluidas las discrepancias entre fuentes, que son un hallazgo y no un detalle.
+    """
+    import os
+
+    from flujocero.sources import gael_indicadores as gael
+    from flujocero.sources.base import Scope
+
+    colector = gael.desde_entorno(dict(os.environ), raiz_cruda=raiz_cruda)
+    typer.echo(f"\n→ fallback {colector.id}: pidiendo el valor VIGENTE de {list(colector.series)}")
+    typer.echo(
+        "  (Gael no sirve series historicas: cubre 'hoy la CMF no responde', no el backfill)"
+    )
+    try:
+        docs = list(colector.collect(Scope(ahora=ahora)))
+    except gael.CupoExcedido as exc:
+        typer.echo(f"  ✗ {exc}")
+        return False
+    except gael.ErrorDeFuente as exc:
+        typer.echo(f"  ✗ el fallback tampoco respondio: {exc}")
+        return False
+
+    filas = []
+    for d in docs:
+        try:
+            filas.extend(colector.parse(d))
+        except (gael.ErrorDeFuente, ValueError) as exc:
+            # §11: no se traga, se reporta. `ValueError` entra porque la validacion de
+            # pydantic levanta `ValidationError`, que hereda de ahi: sin este caso, una
+            # fila mal formada reventaba el fallback con un traceback en vez de un mensaje.
+            # Es el caso ESPERADO si la forma real de Gael difiere de la documentada, por
+            # eso el mensaje apunta al blob crudo, que ya quedo escrito (§3.6).
+            typer.echo(f"  ! {d.ruta.name}: {type(exc).__name__}: {exc}")
+    if not filas:
+        typer.echo(
+            "  ✗ el fallback no produjo ninguna fila. El blob crudo quedo en data/raw/"
+            "gael_indicadores/ — mandamelo y ajusto el parser a la forma real."
+        )
+        return False
+
+    st = colector.selftest(muestra_viva=docs[:5])
+    typer.echo(f"  {'✓' if st.ok else '✗'} selftest: {st.checks}")
+    if not st.ok:
+        for k, v in st.detalle.items():
+            typer.echo(f"      {k}: {v}")
+        return False
+
+    rep = gael.cargar_en_duckdb(con, filas)
+    typer.echo(f"  ✓ {rep}")
+    for d in rep.discrepancias:
+        typer.echo(f"    ⚠ DISCREPANCIA ENTRE FUENTES OFICIALES: {d}")
+    if rep.discrepancias:
+        typer.echo(
+            "    No se resolvio sola a proposito: dos fuentes oficiales que no coinciden es"
+            "\n    un hallazgo de calidad de datos. La fila que ya estaba NO se toco."
+        )
+    return rep.insertadas > 0 or rep.ya_estaban > 0
+
+
 @app.command()
 def ingest(
     fuente: str = typer.Option("cmf_indicadores", help="source_id a ejecutar"),
     desde: str = typer.Option("2024-01", help="AAAA-MM"),
     hasta: str = typer.Option("2026-08", help="AAAA-MM"),
+    sin_fallback: bool = typer.Option(
+        False, "--sin-fallback", help="no intentar Gael Cloud si la CMF no responde"
+    ),
 ) -> None:
     """Ejecuta un colector contra la red y carga el resultado en DuckDB.
 
     Necesita salida a internet y las credenciales en `.env`. Escribe primero a la zona
     cruda (`data/raw/`) y sólo despues parsea, para que `make rebuild` pueda reconstruir.
+
+    Si la CMF no responde —corta al azar, esta medido— cae a Gael Cloud para el valor
+    VIGENTE de la UF y la UTM. Ese fallback rellena huecos y nunca pisa lo que ya existe.
     """
     import os
 
@@ -298,11 +368,21 @@ def ingest(
     from flujocero.quality import source_contract
     from flujocero.sources.base import Scope
 
-    if fuente != "cmf_indicadores":
-        typer.echo(f"colector '{fuente}' todavia no existe. Disponibles: cmf_indicadores")
+    conocidas = ("cmf_indicadores", "gael_indicadores")
+    if fuente not in conocidas:
+        typer.echo(f"colector '{fuente}' todavia no existe. Disponibles: {', '.join(conocidas)}")
         raise typer.Exit(2)
 
     load_dotenv(RAIZ / ".env")
+
+    if fuente == "gael_indicadores":
+        con = duckdb.connect(str(db.ruta_db()))
+        db.aplicar_esquema(con)
+        try:
+            ok = _ingerir_gael(con, datetime.now(UTC))
+        finally:
+            con.close()
+        raise typer.Exit(0 if ok else 1)
     from flujocero.sources.cmf_indicadores import ErrorDeFuente, cargar_en_duckdb, desde_entorno
 
     try:
@@ -327,8 +407,24 @@ def ingest(
     except ErrorDeFuente as exc:
         corrida.notas = f"recoleccion fallida: {exc}"[:400]
         bitacora.cerrar(con, corrida, filas_corrida_anterior=anterior_pre)
-        con.close()
         typer.echo(f"✗ {exc}")
+        # T-908 · la CMF corta al azar. Antes de rendirse, la segunda fuente. Se intenta
+        # con la conexion todavia abierta porque el fallback tambien escribe en DuckDB.
+        rescatado = False
+        try:
+            if not sin_fallback:
+                rescatado = _ingerir_gael(con, datetime.now(UTC))
+        finally:
+            # La conexion se cierra pase lo que pase: un fallback que revienta no puede
+            # dejar la base tomada, porque el siguiente comando no podria ni abrirla.
+            con.close()
+        if rescatado:
+            typer.echo(
+                "\n  El valor VIGENTE quedo cubierto por Gael, pero el periodo "
+                f"{desde}..{hasta} NO se descargo: para el historico hace falta la CMF."
+                "\n  Vuelve a correr este mismo comando en un rato."
+            )
+            raise typer.Exit(1) from exc
         typer.echo(
             "\n  'proxy' o '403'      -> el entorno no tiene salida hacia la CMF;"
             " corre esto desde una maquina con internet abierto."

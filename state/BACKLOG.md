@@ -300,13 +300,29 @@ nota: >
   pero esta fechado y es de este ciclo, a diferencia de la planilla.
 
 ## T-908 · Fallback a Gael Cloud para indicadores
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-010]
-prioridad: baja
+estado: hecha · modulo: src/flujocero/sources/gael_indicadores.py · agente: colector · fase: 1 · depende_de: [T-010]
+adr: docs/adr/006-gael-indicadores.md
 motivo: >
   La API de la CMF corta la conexion al azar (medido: la misma URL fallo y minutos despues
   devolvio 974 registros). Los reintentos con backoff lo absorben, pero un fallback a
   api.gael.cloud daria una segunda fuente. Limite duro de Gael: mas de 9 peticiones en
   10 segundos = IP baneada 1 hora.
+criterio_de_aceptacion:
+  - [x] Colector con el protocolo Source completo y ADR escrito
+  - [x] Cupo respetado del lado del CLIENTE, con margen (6 en 10 s, no 9) y un 429 que
+        NO se reintenta: reintentar un baneo lo prolonga
+  - [x] El respaldo NUNCA pisa una fila de la CMF (`DO NOTHING` vs el `DO UPDATE` de la
+        primaria). Una discrepancia entre fuentes se REPORTA, no se resuelve sola
+  - [x] `cli ingest` cae solo a Gael cuando la CMF no responde; `--sin-fallback` lo apaga
+  - [x] Registrado en `sources/registro.py` para que `make rebuild --from-raw` lo reconstruya
+  - [x] Test de que el orden de reconstruccion NO cambia el resultado
+pendiente: >
+  `forma_verificada=false`: el egreso hacia api.gael.cloud esta bloqueado en el entorno del
+  agente, asi que la forma de la respuesta viene de documentacion y no de una respuesta viva
+  (misma situacion que el ADR 001 con la CMF). Una corrida de
+  `cli ingest --fuente gael_indicadores` desde una maquina con internet deja el primer blob
+  real y de ahi sale la fixture. El parser esta escrito para FALLAR RUIDOSAMENTE si la forma
+  difiere, nunca para adivinar.
 
 ## T-909 · Reemplazar la fixture derivada de documentacion por la respuesta grabada
 estado: pendiente · agente: colector · fase: 1 · depende_de: [T-010]

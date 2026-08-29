@@ -207,9 +207,13 @@ dirección, naturaleza) pero **no el precio**, requiere login y no tiene API ✅
 CMF (oficial, apikey gratuita):
   https://api.cmfchile.cl/api-sbifv3/recursos_api/uf[/{AAAA}[/{MM}[/dias/{DD}]]]?apikey=&formato=json
   series: UF, UTM, IPC, TMC, dólar, euro   ·  docs: api.cmfchile.cl/documentacion/{UF|UTM|IPC|TMC}.html
-Gael Cloud (sin auth, fallback):
+Gael Cloud (sin auth, RESPALDO — implementado, ver docs/adr/006):
   https://api.gael.cloud/general/public/monedas[/{codigo}]
   ⚠️ LÍMITE DURO: >9 requests en 10 s ⇒ IP baneada 1 hora (HTTP 429)
+     El colector frena del lado del cliente con 6/10 s y NO reintenta un 429.
+  ⚠️ SOLO VALOR VIGENTE: el endpoint público no toma fechas. NO sirve para el backfill
+     histórico; para eso la única fuente sigue siendo la CMF.
+  ⚠️ Rellena huecos y nunca pisa una fila de la CMF. Si las dos discrepan, se reporta.
 mindicador.cl  → open source, pero se observó caído. NO lo uses como única fuente.
 Banco Central API BDE → si3.bcentral.cl/estadisticas/principal1/web_services/  (series IDs ❓)
 ```

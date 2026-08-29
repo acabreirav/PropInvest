@@ -84,9 +84,35 @@ def _portal_busqueda() -> EntradaRegistro:
     )
 
 
+def _gael_indicadores() -> EntradaRegistro:
+    from flujocero.sources.gael_indicadores import GaelIndicadores, cargar_en_duckdb
+
+    colector = GaelIndicadores(user_agent="rebuild")
+
+    def cargar(con: Any, filas: list[Any]) -> int:
+        """El registro cuenta filas; el cargador de Gael devuelve un reporte porque tiene
+        mas que contar. Se adapta aca en vez de empobrecer el cargador.
+
+        Nota sobre el orden de reconstruccion: Gael inserta solo si falta y la CMF hace
+        `DO UPDATE`, asi que **la fuente primaria gana venga en el orden que venga**. Eso
+        hace que `make rebuild` sea determinista sin tener que ordenar las fuentes.
+        """
+        rep = cargar_en_duckdb(con, filas)
+        return rep.insertadas
+
+    return EntradaRegistro(
+        source_id="gael_indicadores",
+        tabla="dim_tiempo_financiero",
+        parse=colector.parse,
+        cargar=cargar,
+        descripcion="UF y UTM desde Gael Cloud (respaldo de la CMF)",
+    )
+
+
 # La construcción es perezosa: importar el registro no debe arrastrar todos los colectores.
 _CONSTRUCTORES: dict[str, Callable[[], EntradaRegistro]] = {
     "cmf_indicadores": _cmf_indicadores,
+    "gael_indicadores": _gael_indicadores,
     "portal_legado_2026_05": _portal_legado,
     "portal_busqueda": _portal_busqueda,
     "cmf_tasas_hipotecarias": _cmf_tasas,
