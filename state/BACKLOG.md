@@ -481,3 +481,27 @@ medido: >
   (b) El portal acepta un cliente ANONIMO y honesto: HTTP 200 sin sesion, sin UA de navegador
       y sin banderas de evasion. Todo el disfraz del scraper anterior era innecesario para
       esta ruta, y arriesgaba la cuenta del usuario a cambio de nada.
+
+## T-922 · El catalizador de Metro esta doble-contado con la microzona
+estado: pendiente · agente: geo-microzonas · fase: 1 · depende_de: [T-023, T-014]
+origen: "observacion del usuario, 29-ago-2026"
+hallazgo: >
+  La distancia al Metro es escalar, pero el valor es direccional. Ejemplo del usuario:
+  desde Metro Chile Espana, dos cuadras al este esta Plaza Ñuñoa (caro) y dos al oeste
+  Exequiel Fernandez (mas barato). Misma distancia, mercados distintos.
+  Pero la microzona YA es esa variable bidimensional, y mejor que (distancia, rumbo): un
+  poligono contiene lo que un vector no. Medido en los datos propios: Metro Irarrazaval
+  0,372 UF/m2 contra Estadio Nacional 0,326 — 14% de brecha, misma comuna, ambas junto al Metro.
+  => Para una estacion QUE YA OPERA, `catalizador` (10% del score) cuenta dos veces lo mismo:
+  su valor ya esta dentro de la mediana del barrio. Y premia a un barrio caro por ser caro.
+criterio_de_aceptacion:
+  - [ ] Medir con el modelo hedonico (efectos fijos por microzona) si la distancia a Metro
+        explica algo UNA VEZ controlada la microzona
+  - [ ] Si no explica: el peso del catalizador se redistribuye, con la evidencia escrita
+  - [ ] Si explica: separar `metro_operativo` (ya en el precio) de `metro_en_construccion`
+        (lo que todavia NO esta en el precio, que es donde vive el valor real)
+  - [ ] Evaluar distancias a POLOS (Plaza Ñuñoa, parques, universidades) en vez de rumbo:
+        el angulo no tiene relacion monotona con el precio y exigiria datos que no hay
+nota: >
+  El codigo heredado (`investop/src/modelo/regresion.py`) ya trae el OLS hedonico con
+  agrupacion de microzonas: es el instrumento para esta pregunta, no hay que inventarlo.
