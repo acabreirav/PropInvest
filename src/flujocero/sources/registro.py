@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from flujocero.sources.base import RawDoc
@@ -55,9 +56,25 @@ def _cmf_tasas() -> EntradaRegistro:
     )
 
 
+def _portal_legado() -> EntradaRegistro:
+    from flujocero.sources.portal_legado import SOURCE_ID, PortalLegado, cargar_en_duckdb
+
+    # Reconstruir no vuelve a leer la carpeta del usuario: los documentos ya estan en la zona
+    # cruda, anonimizados. `origen` apunta a un directorio inexistente a proposito.
+    colector = PortalLegado(origen=Path("/reconstruir-no-lee-el-origen"))
+    return EntradaRegistro(
+        source_id=SOURCE_ID,
+        tabla="fact_unidad_venta + fact_arriendo_comp",
+        parse=colector.parse,
+        cargar=cargar_en_duckdb,
+        descripcion="foto de Portal Inmobiliario de mayo-2026 (legado del usuario)",
+    )
+
+
 # La construcción es perezosa: importar el registro no debe arrastrar todos los colectores.
 _CONSTRUCTORES: dict[str, Callable[[], EntradaRegistro]] = {
     "cmf_indicadores": _cmf_indicadores,
+    "portal_legado_2026_05": _portal_legado,
     "cmf_tasas_hipotecarias": _cmf_tasas,
 }
 

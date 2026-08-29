@@ -85,12 +85,22 @@ class Hallazgo:
 
 # §3.4: cero datos personales. El check corre sobre VALORES, no sobre nombres de columna:
 # un correo en una columna llamada `notas` es exactamente igual de ilegal.
+# Los patrones llevan `(?<!\d)` y `(?!\d)` a proposito: sin esos anclajes, cualquier corrida
+# larga de digitos dispara el gate desde adentro. Medido contra el corpus real: el ID de
+# MercadoLibre `MLC-3939132164` contiene `939132164`, que calza con el formato de celular
+# chileno, y hacia fallar el gate en 6.443 valores que no tenian un solo dato personal.
+# Un gate que grita en falso se termina desactivando, y ese es el peor final posible para
+# el gate que implementa la Ley 21.719.
 PATRONES_PERSONALES: dict[str, re.Pattern[str]] = {
     "email": re.compile(r"[\w.+-]+@[\w-]+\.[\w.]{2,}"),
-    # Celular chileno: +56 9 XXXX XXXX, con o sin separadores.
-    "telefono_cl": re.compile(r"(?:\+?56[\s.-]?)?9[\s.-]?\d{4}[\s.-]?\d{4}\b"),
-    # RUT de persona natural con dígito verificador.
-    "rut": re.compile(r"\b\d{1,2}\.?\d{3}\.?\d{3}[-‐]?[\dkK]\b"),
+    # Celular chileno: +56 9 XXXX XXXX, con o sin separadores, pero NO incrustado en un ID.
+    # `(?<!MLC-)` porque un ID de MercadoLibre de nueve digitos que empieza en 9
+    # (`MLC-998686353`) es indistinguible de un celular mirando solo los digitos. Lo que
+    # los separa es el contexto, y el contexto esta a cuatro caracteres de distancia.
+    "telefono_cl": re.compile(r"(?<!\d)(?<!MLC-)(?:\+?56[\s.-]?)?9[\s.-]?\d{4}[\s.-]?\d{4}(?!\d)"),
+    # RUT de persona natural: exige el guion con digito verificador. Sin esa marca, "40804000"
+    # es un monto en pesos, no un RUT, y tratarlo como RUT bloquearia cualquier cifra en texto.
+    "rut": re.compile(r"(?<!\d)\d{1,2}\.?\d{3}\.?\d{3}[-‐][\dkK](?![\w-])"),
 }
 
 # El nombre de la inmobiliaria (persona jurídica) sí se persiste (§3.4). Un RUT de empresa
@@ -180,17 +190,31 @@ def cobertura_precio_y_microzona(filas: list[dict[str, Any]]) -> Hallazgo:
 # --------------------------------------------------------------------------- frescura
 
 
-def frescura(filas: list[dict[str, Any]], ahora: datetime) -> Hallazgo:
-    """§7.3 · ninguna fila del ranking con `fetched_at` de más de 21 días.
+def frescura(
+    filas: list[dict[str, Any]],
+    ahora: datetime,
+    fuentes_historicas: frozenset[str] = frozenset(),
+) -> Hallazgo:
+    """§7.3 · ninguna fila **del ranking** con `fetched_at` de más de 21 días.
 
     `ahora` entra por argumento: nada de fechas del sistema dentro de la lógica (§11).
+
+    `fuentes_historicas` son fuentes que se ingieren sabiendo que están viejas y que **no
+    alimentan el ranking**: la foto de Portal Inmobiliario de mayo-2026, por ejemplo, sirve
+    de diccionario de microzonas y de línea base para medir qué bajó de precio. Marcarlas no
+    relaja el gate: el gate protege el ranking, y una fila que no entra al ranking no es lo
+    que este check vigila. Lo que sí sería relajarlo es subir los 21 días para que quepan.
     """
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS)
-    viejas = [
-        f"{f.get('unidad_key', i)}: {f['fetched_at']:%Y-%m-%d}"
-        for i, f in enumerate(filas)
-        if isinstance(f.get("fetched_at"), datetime) and f["fetched_at"] < limite
-    ]
+    exentas = 0
+    viejas: list[str] = []
+    for i, f in enumerate(filas):
+        if not isinstance(f.get("fetched_at"), datetime) or f["fetched_at"] >= limite:
+            continue
+        if str(f.get("source_id", "")) in fuentes_historicas:
+            exentas += 1
+            continue
+        viejas.append(f"{f.get('unidad_key', i)}: {f['fetched_at']:%Y-%m-%d}")
     if viejas:
         return Hallazgo(
             "frescura",
@@ -199,7 +223,10 @@ def frescura(filas: list[dict[str, Any]], ahora: datetime) -> Hallazgo:
             len(viejas),
             viejas,
         )
-    return Hallazgo("frescura", Severidad.OK, f"todas dentro de {FRESCURA_MAX_DIAS} días")
+    nota = f"todas dentro de {FRESCURA_MAX_DIAS} días"
+    if exentas:
+        nota += f" ({exentas} filas de fuentes históricas, fuera del ranking por diseño)"
+    return Hallazgo("frescura", Severidad.OK, nota)
 
 
 # --------------------------------------------------------------------------- outliers
@@ -257,10 +284,19 @@ def marcar_outliers(filas: list[dict[str, Any]]) -> Hallazgo:
 
 
 def duplicados_de_venta(filas: list[dict[str, Any]]) -> Hallazgo:
-    """§7.3 · dos unidades con el mismo `(proyecto_id, numero_unidad)` colapsan."""
+    """§7.3 · dos unidades con el mismo `(proyecto_id, numero_unidad)` colapsan.
+
+    Solo cuentan las **versiones vigentes** (`valid_to IS NULL`). El §11 manda SCD tipo 2:
+    un colector nunca borra, escribe una versión nueva y cierra la anterior, justamente para
+    poder responder *"¿cuándo bajó el precio de esta unidad?"* — que es señal de compra.
+    Tratar dos versiones de la misma unidad como duplicado convertiría en error el historial
+    que el contrato pide guardar.
+    """
     vistos: dict[tuple[str, str], int] = {}
     choques: list[str] = []
     for i, f in enumerate(filas):
+        if f.get("valid_to") is not None:
+            continue  # version cerrada: es historia, no un duplicado
         clave = (str(f.get("proyecto_id", "")), str(f.get("numero_unidad", "")))
         if not all(clave):
             continue
@@ -432,13 +468,14 @@ def correr(
     ahora: datetime,
     mediana_uf_m2_por_comuna: dict[str, Decimal] | None = None,
     conteo_comparables: dict[tuple[str, str], int] | None = None,
+    fuentes_historicas: frozenset[str] = frozenset(),
 ) -> ReporteCalidad:
     """Corre todos los checks del §7.3 sobre un lote ya cargado."""
     rep = ReporteCalidad()
     rep.hallazgos.append(buscar_datos_personales(unidades + comparables))
     rep.hallazgos.append(procedencia_completa(unidades))
     rep.hallazgos.append(cobertura_precio_y_microzona(unidades))
-    rep.hallazgos.append(frescura(unidades, ahora))
+    rep.hallazgos.append(frescura(unidades, ahora, fuentes_historicas))
     rep.hallazgos.append(marcar_outliers(unidades))
     rep.hallazgos.append(duplicados_de_venta(unidades))
     rep.hallazgos.append(duplicados_de_arriendo(comparables))

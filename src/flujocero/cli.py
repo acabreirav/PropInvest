@@ -490,6 +490,66 @@ def medir_meli() -> None:
 
 
 @app.command()
+def ingerir_legado(
+    origen: str = typer.Option(
+        ...,
+        help="carpeta con los HTML del proyecto anterior (data/raw/portal_inmobiliario/listings)",
+    ),
+    limite: int = typer.Option(0, help="0 = todos. Util para probar con pocos primero."),
+) -> None:
+    """T-918 · ingiere la foto de Portal Inmobiliario de mayo-2026 (docs/adr/004-legado-investop.md).
+
+    No toca la red. Copia a la zona cruda **anonimizando primero** (§3.4), declara
+    `fetched_at` de mayo —no de hoy— y carga microzonas, ventas y comparables de arriendo.
+
+    Esos datos NO alimentan el ranking: el gate de frescura del §7.3 los excluye por tener
+    mas de 21 dias, que es lo correcto. Sirven de diccionario de microzonas, de fixtures y de
+    linea base para medir que bajo de precio en cuatro meses (T-919).
+    """
+    from pathlib import Path
+
+    import duckdb
+
+    from flujocero.quality import bitacora
+    from flujocero.sources.base import leer_crudo
+    from flujocero.sources.portal_legado import PortalLegado, cargar_en_duckdb
+
+    carpeta = Path(origen).expanduser()
+    if not carpeta.is_dir():
+        typer.echo(f"✗ no existe la carpeta {carpeta}")
+        raise typer.Exit(2)
+
+    col = PortalLegado(origen=carpeta)
+    typer.echo(f"  {len(col.archivos())} archivos en el origen")
+
+    corrida = bitacora.abrir(col.id)
+    docs = col.collect(limite=limite or None)
+    corrida.docs_recolectados = len(docs)
+    typer.echo(f"✓ {len(docs)} documentos a la zona cruda, anonimizados")
+
+    avisos = [a for d in docs for a in col.parse(leer_crudo(d.ruta))]
+    typer.echo(f"✓ {len(avisos)} avisos parseados ({len(avisos) / max(len(docs), 1):.0%})")
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        corrida.filas_insertadas = cargar_en_duckdb(con, avisos)
+        rep = col.selftest(muestra=min(600, len(col.archivos())))
+        corrida.selftest_ok = rep.ok
+        corrida.notas = rep.detalle.get("cobertura", "")
+        bitacora.cerrar(con, corrida)
+        typer.echo(f"✓ {corrida.filas_insertadas} filas cargadas")
+        typer.echo(f"{'✓' if rep.ok else '✗'} selftest: {rep.detalle.get('cobertura')}")
+        for tabla in ("dim_comuna", "dim_microzona", "fact_unidad_venta", "fact_arriendo_comp"):
+            n = con.execute(f"SELECT count(*) FROM {tabla}").fetchone()[0]
+            typer.echo(f"    {tabla:22s} {n:6d}")
+    finally:
+        con.close()
+    typer.echo(
+        "\n  Recordá: son datos de mayo-2026. El gate de frescura los deja fuera del ranking."
+    )
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []
@@ -538,7 +598,13 @@ def gates() -> None:
         con.close()
 
     if unidades or comps:
-        rep = qc.correr(unidades, comps, datetime.now(UTC))
+        # Las fuentes marcadas `historica: true` en fuentes.yml se ingieren sabiendo que
+        # estan viejas y NO alimentan el ranking. El gate de frescura las exime; no las
+        # ignora: las cuenta aparte y lo dice.
+        historicas = frozenset(
+            f["id"] for f in cargar("fuentes").crudo("fuentes") if f.get("historica")
+        )
+        rep = qc.correr(unidades, comps, datetime.now(UTC), fuentes_historicas=historicas)
         typer.echo(str(rep))
         if rep.falla:
             fallos.append("los gates de calidad de datos del §7.3 estan en rojo")

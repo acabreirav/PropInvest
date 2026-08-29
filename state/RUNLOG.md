@@ -720,3 +720,42 @@ banos y comuna; 99,3% microzona; 82% antiguedad; 77% gastos comunes.
 (microzona, dormitorios): 93 de 256 (36%), cubriendo 2.136 unidades. Piso real donde hoy hay cero.
 
 **Abre** T-917, T-918, T-919, T-920.
+
+---
+
+## 2026-08-29 · T-918 · La foto de mayo entra a la base
+
+**Que se hizo.** Colector `portal_legado_2026_05`: ingiere los 6.229 HTML del proyecto
+anterior a la zona cruda, anonimizando antes de escribir, y carga microzonas, ventas y
+comparables. Comando `cli ingerir-legado`. `rebuild --from-raw` lo reconstruye entero.
+
+**Resultado.** 6.180 documentos a la zona cruda (745 MB comprimidos) · 6.038 parseados
+(97,7%) · **2.701 unidades de venta, 2.850 comparables de arriendo, 84 microzonas, 7 comunas**
+· procedencia 100% en ambas tablas · 264 tests verdes · `make gates` VERDE.
+
+**Cuatro bugs que aparecieron y que valen mas que el colector:**
+
+1. **`a_decimal("35 - 61 m2")` devolvia 3.561 m2.** Los avisos de proyecto publican rangos, y
+   la funcion borraba lo que no fuera digito y pegaba lo que quedaba. Un depto de 3.561 m2 no
+   lo pilla nadie mirando un ranking, y contamina la mediana de su microzona para siempre.
+   Es la misma familia del error de mil veces del colector CMF. Ahora un rango es ND.
+2. **El gate de datos personales daba 6.443 falsos positivos.** `MLC-3939132164` contiene
+   `939132164`, que calza con el formato de celular chileno. El patron no tenia anclaje por
+   la izquierda. Un gate que grita en falso se termina desactivando, y ese es el peor final
+   posible para el gate que implementa la Ley 21.719.
+3. **Un dato personal REAL que el gate si encontro:** un vendedor escribio su celular en el
+   TITULO del aviso, y el titulo va en la URL, y la URL es una de las seis columnas de
+   procedencia. Anonimizar el HTML no alcanzaba. Ahora la URL se recorta a su forma canonica
+   por ID cuando trae contacto.
+4. **El mismo aviso capturado el 4 y el 5 de mayo se contaba como duplicado.** No lo es: es
+   SCD tipo 2, que el §11 pide justamente para responder "cuando bajo el precio". El cargador
+   ahora abre version nueva solo si el precio cambio, cierra la anterior, y no deja que una
+   captura mas vieja pise el presente.
+
+**Decision de diseno que quedo escrita.** El §3.6 (zona cruda inmutable) y el §3.4 (cero datos
+personales) chocan. Gana el §3.4: es obligacion legal, y lo que se borra son campos que el
+parser nunca lee, asi que la reconstruccion queda intacta.
+
+**Lo que esto desbloquea.** T-013 (microzonas) ya no depende de la API caida de MELI: hay 84
+barrios reales con el nombre que usa el portal. T-919 tiene su linea base de precios.
+`tests/integration/` dejo de estar vacio con 6 fichas reales y 20 tests.

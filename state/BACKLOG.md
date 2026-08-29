@@ -400,16 +400,26 @@ hallazgo: >
   prohibe.
 
 ## T-918 · Ingesta del legado: HTML a la zona cruda con procedencia
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-916]
+estado: hecha · agente: colector · fase: 1 · depende_de: [T-916]
 criterio_de_aceptacion:
-  - [ ] Los 6.180 HTML entran a `data/raw/` con `.meta.json` y las seis columnas,
-        declarando honestamente `fetched_at` de mayo-2026 (NO se disfrazan de frescos)
-  - [ ] Fuente propia `portal_legado_2026_05`, marcada como historica y **excluida del
-        ranking por el gate de frescura de 21 dias** (§7.3). Sirve de base, no de dato vivo
-  - [ ] Purga de datos personales ANTES de persistir: 6.306 de 6.229 archivos mencionan
-        contacto y 503 tienen patrones de telefono o mail (§3.4)
-  - [ ] Fixtures para `tests/integration/`, que hoy esta vacio
-  - [ ] Diccionario de 81 microzonas reales -> alimenta T-013 sin tocar la API de MELI
+  - [x] 6.180 HTML en `data/raw/portal_legado_2026_05/` con `.meta.json` y las seis columnas.
+        `fetched_at` sale del NOMBRE del archivo (mayo-2026), no del reloj de hoy.
+  - [x] Fuente `portal_legado_2026_05` con `historica: true` en fuentes.yml. El gate de
+        frescura la exime y lo REPORTA; no la ignora. Exime la fuente declarada, no la regla.
+  - [x] Anonimizacion ANTES de escribir a la zona cruda. Cero fugas sobre 600 fichas.
+  - [x] 6 fixtures reales en `tests/fixtures/portal_legado/` (712 KB) y 20 tests de
+        integracion. `tests/integration/` ya no esta vacio.
+  - [x] 84 microzonas y 7 comunas en `dim_microzona`/`dim_comuna` -> desbloquea T-013
+  - [x] 2.701 unidades de venta y 2.850 comparables de arriendo, procedencia 100%
+  - [x] `rebuild --from-raw` reconstruye las 5.643 filas desde la zona cruda (§3.6 probado)
+bugs_encontrados_y_corregidos:
+  - a_decimal convertia "35 - 61 m2" en 3.561 m2 (rangos de proyecto). Ahora un rango es ND.
+  - El gate de datos personales daba 6.443 falsos positivos: `MLC-3939132164` contiene
+    `939132164`, que calza con celular chileno. Patrones anclados.
+  - Un vendedor puso su celular en el TITULO del aviso y quedaba en `source_url`, que es
+    columna de procedencia. Ahora la URL tambien se sanea.
+  - El mismo aviso en dos fechas se contaba como duplicado. Es SCD tipo 2: version nueva
+    solo si el precio cambio, y la vieja se cierra.
 
 ## T-919 · Delta de precios: cuatro meses de senal de compra
 estado: pendiente · agente: colector · fase: 1 · depende_de: [T-918, T-920]

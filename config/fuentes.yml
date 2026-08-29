@@ -83,6 +83,27 @@ fuentes:
     adr: "docs/adr/003-meli.md"
     razon_deshabilitada: "misma que meli_venta: HTTP 403 en /sites/MLC/search"
 
+  - id: portal_legado_2026_05
+    capa: 3
+    legal_tier: html_prohibido      # fichas /MLC-, no permitidas por robots
+    aprobacion_humana: "D-016"      # §3.5 exige aprobacion explicita para este tier
+    enabled: true
+    historica: true                 # <- NO alimenta el ranking: ver razon
+    base: "https://www.portalinmobiliario.com"
+    modulo: "src/flujocero/sources/portal_legado.py"
+    adr: "docs/adr/004-legado-investop.md"
+    parser_version: "portal_legado/1.0.0"
+    produce: "fact_unidad_venta + fact_arriendo_comp + dim_microzona"
+    ventana: "2026-04-30 a 2026-05-05"
+    razon_historica: >
+      Es la foto que el usuario scrapeo con su proyecto anterior, ingerida con su
+      fetched_at real de mayo-2026. El gate de frescura del §7.3 (21 dias) la deja fuera
+      del ranking, y eso es lo correcto: su valor es el diccionario de 81 microzonas
+      reales, las fixtures de tests/integration y la linea base contra la cual medir que
+      bajo de precio en cuatro meses (T-919). Un aviso desaparece cuando se vende, asi que
+      esta foto no se puede volver a tomar.
+    selftest: "verde — 97% parseado, m2 99,4% sobre avisos de unidad, cero datos personales"
+
   - id: assetplan_arriendo
     capa: 4
     legal_tier: html_permitido

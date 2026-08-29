@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS fact_unidad_venta (
   dormitorios     INTEGER, banos INTEGER,
   m2_utiles       DOUBLE, m2_terraza DOUBLE, m2_totales DOUBLE,
   piso            INTEGER, orientacion VARCHAR,
+  -- D-015: el stock usado compite, pero no hereda el subsidio a la tasa. NULL = no se sabe,
+  -- y no se rellena: el §3.2 prohibe imputar. En Portal Inmobiliario viene del breadcrumb
+  -- ("Propiedades usadas" vs "Proyectos"), verificado en el 91% de una muestra de 400.
+  es_vivienda_nueva BOOLEAN,
+  antiguedad_anios  INTEGER,              -- desde la recepcion. Decide la ventana DFL2 (T-911)
   precio_uf       DECIMAL(12,2),
   precio_estacionamiento_uf DECIMAL(12,2),
   precio_bodega_uf DECIMAL(12,2),
@@ -171,3 +176,9 @@ CREATE TABLE IF NOT EXISTS run_log (
   docs_recolectados INTEGER, filas_insertadas INTEGER, filas_actualizadas INTEGER,
   selftest_ok BOOLEAN, delta_vs_corrida_anterior DOUBLE, notas VARCHAR
 );
+
+-- Migraciones idempotentes. `CREATE TABLE IF NOT EXISTS` no agrega columnas a una tabla que
+-- ya existe, asi que una base creada antes de D-015 se quedaba sin estas dos y fallaba al
+-- insertar. Correr el esquema completo tiene que dejar cualquier base al dia, no solo una nueva.
+ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS es_vivienda_nueva BOOLEAN;
+ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS antiguedad_anios  INTEGER;

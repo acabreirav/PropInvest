@@ -255,3 +255,84 @@ def test_diez_unidades_identicas_son_un_duplicado_no_un_lote_valido() -> None:
     rep = q.correr([unidad()] * 10, [comp()], AHORA)
     assert rep.falla
     assert any(h.check == "duplicados_venta" for h in rep.hallazgos if not h.ok)
+
+
+# ------------------------------------------------- regresiones halladas con el corpus real
+
+
+def test_un_id_de_mercadolibre_no_es_un_telefono() -> None:
+    """`MLC-998686353` contiene `998686353`, que calza con el formato de celular chileno.
+    Sin anclar el patron, el gate reportaba 6.443 "datos personales" que eran IDs, URLs y
+    rutas de blob. Un gate que grita en falso se termina desactivando, y ese es el peor
+    final posible para el gate que implementa la Ley 21.719."""
+    filas = [
+        {
+            "unidad_key": "MLC-998686353",
+            "source_url": "https://www.portalinmobiliario.com/MLC-3939132164-depto-_JM",
+            "raw_blob_path": "data/raw/x/2026/05/04/MLC-998686353_20260504.json.gz",
+        }
+    ]
+    h = q.buscar_datos_personales(filas)
+    assert h.severidad == q.Severidad.OK, h.detalle
+
+
+def test_un_monto_en_pesos_no_es_un_rut() -> None:
+    """`40.804.000` calzaba con el patron de RUT sin digito verificador."""
+    assert q.buscar_datos_personales([{"nota": "avaluo 40.804.000"}]).severidad == q.Severidad.OK
+
+
+def test_un_telefono_de_verdad_sigue_deteniendo_el_pipeline() -> None:
+    """El contrapeso de los dos anteriores: afinar el patron no puede volverlo ciego."""
+    for valor in (
+        "llamar al +56 9 8370 2878",
+        "https://www.portalinmobiliario.com/MLC-387-arriendo-metro-992401813-dueno-_JM",
+        "escribir a corredor@inmobiliaria.cl",
+        "RUT 12.345.678-9",
+    ):
+        h = q.buscar_datos_personales([{"campo": valor}])
+        assert h.severidad == q.Severidad.FALLA, valor
+
+
+def test_una_fuente_historica_no_reprueba_el_gate_de_frescura() -> None:
+    """La foto de mayo-2026 se ingiere sabiendo que esta vieja y NO alimenta el ranking.
+    El gate protege el ranking; una fila que no entra al ranking no es lo que vigila."""
+    vieja = {
+        "unidad_key": "U1",
+        "source_id": "portal_legado_2026_05",
+        "fetched_at": datetime(2026, 5, 4, tzinfo=UTC),
+    }
+    ahora = datetime(2026, 8, 29, tzinfo=UTC)
+    assert q.frescura([vieja], ahora).severidad == q.Severidad.FALLA
+    exento = q.frescura([vieja], ahora, frozenset({"portal_legado_2026_05"}))
+    assert exento.severidad == q.Severidad.OK
+    assert "históricas" in exento.mensaje
+
+
+def test_eximir_una_fuente_no_exime_a_las_demas() -> None:
+    """Lo que se exime es una fuente declarada, no la regla."""
+    filas = [
+        {
+            "unidad_key": "viejo",
+            "source_id": "otra_fuente",
+            "fetched_at": datetime(2026, 5, 4, tzinfo=UTC),
+        },
+    ]
+    ahora = datetime(2026, 8, 29, tzinfo=UTC)
+    h = q.frescura(filas, ahora, frozenset({"portal_legado_2026_05"}))
+    assert h.severidad == q.Severidad.FALLA
+
+
+def test_dos_versiones_de_la_misma_unidad_no_son_un_duplicado() -> None:
+    """§11 manda SCD tipo 2 para poder responder "¿cuando bajo el precio?". Tratar el
+    historial como duplicado convertiria en error justo lo que el contrato pide guardar."""
+    filas = [
+        {"proyecto_id": "P", "numero_unidad": "101", "valid_to": datetime(2026, 5, 5, tzinfo=UTC)},
+        {"proyecto_id": "P", "numero_unidad": "101", "valid_to": None},
+    ]
+    assert q.duplicados_de_venta(filas).severidad == q.Severidad.OK
+
+    dos_vigentes = [
+        {"proyecto_id": "P", "numero_unidad": "101", "valid_to": None},
+        {"proyecto_id": "P", "numero_unidad": "101", "valid_to": None},
+    ]
+    assert q.duplicados_de_venta(dos_vigentes).severidad == q.Severidad.FALLA
