@@ -24,8 +24,14 @@ class Unidad:
     microzona_id: str
     arriendo_mensual_uf: Decimal
     arriendo_n_comparables: int
-    acogida_dfl2: bool
+    # TRI-ESTADO, no booleano. Medido sobre 5.870 avisos reales: **16 mencionan DFL2, el
+    # 0,3%** — y no porque no lo sean, sino porque el aviso no lo dice. Con un booleano,
+    # `exigir_dfl2` vaciaba el ranking entero. El §3.2 es explicito: un ND tratado como
+    # `False` es imputar en silencio. `None` = por verificar en la escritura o el certificado
+    # municipal, que es donde el §2.5 dice que se verifica de verdad.
+    acogida_dfl2: bool | None
     es_vivienda_nueva: bool = True
+    antiguedad_anios: int | None = None
     evidence_precio: str = "V"
     microzona_saturada: bool = False
     riesgo_microzona: Decimal = D("0.5")  # 0 = sin riesgo, 1 = máximo
@@ -87,6 +93,9 @@ class Evaluacion:
     motivo_sin_subsidio: str | None = None
     fogaes_aplicado: bool = False
     motivo_sin_fogaes: str | None = None
+    dfl2_aplicado: bool = False
+    motivo_sin_dfl2: str | None = None
+    ventana_contribuciones_abierta: bool = True
     pie_minimo_exigido: Decimal = D(0)
     pie_efectivo: Decimal = D(0)
     excluido: bool = False
@@ -173,6 +182,46 @@ def fogaes_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[bool, str | No
     return True, None
 
 
+def dfl2_aplicable(u: Unidad, e: Escenario) -> tuple[bool, str | None]:
+    """¿Se le acreditan a esta unidad los beneficios tributarios del DFL2?
+
+    Solo si el escenario los pide **y** la unidad esta confirmada. Ante un `None` se evalua
+    SIN el beneficio: nunca se muestra una oportunidad mejor de lo que se puede probar. Si
+    despues resulta ser DFL2, los numeros solo mejoran — la asimetria va en esa direccion a
+    proposito.
+    """
+    if not e.dfl2:
+        return False, None
+    if u.acogida_dfl2 is None:
+        return False, "DFL2 sin confirmar: se evalua sin el beneficio hasta ver la escritura"
+    if not u.acogida_dfl2:
+        return False, "no acogida a DFL2"
+    return True, None
+
+
+def ventana_dfl2_abierta(u: Unidad, p: Config) -> bool:
+    """¿Sigue vigente la rebaja de contribuciones? (T-911)
+
+    No es perpetua: corre desde la recepcion municipal y dura mas mientras mas chica sea la
+    vivienda. Un usado de 15 anos puede tenerla consumida, y el motor la aplicaba a todos —
+    un supuesto optimista justo sobre el beneficio que el §2.5 declara de mayor valor presente.
+
+    Sin dato de antiguedad se asume ABIERTA, y se dice por que: la obra nueva es el caso donde
+    falta el dato y es tambien donde la ventana esta recien empezando. Para el stock usado el
+    portal declara antiguedad en el 82% de los avisos.
+    """
+    if u.antiguedad_anios is None:
+        return True
+    v = p.crudo("gastos_operativos.ventana_dfl2_contribuciones_anios")
+    if u.m2_utiles <= D(70):
+        anios = v["hasta_70_m2"]["v"]
+    elif u.m2_utiles <= D(100):
+        anios = v["hasta_100_m2"]["v"]
+    else:
+        anios = v["hasta_140_m2"]["v"]
+    return u.antiguedad_anios < int(anios)
+
+
 def pie_minimo_exigido(con_fogaes: bool, p: Config) -> Decimal:
     """El pie que el banco exige, que no es el mismo que el inversionista quiere poner."""
     ltv = "financiamiento.ltv_con_fogaes" if con_fogaes else "financiamiento.ltv_sin_fogaes"
@@ -197,7 +246,9 @@ def evaluar_exclusiones(u: Unidad, params: Config, inv: Config) -> str | None:
         return f"microzona {u.microzona_id} marcada como saturada"
     if ex.get("excluir_precio_estimado") and u.evidence_precio not in ("V", "D"):
         return f"precio con evidencia `{u.evidence_precio}`: no se rankea un precio estimado"
-    if inv.crudo("estrategia_dfl2").get("exigir_dfl2") and not u.acogida_dfl2:
+    # Solo excluye lo que se sabe que NO es DFL2. Un `None` compite y se marca: el aviso
+    # callarselo no es evidencia de que no lo sea.
+    if inv.crudo("estrategia_dfl2").get("exigir_dfl2") and u.acogida_dfl2 is False:
         return "no acogida a DFL2, y el perfil exige DFL2"
     return None
 
@@ -235,11 +286,18 @@ def gastos_comunes_mensuales_clp(u: Unidad, p: Config) -> Decimal:
 
 
 def construir_opex(u: Unidad, e: Escenario, egi_uf: Decimal, p: Config) -> f.Opex:
-    """Gastos operativos anuales. Los SEGUROS no van acá: el banco los cobra con el dividendo."""
+    """Gastos operativos anuales. Los SEGUROS no van acá: el banco los cobra con el dividendo.
+
+    Los dos beneficios del DFL2 se aplican por separado y con condiciones distintas:
+    la **exención de renta** vale mientras la vivienda esté acogida, y la **rebaja de
+    contribuciones** solo mientras su ventana siga abierta (T-911). Tratarlos como uno solo
+    regalaba la rebaja a un usado de veinte años.
+    """
     uf = p.d("macro.valor_uf_clp")
-    contrib = contribuciones_anuales_uf(u.precio_uf, e.dfl2, p)
+    dfl2, _ = dfl2_aplicable(u, e)
+    contrib = contribuciones_anuales_uf(u.precio_uf, dfl2 and ventana_dfl2_abierta(u, p), p)
     renta = D(0)
-    if not e.dfl2:
+    if not dfl2:
         base = max(D(0), u.arriendo_mensual_uf * D(12) - contrib)
         renta = base * p.d("tributacion.igc_tasa_marginal_default")
     return f.Opex(
@@ -284,6 +342,8 @@ def evaluar(u: Unidad, e: Escenario, p: Config, inv: Config) -> Evaluacion:
 
     ev.tasa_aplicada, ev.subsidio_aplicado, ev.motivo_sin_subsidio = tasa_aplicable(u, e, p)
     ev.fogaes_aplicado, ev.motivo_sin_fogaes = fogaes_aplicable(u, e, p)
+    ev.dfl2_aplicado, ev.motivo_sin_dfl2 = dfl2_aplicable(u, e)
+    ev.ventana_contribuciones_abierta = ventana_dfl2_abierta(u, p)
     ev.pie_minimo_exigido = pie_minimo_exigido(ev.fogaes_aplicado, p)
 
     # El pie del escenario es lo que el inversionista QUIERE poner; el minimo exigido es lo

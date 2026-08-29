@@ -154,6 +154,15 @@ gastos_operativos:
   contribuciones_avaluo_corte_clp: {v: 220398431, evidence: V}
   avaluo_exento_clp: {v: 61711570, evidence: C, nota: "SII 01.07.2026; otra fuente da 58.040.000"}
   ratio_avaluo_fiscal_sobre_mercado: {v: 0.55, evidence: E, rango: [0.40, 0.70], nota: "HACER SENSIBILIDAD"}
+  # T-911: la rebaja de contribuciones del DFL2 NO es perpetua. Corre desde la recepcion
+  # municipal y dura segun la superficie: mientras mas chica la vivienda, mas larga la
+  # franquicia. Un usado de 15 anos puede tenerla consumida, y el modelo la aplicaba a todos.
+  # `C` porque los tramos vienen de la practica del rubro y no de una fuente primaria citada:
+  # hay que verificarlos en el DFL2 art. 14 antes de subirlos a `V`. Ver T-911.
+  ventana_dfl2_contribuciones_anios:
+    hasta_70_m2:  {v: 20, evidence: C}
+    hasta_100_m2: {v: 15, evidence: C}
+    hasta_140_m2: {v: 10, evidence: C}
   rebaja_dfl2_contribuciones: {v: 0.50, evidence: V}
   rebaja_dfl2_anios: {hasta_70m2: 20, hasta_100m2: 15, hasta_140m2: 10}
   reavaluo_no_agricola_proximo: "2027-01-01"

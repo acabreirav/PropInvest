@@ -14,6 +14,7 @@ from flujocero.finance.modelo import (
     evaluar,
     gastos_de_cierre_uf,
     tasa_aplicable,
+    ventana_dfl2_abierta,
 )
 
 getcontext().prec = 34
@@ -344,3 +345,73 @@ def test_sobre_el_tope_el_subsidio_se_niega_aunque_el_ranking_lo_admitiera(cfg) 
     )
     assert not aplicado and "tope" in motivo
     assert tasa == D("0.0429")
+
+
+# ------------------------------------------------ DFL2 tri-estado y ventana (T-917, T-911)
+
+
+def test_un_DFL2_sin_confirmar_compite_pero_no_cobra_el_beneficio(cfg) -> None:
+    """T-917. Medido sobre 5.870 avisos reales: **16 mencionan DFL2, el 0,3%** — y no porque
+    no lo sean, sino porque el aviso no lo dice. Con un booleano, `exigir_dfl2` vaciaba el
+    ranking entero. Un ND tratado como False es imputar en silencio (§3.2).
+
+    La asimetria es deliberada: compite, pero se evalua SIN el beneficio. Nunca se muestra una
+    oportunidad mejor de lo que se puede probar; si despues resulta DFL2, solo mejora.
+    """
+    p, inv = cfg
+    ev = evaluar(unidad(acogida_dfl2=None), escenario(dfl2=True), p, inv)
+    assert not ev.excluido, "compite: el aviso callarselo no prueba que no lo sea"
+    assert not ev.dfl2_aplicado
+    assert "sin confirmar" in ev.motivo_sin_dfl2
+    assert "escritura" in ev.motivo_sin_dfl2, "dice donde se verifica de verdad (§2.5)"
+
+
+def test_solo_se_excluye_lo_que_se_sabe_que_NO_es_DFL2(cfg) -> None:
+    p, inv = cfg
+    assert evaluar(unidad(acogida_dfl2=False), escenario(), p, inv).excluido
+    assert not evaluar(unidad(acogida_dfl2=None), escenario(), p, inv).excluido
+
+
+def test_un_DFL2_sin_confirmar_nunca_rinde_mas_que_uno_confirmado(cfg) -> None:
+    """El sentido de la asimetria, en plata."""
+    p, inv = cfg
+    e = escenario(dfl2=True)
+    confirmado = evaluar(unidad(acogida_dfl2=True), e, p, inv)
+    dudoso = evaluar(unidad(acogida_dfl2=None), e, p, inv)
+    assert dudoso.noi_uf < confirmado.noi_uf
+
+
+def test_la_ventana_de_contribuciones_se_agota_con_la_antiguedad(cfg) -> None:
+    """T-911. La rebaja del 50% no es perpetua: corre desde la recepcion municipal. El motor
+    se la aplicaba a todos, que es un supuesto optimista justo sobre el beneficio que el §2.5
+    declara de mayor valor presente."""
+    p, inv = cfg
+    e = escenario(dfl2=True)
+    nueva = evaluar(unidad(acogida_dfl2=True, m2_utiles=D(55), antiguedad_anios=3), e, p, inv)
+    vieja = evaluar(unidad(acogida_dfl2=True, m2_utiles=D(55), antiguedad_anios=25), e, p, inv)
+    assert nueva.ventana_contribuciones_abierta
+    assert not vieja.ventana_contribuciones_abierta
+    assert vieja.opex_anual_uf > nueva.opex_anual_uf, "la vieja paga contribuciones completas"
+
+
+@pytest.mark.parametrize(
+    "m2,antiguedad,abierta",
+    [
+        ("55", 19, True),  # <=70 m2: 20 anios
+        ("55", 20, False),
+        ("85", 14, True),  # <=100 m2: 15 anios
+        ("85", 15, False),
+        ("120", 9, True),  # <=140 m2: 10 anios
+        ("120", 10, False),
+    ],
+)
+def test_la_ventana_dura_mas_mientras_mas_chica_la_vivienda(cfg, m2, antiguedad, abierta) -> None:
+    p, _ = cfg
+    u = unidad(m2_utiles=D(m2), antiguedad_anios=antiguedad, acogida_dfl2=True)
+    assert ventana_dfl2_abierta(u, p) is abierta
+
+
+def test_sin_dato_de_antiguedad_la_ventana_se_asume_abierta(cfg) -> None:
+    """Es donde falta el dato —obra nueva— y es tambien donde la ventana recien empieza."""
+    p, _ = cfg
+    assert ventana_dfl2_abierta(unidad(antiguedad_anios=None), p) is True

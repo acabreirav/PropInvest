@@ -324,7 +324,7 @@ criterio_de_aceptacion:
 El gate de caída >30% dispara esta tarea automáticamente.
 
 ## T-911 · DFL2 en vivienda usada: la ventana de contribuciones puede estar consumida
-estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: []
+estado: hecha · agente: motor-financiero · fase: 1 · depende_de: []
 criterio_de_aceptacion:
   - [ ] Verificar con fuente citada desde cuando corre la rebaja de 50% de contribuciones
         (recepcion municipal) y su duracion segun m2
@@ -404,7 +404,7 @@ criterio_de_aceptacion:
   - [ ] Purga de datos personales ANTES de que nada toque la base analitica
 
 ## T-917 · `exigir_dfl2` vaciaria el ranking contra datos de portal
-estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: []
+estado: hecha · agente: motor-financiero · fase: 1 · depende_de: []
 criterio_de_aceptacion:
   - [ ] `acogida_dfl2` admite tres estados: si / no / **por_verificar**, no un booleano
   - [ ] `exigir_dfl2` excluye solo los `no`; los `por_verificar` compiten y se marcan en la UI

@@ -1047,3 +1047,37 @@ no aca. El numero hace visible de inmediato que falta un insumo, en vez de produ
 mediana sobre el 16% de los datos sin decirlo.
 
 **20 casos de oro**, incluido el que compara mediana contra promedio ante un outlier.
+
+---
+
+## 2026-08-29 · Deuda pagada antes de T-029: las dos que lo bloqueaban
+
+**Auditoria previa.** Cero TODO/FIXME reales en el codigo, un solo `skipif` legitimo (el
+corpus del legado no esta en toda maquina), todos los modulos con tests propios. La deuda
+acumulada es la declarada en el backlog, no cruft escondido.
+
+De la lista, dos bloqueaban T-029 y se pagaron:
+
+**T-917 · el DFL2 pasa a TRI-ESTADO.** Medido sobre 5.870 avisos: 16 mencionan DFL2, el 0,3%
+— y no porque no lo sean, sino porque el aviso no lo dice. Con un booleano, `exigir_dfl2`
+vaciaba el ranking entero. Ahora `acogida_dfl2: bool | None`, y la exclusion dura solo alcanza
+a lo que se sabe que NO es DFL2. Un `None` **compite pero se evalua SIN el beneficio**: la
+asimetria va a proposito hacia no mostrar nunca una oportunidad mejor de lo que se puede
+probar. Si despues resulta ser DFL2, los numeros solo mejoran.
+
+**T-911 · la ventana de contribuciones se agota.** La rebaja del 50% no es perpetua: corre
+desde la recepcion municipal y dura mas mientras mas chica la vivienda (20 anios hasta 70 m2,
+15 hasta 100, 10 hasta 140). El motor se la aplicaba a TODOS, que era un supuesto optimista
+justo sobre el beneficio que el §2.5 declara de mayor valor presente. Los tramos quedan en
+`params.yml` con evidencia `C`: vienen de la practica del rubro y hay que verificarlos en el
+DFL2 art. 14 antes de subirlos a `V`.
+
+De paso quedaron separados los DOS beneficios del DFL2, que se aplicaban juntos: la exencion
+de renta vale mientras la vivienda este acogida; la rebaja de contribuciones, solo mientras su
+ventana siga abierta. Tratarlos como uno regalaba la rebaja a un usado de veinte anios.
+
+**Lo que NO se pudo pagar y por que:** T-907 (fuente vigente de tasas por banco) necesita una
+fuente externa que todavia no existe; T-909 (fixture real de la CMF) necesita un archivo de la
+maquina del usuario; T-014 y T-022 son colectores nuevos, no deuda.
+
+11 casos de oro nuevos.
