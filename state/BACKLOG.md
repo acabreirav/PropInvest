@@ -97,7 +97,8 @@ bloqueo: >
   OJO: ese comando reescribe MELI_REFRESH_TOKEN en el .env, porque el canje mata el anterior.
 
 ## T-910 · Decidir la fuente de oferta y arriendo si MELI quedo cerrada
-estado: bloqueada · agente: fuente-scout · fase: 1 · depende_de: [T-011]
+estado: hecha
+resuelto_por: "T-920: la ruta permitida del portal alcanza. No hizo falta invocar D-016." · agente: fuente-scout · fase: 1 · depende_de: [T-011]
 criterio_de_aceptacion:
   - [ ] G5 ejecutada y su salida pegada en el ADR-003
   - [ ] Si no queda ruta: D-014 escrita en docs/05-decisiones.md y aprobada por el usuario
@@ -123,7 +124,11 @@ hallazgo: >
   segun manda el §7.1. El dato viejo no se borra: se conserva como fixture de estructura.
 
 ## T-013 · dim_microzona desde MELI classified_locations
-estado: pendiente · agente: geo-microzonas · fase: 1 · depende_de: [T-011]
+estado: hecha_por_otra_via
+resuelto_por: >
+  La API de MELI devolvio 403 (ADR-003). Las microzonas salieron del propio portal: 165 barrios
+  con el nombre que el portal usa, extraidos de las paginas de listado. `classified_locations`
+  queda como verificacion futura, no como dependencia. · agente: geo-microzonas · fase: 1 · depende_de: [T-011]
 criterio_de_aceptacion:
   - Cascada CL → states → cities → neighborhoods materializada con coordenadas
   - Microzonas de las 3 comunas de fase 1 presentes, con `saturada` desde `config/zonas.yml`
@@ -136,14 +141,16 @@ criterio_de_aceptacion:
   - Distancia a Metro operativo y en construcción, con año de apertura
 
 ## T-020 · Colector meli_venta (proyectos nuevos, 3 comunas)
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-011]
+estado: cancelada
+razon: "/sites/MLC/search devuelve 403 (ADR-003). Reemplazada por T-920, ya hecha." · agente: colector · fase: 1 · depende_de: [T-011]
 paraleliza_con: [T-014, T-021, T-022]
 criterio_de_aceptacion:
   - ≥1.000 avisos de venta en las 3 comunas, con `neighborhood` asignado
   - `selftest()` verde; fixture grabada
 
 ## T-021 · Colector meli_arriendo (comparables, 3 comunas)
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-011]
+estado: cancelada
+razon: "misma razon que T-020. El colector de T-920 trae venta y arriendo." · agente: colector · fase: 1 · depende_de: [T-011]
 paraleliza_con: [T-020, T-022]
 criterio_de_aceptacion:
   - ≥1.500 avisos de arriendo con microzona y tipología normalizada
@@ -331,7 +338,8 @@ nota: >
   con datos reales.
 
 ## T-912 · De donde salen los avisos de vivienda usada
-estado: pendiente · agente: fuente-scout · fase: 1 · depende_de: [T-011]
+estado: hecha
+resuelto_por: "T-920, por la ruta que el robots.txt permite. 2.696 unidades cargadas." · agente: fuente-scout · fase: 1 · depende_de: [T-011]
 criterio_de_aceptacion:
   - [ ] ADR por fuente candidata con robots + legal_tier: chilepropiedades, catastro SII, CBR
   - [x] Aprobacion humana para `html_prohibido`: **D-016, 28-ago-2026**. Cada colector de esa
@@ -505,3 +513,21 @@ criterio_de_aceptacion:
 nota: >
   El codigo heredado (`investop/src/modelo/regresion.py`) ya trae el OLS hedonico con
   agrupacion de microzonas: es el instrumento para esta pregunta, no hay que inventarlo.
+
+## T-029 · El eslabon que falta: cruzar venta x arriendo y rankear
+estado: pendiente · agente: motor-financiero · fase: 1 · depende_de: [T-023]
+PRIORIDAD: la mas alta. Es lo unico entre el estado actual y un ranking mirable.
+hallazgo: >
+  Estan las dos puntas y no esta el puente. `fact_unidad_venta` tiene 2.696 unidades con
+  precio, m2, tipologia y microzona. `agg_arriendo_microzona` tiene la mediana de arriendo por
+  (microzona, tipologia, rango_m2). El motor financiero calcula todo. **Pero ningun comando
+  toma una unidad, le pega el arriendo de su celda y corre el motor.** `demo` corre sobre
+  unidades inventadas; no hay `score` sobre datos reales.
+criterio_de_aceptacion:
+  - [ ] `cli oportunidades`: join unidad -> celda de arriendo por (microzona, tipologia, rango)
+  - [ ] Una unidad sin celda con n>=8 NO se rankea y se cuenta aparte: es el gate del §7.3,
+        y con los datos de hoy va a excluir a la mayoria. Hay que decirlo, no esconderlo.
+  - [ ] Corre `evaluar_universo` + `puntuar` y muestra el top con su desglose de score
+  - [ ] Cada fila expone: yield bruto, cap rate, costo real de tenencia, pie de equilibrio,
+        y de donde salio su arriendo (microzona, n, dispersion)
+  - [ ] Gate de coherencia: ninguna unidad rankeada sin `evidence_level` V en su precio (§12)
