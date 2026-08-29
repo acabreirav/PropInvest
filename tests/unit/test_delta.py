@@ -302,3 +302,40 @@ def test_el_listado_muestra_UF_por_m2_que_es_lo_que_permite_comparar(con) -> Non
     salida = str(delta.comparar(con, HOY))
     assert "UF/m2" in salida
     assert "62 UF/m2" in salida, "3600 UF sobre 58 m2"
+
+
+def test_dos_capturas_viejas_al_mismo_precio_no_crean_versiones_superpuestas(con) -> None:
+    """El corpus trae capturas del 4 y del 5 de mayo y llegan en orden arbitrario. Con la
+    version anterior, ambas insertaban su propia version cerrada con el mismo precio, y la
+    unidad aparecia DOS VECES en la lista de bajadas — se lee como dos oportunidades."""
+    mayo4 = datetime(2026, 5, 4, tzinfo=UTC)
+    mayo5 = datetime(2026, 5, 5, tzinfo=UTC)
+    cargar_avisos(con, [Aviso("MLC-1", "5800", HOY)], "vivo", "portal_busqueda/1.0.0")
+    cargar_avisos(con, [Aviso("MLC-1", "6400", mayo5)], "legado", "portal_busqueda/1.0.0")
+    cargar_avisos(con, [Aviso("MLC-1", "6400", mayo4)], "legado", "portal_busqueda/1.0.0")
+
+    filas = con.execute(
+        "SELECT precio_uf, valid_from, valid_to FROM fact_unidad_venta ORDER BY valid_from"
+    ).fetchall()
+    assert len(filas) == 2, "una version vieja y una vigente, no tres"
+    assert filas[0][1] == mayo4, "la version vieja empieza en la captura mas antigua"
+    assert filas[0][0] == D("6400.00")
+
+    r = delta.comparar(con, HOY)
+    assert len(r.bajaron) == 1
+    assert [c.unidad_key for c in r.bajaron].count("MLC-1") == 1
+
+
+def test_el_informe_muestra_el_cambio_NETO_una_sola_vez(con) -> None:
+    """Una unidad con dos bajadas sucesivas es una oportunidad, no dos."""
+    mayo = datetime(2026, 5, 4, tzinfo=UTC)
+    junio = datetime(2026, 6, 15, tzinfo=UTC)
+    cargar_avisos(con, [Aviso("MLC-1", "6000", mayo)], "x", "portal_busqueda/1.0.0")
+    cargar_avisos(con, [Aviso("MLC-1", "5500", junio)], "x", "portal_busqueda/1.0.0")
+    cargar_avisos(con, [Aviso("MLC-1", "5000", HOY)], "x", "portal_busqueda/1.0.0")
+
+    r = delta.comparar(con, HOY)
+    assert len(r.bajaron) == 1
+    c = r.bajaron[0]
+    assert c.precio_antes_uf == D("6000.00"), "se compara contra la mas antigua"
+    assert c.precio_ahora_uf == D("5000.00")

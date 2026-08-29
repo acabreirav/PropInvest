@@ -160,12 +160,16 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
         CambioDePrecio(*fila)
         for fila in conexion.execute(
             """
+            -- Una fila por unidad: el cambio NETO desde su version mas antigua hasta la
+            -- vigente. Sin el `QUALIFY`, una unidad con dos versiones cerradas aparecia dos
+            -- veces en la lista de bajadas, y se lee como dos oportunidades donde hay una.
             SELECT v.unidad_key, n.microzona_id, n.m2_utiles,
                    v.precio_uf, n.precio_uf, v.valid_from, n.valid_from
             FROM fact_unidad_venta v
             JOIN fact_unidad_venta n USING (unidad_key)
             WHERE v.valid_to IS NOT NULL AND n.valid_to IS NULL
               AND n.valid_from >= ?
+            QUALIFY row_number() OVER (PARTITION BY v.unidad_key ORDER BY v.valid_from) = 1
             """,
             (corte,),
         ).fetchall()

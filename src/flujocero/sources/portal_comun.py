@@ -377,12 +377,15 @@ def _rellenar_pasado(
 ) -> int:
     """Inserta hacia atras una captura anterior a la version vigente (§11, SCD tipo 2).
 
-    Dos casos, y la diferencia no es cosmetica:
+    El corpus trae varias capturas del mismo dia a dias distintos —4 y 5 de mayo— y llegan en
+    orden arbitrario, asi que hay que mirar **la version que empieza justo despues** de la
+    fecha entrante, no solo la vigente:
 
-    - **Mismo precio.** La unidad ya estaba a ese precio en la fecha vieja, asi que no hay dos
-      versiones: hay una que empezo antes. Se retrocede su `valid_from`. Crear una version
-      nueva aca inventaria un cambio de precio que nunca ocurrio.
-    - **Precio distinto.** Es una version cerrada de verdad: `[fecha_vieja, valid_from_actual)`.
+    - **Mismo precio que ella** -> se retrocede su `valid_from`. Ya estaba a ese precio en la
+      fecha vieja: no son dos versiones, es una que empezo antes. Insertar aqui creaba dos
+      versiones cerradas superpuestas con el mismo precio, y el informe mostraba la misma
+      unidad dos veces en la lista de bajadas.
+    - **Precio distinto** -> version cerrada de verdad, `[fecha_vieja, inicio_de_la_siguiente)`.
 
     Idempotente: si ya existe una version cubriendo ese instante, no hace nada.
     """
@@ -394,11 +397,21 @@ def _rellenar_pasado(
     if ya_esta:
         return 0
 
-    if precio_vigente == a.precio_uf:
+    # La version mas temprana que empieza despues de esta captura. Puede ser la vigente o una
+    # cerrada que otra captura vieja abrio antes.
+    siguiente = conexion.execute(
+        "SELECT valid_from, precio_uf FROM fact_unidad_venta "
+        "WHERE unidad_key = ? AND valid_from > ? ORDER BY valid_from LIMIT 1",
+        (a.portal_id, a.fetched_at),
+    ).fetchone()
+    if siguiente is None:
+        return 0
+    inicio_siguiente, precio_siguiente = siguiente
+
+    if precio_siguiente == a.precio_uf:
         conexion.execute(
-            "UPDATE fact_unidad_venta SET valid_from = ? "
-            "WHERE unidad_key = ? AND valid_from = ? AND valid_to IS NULL",
-            (a.fetched_at, a.portal_id, desde_vigente),
+            "UPDATE fact_unidad_venta SET valid_from = ? WHERE unidad_key = ? AND valid_from = ?",
+            (a.fetched_at, a.portal_id, inicio_siguiente),
         )
         return 0
 
@@ -425,7 +438,7 @@ def _rellenar_pasado(
             True,
             "E" if a.es_proyecto else "V",
             a.fetched_at,
-            desde_vigente,  # la version vieja se cierra justo donde empieza la vigente
+            inicio_siguiente,  # se cierra justo donde empieza la siguiente
             *_procedencia(a, source_id, parser_version),
         ),
     )
