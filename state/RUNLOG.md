@@ -1153,3 +1153,40 @@ El DFL2 llega como `None` —por verificar— y no como negativo: el portal lo d
 beneficio sin probar.
 
 12 casos de oro nuevos.
+
+---
+
+## 2026-08-29 · El primer ranking real, y tres cosas que escondia
+
+**1.166 unidades rankeadas** en la maquina del usuario, de 4.203 con precio verificado. Las
+1.648 que quedaron fuera por `sin_comparables` son la regla del §2.4 haciendo su trabajo: sin
+celda de arriendo propia no se rankea, y no hay caida a comuna.
+
+Mirando la salida aparecieron tres problemas.
+
+**1. El encabezado mentia sobre la plata.** Decia "Escenario: pie 10% · con subsidio", que es
+lo PEDIDO. Pero casi todas esas unidades son usadas, y a un usado el motor le niega el subsidio
+y el FOGAES y le exige **20% de pie**. Los numeros ya estaban bien —se verifico que el
+$34.035 de la primera fila calza con el caso usado y no con el nuevo— pero el titulo anunciaba
+la mitad del pie real. Ahora se imprimen las dos cosas: lo pedido y lo aplicado, con el conteo
+de cuantas recibieron cada beneficio, y el pie efectivo va como columna por unidad.
+
+**2. El mismo departamento ocupaba dos lugares del top.** `MLC-2076401873` y `MLC-1981549115`,
+identicos en UF 1.200 y 57,1 UF/m2. Dos corredores publican el mismo depto y cada uno tiene su
+`MLC-`, asi que la clave natural del §7.3 —(proyecto_id, numero_unidad)— no los agarra: ninguno
+de esos dos campos existe en un aviso de portal. Se colapsa por la firma que el §7.3 ya usa
+para arriendo: mismo barrio, tipologia, m2 y precio. Se colapsa **para el ranking**; en la
+tabla siguen los dos, porque el dato crudo no se toca.
+
+**3. El top esta dominado por micro-unidades y eso hay que decirlo.** La primera fila es de
+23 m2 a UF 890 con 10,24% de yield. El §13.3 advierte exactamente de esto: los retornos de dos
+digitos del mercado chileno **son stock usado chico y barato**. Alto yield bruto no es lo mismo
+que buena inversion — una unidad de 25 m2 tiene mas rotacion, mas vacancia, gastos comunes mas
+altos por m2 y mucha menos liquidez de salida, y el ranking no mide nada de eso. Se agrego un
+aviso que salta cuando un tercio o mas del top esta bajo 35 m2.
+
+**Lo que el ranking SI dice, y es un hallazgo.** El §2.3 del contrato afirma que el pie de
+equilibrio en el Gran Santiago esta en 34-47%. Estas unidades salen con pie de flujo cero de
+**17-20%**, y la primera en **-7%** (se paga sola). El contrato tenia razon para el stock NUEVO
+que era su alcance original; abrir a usado (D-015) cambio ese piso. No invalida el hallazgo:
+lo acota.

@@ -174,3 +174,25 @@ def test_un_componente_con_datos_distintos_deja_de_estar_inerte(con) -> None:
 
     r.unidades.append(replace(r.unidades[0], unidad_key="B", riesgo_microzona=D("0.9")))
     assert "riesgo_microzona" not in op.componentes_inertes(r.unidades)
+
+
+def test_el_mismo_depto_publicado_dos_veces_ocupa_un_solo_lugar(con) -> None:
+    """Visto en el primer ranking real: dos avisos identicos en UF 1.200 y 57,1 UF/m2 ocupando
+    dos lugares del top. La clave natural del §7.3 —(proyecto_id, numero_unidad)— no los agarra
+    porque ninguno de los dos campos existe en un aviso de portal: cada corredor publica con su
+    propio MLC. La firma que si los junta es mismo barrio, tipologia, m2 y precio."""
+    celda(con)
+    unidad(con, key="CORREDOR-A", m2=56, precio="1200")
+    unidad(con, key="CORREDOR-B", m2=56, precio="1200")
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    assert r.descartes["duplicado"] == 1
+
+
+def test_dos_deptos_distintos_del_mismo_barrio_no_se_colapsan(con) -> None:
+    """El contrapeso: dedupe demasiado agresivo esconderia oferta real."""
+    celda(con)
+    unidad(con, key="A", m2=56, precio="1200")
+    unidad(con, key="B", m2=56, precio="1250")
+    unidad(con, key="C", m2=58, precio="1200")
+    assert len(op.emparejar(con, RANGOS).unidades) == 3

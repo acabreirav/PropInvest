@@ -61,9 +61,24 @@ def emparejar(conexion: Any, rangos: list[list[int]]) -> Emparejamiento:
     celdas = celdas_de_arriendo(conexion)
     r = Emparejamiento(
         descartes=dict.fromkeys(
-            ("sin_microzona", "sin_tipologia", "sin_m2", "fuera_de_rango", "sin_comparables"), 0
+            (
+                "sin_microzona",
+                "sin_tipologia",
+                "sin_m2",
+                "fuera_de_rango",
+                "sin_comparables",
+                "duplicado",
+            ),
+            0,
         )
     )
+    # El mismo departamento publicado por dos corredores tiene dos `MLC-`, asi que la clave
+    # natural del §7.3 —(proyecto_id, numero_unidad)— no lo agarra: ninguno de los dos campos
+    # existe en un aviso de portal. Se vio en el primer ranking real, con dos avisos identicos
+    # en UF 1.200 y 57,1 UF/m2 ocupando dos lugares del top. La firma que si los junta es la
+    # que el §7.3 ya usa para arriendo: mismo barrio, misma tipologia, mismos m2, mismo precio.
+    # Se colapsa para el RANKING; en la tabla siguen los dos, porque el dato crudo no se toca.
+    vistos: set[tuple[Any, ...]] = set()
 
     filas = conexion.execute(
         "SELECT unidad_key, microzona_id, tipologia, m2_utiles, precio_uf, es_vivienda_nueva, "
@@ -91,6 +106,12 @@ def emparejar(conexion: Any, rangos: list[list[int]]) -> Emparejamiento:
             # SIN caída a comuna, a proposito. Ver el docstring del módulo.
             r.descartes["sin_comparables"] += 1
             continue
+
+        firma = (mz, tip, Decimal(str(m2)), Decimal(str(precio)))
+        if firma in vistos:
+            r.descartes["duplicado"] += 1
+            continue
+        vistos.add(firma)
 
         arriendo, n = celda
         r.unidades.append(

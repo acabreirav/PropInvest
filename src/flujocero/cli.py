@@ -843,20 +843,54 @@ def oportunidades(
         raise typer.Exit(0)
 
     uf = p.d("macro.valor_uf_clp")
+    # Lo PEDIDO y lo APLICADO son cosas distintas, y confundirlas es grave: el escenario pide
+    # 10% de pie con subsidio, pero a un usado el motor le niega los dos y le exige 20%. Un
+    # encabezado que anuncia "pie 10%" sobre numeros calculados al 20% miente sobre la plata
+    # que hay que poner.
+    con_sub = sum(1 for _, ev in vivos if ev.subsidio_aplicado)
+    con_fog = sum(1 for _, ev in vivos if ev.fogaes_aplicado)
+    pies = {ev.pie_efectivo for _, ev in vivos}
     typer.echo(
-        f"\n  Escenario: pie {e.pie_pct:.0%} · {'con' if e.con_subsidio else 'sin'} subsidio\n"
+        f"\n  Escenario PEDIDO: pie {e.pie_pct:.0%} · {'con' if e.con_subsidio else 'sin'} subsidio"
     )
     typer.echo(
-        f"    {'unidad':16s} {'UF':>7s} {'UF/m2':>6s} {'yield':>6s} {'cap':>6s} "
-        f"{'tenencia/mes':>13s} {'pie 0':>6s}  microzona"
+        f"  Lo que el motor APLICO: {con_sub} de {len(vivos)} con subsidio · "
+        f"{con_fog} con FOGAES · pie efectivo {' y '.join(f'{x:.0%}' for x in sorted(pies))}"
+    )
+    if con_sub < len(vivos):
+        typer.echo(
+            "    El subsidio y el FOGAES exigen primera venta. Un usado paga la tasa completa\n"
+            "    y 20% de pie, y los numeros de abajo ya lo reflejan."
+        )
+    typer.echo("")
+    typer.echo(
+        f"    {'unidad':16s} {'UF':>7s} {'m2':>5s} {'UF/m2':>6s} {'yield':>6s} {'cap':>6s} "
+        f"{'tenencia/mes':>13s} {'pie':>4s} {'pie 0':>6s}  microzona"
     )
     for u, ev in vivos[:top]:
         tenencia = ev.costo_tenencia_mensual_uf * uf
         typer.echo(
-            f"    {u.unidad_key:16s} {u.precio_uf:>7,.0f} {u.precio_uf / u.m2_utiles:>6.1f} "
+            f"    {u.unidad_key:16s} {u.precio_uf:>7,.0f} {u.m2_utiles:>5.0f} "
+            f"{u.precio_uf / u.m2_utiles:>6.1f} "
             f"{ev.rentabilidad_bruta:>6.2%} {ev.cap_rate:>6.2%} "
-            f"{'$' + format(int(tenencia), ','):>13s} {ev.pie_minimo_flujo_cero:>6.0%}  "
-            f"{u.microzona_id}"
+            f"{'$' + format(int(tenencia), ','):>13s} {ev.pie_efectivo:>4.0%} "
+            f"{ev.pie_minimo_flujo_cero:>6.0%}  {u.microzona_id}"
+        )
+
+    # El §13.3 advierte exactamente de esto: los yields de dos digitos del ranking chileno son
+    # stock usado chico y barato. Alto yield bruto no es lo mismo que buena inversion: una
+    # unidad de 25 m2 tiene mas rotacion, mas vacancia, gastos comunes mas altos por m2 y
+    # mucha menos liquidez de salida. El ranking no lo sabe; el usuario tiene que saberlo.
+    chicas = [u for u, _ in vivos[:top] if u.m2_utiles < D(35)]
+    if len(chicas) >= top // 3:
+        mediana_m2 = sorted(u.m2_utiles for u, _ in vivos[:top])[len(vivos[:top]) // 2]
+        typer.echo(
+            f"\n  ⚠ {len(chicas)} de las {top} primeras son de menos de 35 m² "
+            f"(mediana {mediana_m2:.0f} m²).\n"
+            "    Es esperable: a menor tamaño, mayor yield bruto. Pero el §13.3 advierte que\n"
+            "    los retornos de dos dígitos del mercado chileno son stock usado chico, y el\n"
+            "    ranking no mide rotación, vacancia real ni liquidez de salida. Verificá\n"
+            "    estado y gastos comunes antes de emocionarte con las primeras filas."
         )
 
     typer.echo("\n  De dónde salió el arriendo de las tres primeras:")
