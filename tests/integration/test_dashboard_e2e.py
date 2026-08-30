@@ -33,7 +33,15 @@ AHORA = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
 # El §7.5 pide medir con 10.000 unidades. Se generan sinteticamente: el objetivo es el
 # RENDIMIENTO de la pagina con un universo grande, no el valor de ningun numero.
 N_UNIDADES = 10_000
-MICROZONAS = [f"comuna-{i // 10}/barrio-{i % 10}" for i in range(20)]
+
+# Las comunas TIENEN que estar declaradas en `config/zonas.yml`: desde T-938 el alcance es
+# una lista blanca y una microzona inventada queda fuera del ranking, dejando la tabla vacia
+# y el E2E rojo. Se usan comunas reales de fase 1 y 2, y barrios que NO figuran como
+# saturados —`nunoa/estadio-nacional` lo esta— porque esos tambien se excluyen.
+COMUNAS_EN_ALCANCE = ("san-miguel", "la-florida", "nunoa", "macul")
+MICROZONAS = [
+    f"{COMUNAS_EN_ALCANCE[i % len(COMUNAS_EN_ALCANCE)]}/barrio-e2e-{i}" for i in range(20)
+]
 
 
 def _puerto_libre() -> int:
@@ -51,8 +59,7 @@ def base_grande(tmp_path_factory) -> Path:
     con = duckdb.connect(str(ruta))
     db.aplicar_esquema(con)
 
-    comunas = sorted({m.split("/")[0] for m in MICROZONAS})
-    for c in comunas:
+    for c in sorted({m.split("/")[0] for m in MICROZONAS}):
         con.execute(
             "INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES (?,?,'Metropolitana')",
             (c, c),

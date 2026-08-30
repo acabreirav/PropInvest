@@ -39,6 +39,7 @@ from decimal import Decimal
 from typing import Any
 
 from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango
+from flujocero.alcance import Alcance
 
 D = Decimal
 
@@ -115,9 +116,18 @@ WHERE v.valid_to IS NULL AND v.precio_uf IS NOT NULL AND v.evidence_level = 'V'
 
 
 def diagnosticar(
-    conexion: Any, rangos: list[list[int]], minimo: int = MIN_COMPARABLES
+    conexion: Any,
+    rangos: list[list[int]],
+    minimo: int = MIN_COMPARABLES,
+    alcance: Alcance | None = None,
 ) -> Diagnostico:
     """Qué celdas bloquean cuántas unidades, ordenadas por palanca.
+
+    `alcance` saca de la cuenta lo que **no se desbloquea con comparables de arriendo**: una
+    unidad en una comuna excluida del §10, o en una microzona marcada saturada, se descarta
+    por regla dura después, así que contarla como "desbloqueable" infla el objetivo y manda
+    la recolección al lugar equivocado. Pasó: `--dirigida 3` eligió Providencia por volumen,
+    y Providencia está en `excluidas`.
 
     El rango de m² se calcula con la MISMA función que usa la agregación de arriendo. Si acá
     se calculara de otra forma, el diagnóstico apuntaría a celdas que el emparejamiento nunca
@@ -135,6 +145,8 @@ def diagnosticar(
     rankeables = 0
     total = 0
     for mz, tip, m2 in conexion.execute(CONSULTA).fetchall():
+        if alcance is not None and not alcance.unidad_rankeable(mz)[0]:
+            continue
         rango = etiqueta_rango(D(str(m2)), rangos)
         if rango is None:
             # Sobre 140 m² pierde el DFL2 y no compite (§12). No es un hueco de datos:

@@ -21,6 +21,7 @@ from decimal import Decimal
 from typing import Any
 
 from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango
+from flujocero.alcance import Alcance
 from flujocero.finance.modelo import Unidad
 
 D = Decimal
@@ -52,17 +53,34 @@ def celdas_de_arriendo(conexion: Any) -> dict[tuple[str, str, str], tuple[Decima
     }
 
 
-def emparejar(conexion: Any, rangos: list[list[int]]) -> Emparejamiento:
+def emparejar(
+    conexion: Any, rangos: list[list[int]], alcance: Alcance | None = None
+) -> Emparejamiento:
     """Cruza `fact_unidad_venta` vigente contra `agg_arriendo_microzona`.
 
     Solo entran unidades con precio de evidencia `V`: el §12 excluye del ranking todo precio
     estimado, y un "desde UF X" de proyecto es precisamente eso.
+
+    `alcance` decide dos cosas que ANTES NO SE DECIDIAN AQUI, y una era grave:
+
+    - **`microzona_saturada` se puebla.** `params.yml` declara
+      `excluir_microzonas_saturadas: true` y `modelo.py` implementa la regla, pero este
+      emparejamiento —el unico camino de las unidades reales— dejaba el campo en su default
+      `False`, asi que la exclusion dura del §12 **no se disparaba nunca**. Solo funcionaba
+      en `demo`, sobre unidades inventadas.
+    - **Las comunas fuera del alcance se descartan y se cuentan.** El §10 define el alcance
+      por fases; una comuna que el colector trajo de pasada no entra al ranking porque si.
+
+    Con `alcance=None` se conserva el comportamiento anterior. Se pasa `None` solo donde no
+    hay configuracion a mano; el camino normal SIEMPRE lo pasa.
     """
     celdas = celdas_de_arriendo(conexion)
     r = Emparejamiento(
         descartes=dict.fromkeys(
             (
                 "sin_microzona",
+                "fuera_de_alcance",
+                "microzona_saturada",
                 "sin_tipologia",
                 "sin_m2",
                 "fuera_de_rango",
@@ -90,6 +108,16 @@ def emparejar(conexion: Any, rangos: list[list[int]]) -> Emparejamiento:
         if not mz:
             r.descartes["sin_microzona"] += 1
             continue
+        if alcance is not None:
+            if alcance.saturada(mz):
+                # §12: exclusion dura. Se descarta ACA y no en el motor porque una unidad
+                # que no puede rankear tampoco tiene que consumir una celda de arriendo ni
+                # aparecer como "desbloqueable" en el diagnostico de huecos.
+                r.descartes["microzona_saturada"] += 1
+                continue
+            if not alcance.en_alcance(mz.split("/")[0]):
+                r.descartes["fuera_de_alcance"] += 1
+                continue
         if not tip:
             r.descartes["sin_tipologia"] += 1
             continue
@@ -129,6 +157,9 @@ def emparejar(conexion: Any, rangos: list[list[int]]) -> Emparejamiento:
                 acogida_dfl2=None,
                 es_vivienda_nueva=bool(nueva) if nueva is not None else False,
                 antiguedad_anios=int(antiguedad) if antiguedad is not None else None,
+                # Se pobla aunque las saturadas ya se hayan descartado arriba: si algun dia
+                # el filtro de arriba cambia, el motor sigue teniendo con que aplicar el §12.
+                microzona_saturada=alcance.saturada(mz) if alcance else False,
             )
         )
         r.procedencia_arriendo[key] = (f"{mz} · {tip} · {rango} m²", n, arriendo)

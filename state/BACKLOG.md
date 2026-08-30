@@ -749,3 +749,35 @@ correccion: >
   Antes de tener la base del usuario yo habia medido "86% se cae por sin_comparables" sobre la
   base PARCIAL de mi contenedor. En la base real es 43%. El diagnostico de DONDE estaba el
   hueco era correcto; la gravedad no. Corregido.
+
+## T-938 · La exclusion dura del §12 no se disparaba NUNCA sobre datos reales
+estado: hecha · modulo: src/flujocero/alcance.py · agente: motor-financiero · fase: 1
+hallazgo: >
+  Tres agujeros que salieron de una sola corrida (`recolectar-portal --dirigida 3`):
+
+  1. **GRAVE.** `params.yml` declara `excluir_microzonas_saturadas: true` y `modelo.py`
+     implementa la regla contra `Unidad.microzona_saturada`, pero `oportunidades.emparejar()`
+     —el UNICO camino de las unidades reales— nunca poblaba ese campo. Quedaba en su default
+     `False` y **la exclusion no se disparaba jamas**. Solo funcionaba en `demo`, sobre
+     unidades inventadas. El caso que lo destapo: `nunoa/estadio-nacional` esta marcada
+     saturada en zonas.yml y es justo la microzona con MAS comparables que tenemos (n=124).
+  2. `--dirigida 3` eligio Nunoa, Providencia y Macul por volumen. **Providencia esta en
+     `excluidas`** ("2D2B en UF 8.921, sobre el tope"): un tercio de esa corrida se gasto
+     recolectando arriendo para unidades que el motor nunca iba a rankear.
+  3. El diagnostico de huecos contaba como "desbloqueable" lo que se descarta despues por
+     regla dura, inflando el objetivo y desviando la recoleccion.
+criterio_de_aceptacion:
+  - [x] `alcance.py`: fuente unica desde `zonas.yml`, LISTA BLANCA (lo no declarado esta
+        fuera), microzonas saturadas con su `microzona_id` completo
+  - [x] `emparejar()` puebla `microzona_saturada` y descarta fuera de alcance, contando cada
+        motivo aparte
+  - [x] `diagnosticar()` no cuenta lo que no puede rankear
+  - [x] `--dirigida` se detiene si el diagnostico propone una comuna fuera de alcance
+  - [x] Test de que el motor EXCLUYE de verdad una unidad saturada: sin el, el arreglo
+        podria poblar un campo que nadie mira
+  - [x] Test que ata las comunas del fixture E2E con el alcance real
+consecuencia: >
+  El ranking se va a ACHICAR y eso es el arreglo funcionando. Las unidades de Las Condes,
+  Providencia y `nunoa/estadio-nacional` que aparecian antes no debian estar ahi.
+  Ademas explica la alerta de reconciliacion de la ultima corrida: las dos microzonas fuera
+  de ±25% —las-condes +49%, providencia +29%— son justo comunas EXCLUIDAS del alcance.

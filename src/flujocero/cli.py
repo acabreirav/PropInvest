@@ -12,6 +12,7 @@ from typing import Any
 import typer
 
 from flujocero import db
+from flujocero.alcance import desde_config
 from flujocero.config import RAIZ, cargar, con_valor, ticket_maximo_uf, uf_desde_la_base
 
 getcontext().prec = 34
@@ -716,11 +717,24 @@ def recolectar_portal(
         # El cuello de botella medido no son los avisos de venta: es que la celda de arriendo
         # de la unidad no llega a los 8 comparables del §7.3. Recolectar "mas arriendo" a
         # ciegas reparte el esfuerzo entre celdas que ya sirven; esto lo manda donde paga.
+        # El diagnostico YA respeta el alcance del §10, asi que la prioridad no puede volver
+        # a caer en una comuna excluida. Pasó en la corrida del 30-ago: `--dirigida 3` eligio
+        # Nunoa, Providencia y Macul por volumen, y Providencia esta en `excluidas` — un
+        # tercio de la corrida se gasto recolectando arriendo para unidades que el motor
+        # nunca iba a rankear. El filtro vive en el diagnostico y no aca a proposito: asi
+        # `cli faltantes` y `--dirigida` no pueden divergir.
         antes = _diagnostico()
         prioridad = list(antes.por_comuna())[:dirigida]
         if not prioridad:
             typer.echo("No hay comunas con unidades esperando: nada que dirigir.")
             raise typer.Exit(0)
+        alc = desde_config(cargar("zonas"))
+        intrusas = [c for c in prioridad if not alc.en_alcance(c)]
+        if intrusas:
+            # Defensa en profundidad: si algun dia el diagnostico deja pasar una, la corrida
+            # se detiene en vez de gastar 20 minutos recolectando para nada.
+            typer.echo(f"✗ el diagnostico propuso comunas fuera del alcance: {intrusas}")
+            raise typer.Exit(2)
         lista, ops = prioridad, ("arriendo",)
         typer.echo("  RECOLECCION DIRIGIDA (`--dirigida`): solo arriendo, solo donde falta\n")
         for c in prioridad:
@@ -780,7 +794,11 @@ def _diagnostico():
 
     con = duckdb.connect(str(db.crear()))
     try:
-        return fa.diagnosticar(con, cargar("params").crudo("ingresos.rangos_m2"))
+        return fa.diagnosticar(
+            con,
+            cargar("params").crudo("ingresos.rangos_m2"),
+            alcance=desde_config(cargar("zonas")),
+        )
     finally:
         con.close()
 
@@ -949,7 +967,7 @@ def oportunidades(
     p, inv = cargar("params"), cargar("inversionista")
     con = duckdb.connect(str(db.crear()))
     try:
-        r = op.emparejar(con, p.crudo("ingresos.rangos_m2"))
+        r = op.emparejar(con, p.crudo("ingresos.rangos_m2"), alcance=desde_config(cargar("zonas")))
     finally:
         con.close()
 
@@ -1156,9 +1174,10 @@ def faltantes(
     from flujocero.agg import faltantes as fa
 
     p = cargar("params")
+    alc = desde_config(cargar("zonas"))
     con = duckdb.connect(str(db.crear()))
     try:
-        dg = fa.diagnosticar(con, p.crudo("ingresos.rangos_m2"))
+        dg = fa.diagnosticar(con, p.crudo("ingresos.rangos_m2"), alcance=alc)
     finally:
         con.close()
 

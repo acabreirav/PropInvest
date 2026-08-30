@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from flujocero.agg import oportunidades as op
+from flujocero.alcance import desde_config
 from flujocero.config import cargar, con_valor, uf_desde_la_base
 from flujocero.finance.escenarios import escenario_base, evaluar_universo
 from flujocero.finance.modelo import Evaluacion, Unidad
@@ -246,7 +247,9 @@ class Servicio:
         try:
             real = uf_desde_la_base(con)
             capacidades = _capacidades(con)
-            emp = op.emparejar(con, p.crudo("ingresos.rangos_m2"))
+            emp = op.emparejar(
+                con, p.crudo("ingresos.rangos_m2"), alcance=desde_config(cargar("zonas"))
+            )
         finally:
             con.close()
 
