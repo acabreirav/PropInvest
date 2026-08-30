@@ -1298,3 +1298,30 @@ ese dia sin que se note mirando la tabla.
 Los cuatro con test de regresion.
 
 **Gates:** VERDE. 445 tests (eran 382).
+
+## 2026-08-30 · La corrida viva de Gael cerro la advertencia del ADR 006, y trajo un regalo
+
+`cli ingest --fuente gael_indicadores` desde la maquina del usuario (IP chilena residencial):
+
+```
+✓ selftest: {'parseo': True, 'campos_requeridos': True, 'rangos_plausibles': True,
+             'conteo_estable': True, 'robots': True, 'forma_verificada': True}
+✓ 1 insertadas · 1 ya estaban
+```
+
+**1. La forma documentada resulto ser la real.** El parser defensivo no tuvo que rechazar
+nada: ni ambiguedad de miles, ni fecha ambigua, ni campos duplicados. Haberlo escrito para
+fallar ruidosamente sigue valiendo —es lo que lo hace seguro el dia que Gael cambie el
+formato— pero hoy no hizo falta. `forma_verificada` pasa a `true` en fuentes.yml.
+
+**2. El hallazgo que no estaba planificado: las dos fuentes coinciden.** De la serie que se
+solapaba con la CMF **no salio ninguna `Discrepancia`**, o sea que los dos valores caen
+dentro del 0,01%. Eso es una validacion externa que antes no existia: la UF que usa el
+modelo la confirman dos fuentes oficiales independientes, no una sola API inestable. Es el
+mismo tipo de evidencia que el 0,0% de desviacion contra Colliers en el arriendo de San
+Miguel, y vale por la misma razon: dos caminos distintos que llegan al mismo numero.
+
+**Lo que sigue abierto.** Los tests de Gael corren contra una fixture reconstruida desde
+documentacion, igual que los de la CMF (T-909). El blob real ya existe en la maquina del
+usuario, en `data/raw/gael_indicadores/2026/08/30/`. Convertirlo en fixture es lo unico que
+falta para cerrar la deuda de las dos fuentes de indicadores a la vez.

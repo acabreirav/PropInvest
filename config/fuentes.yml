@@ -35,7 +35,12 @@ fuentes:
     adr: "docs/adr/006-gael-indicadores.md"
     parser_version: "gael_indicadores/1.0.0"
     produce: dim_tiempo_financiero
-    selftest: "verde contra fixture sintética; forma_verificada=false — falta muestra viva"
+    selftest: "VERDE contra muestra viva, 30-ago-2026: forma_verificada=true"
+    verificacion_viva: >
+      Corrida del 30-ago-2026 desde la maquina del usuario (IP chilena residencial):
+      los cinco checks del §7.1 en verde y `forma_verificada=true`. La forma documentada
+      resulto ser la real. Ademas, el dia que se solapaba con la CMF coincidio dentro de
+      la tolerancia de redondeo: dos fuentes oficiales independientes dan el mismo valor.
     limitacion: >
       El endpoint público NO toma fechas: entrega el valor VIGENTE, no serie histórica.
       Cubre "hoy la CMF no responde"; para el backfill la única fuente sigue siendo la CMF.

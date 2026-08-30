@@ -77,9 +77,35 @@ que un error.
 
 ---
 
-## Lo que este ADR NO puede afirmar todavía
+## Verificación viva — 30-ago-2026
 
-**La forma de la respuesta no está verificada contra una respuesta viva.** El entorno donde
+**Resuelto.** Corrida de `cli ingest --fuente gael_indicadores` desde la máquina del usuario
+(IP chilena residencial). Los cinco checks del §7.1 en verde y **`forma_verificada=true`**:
+
+```
+✓ selftest: {'parseo': True, 'campos_requeridos': True, 'rangos_plausibles': True,
+             'conteo_estable': True, 'robots': True, 'forma_verificada': True}
+✓ 1 insertadas · 1 ya estaban
+```
+
+Dos hallazgos, y el segundo no estaba planificado:
+
+1. **La forma documentada resultó ser la real.** El parser defensivo no tuvo que rechazar
+   nada: ni ambigüedad de miles, ni fecha ambigua, ni campos duplicados. Que se haya
+   escrito para fallar ruidosamente sigue valiendo — es lo que lo hace seguro cuando Gael
+   cambie el formato— pero hoy no hizo falta.
+
+2. **Las dos fuentes coinciden.** Del día que se solapaba con la CMF no salió ninguna
+   `Discrepancia`, o sea que los dos valores están dentro del 0,01%. Es una **validación
+   externa que no existía**: la UF que usa el modelo la confirman dos fuentes oficiales
+   independientes, no una sola API inestable.
+
+Queda pendiente convertir el blob de esa corrida en la fixture de los tests, que hoy siguen
+corriendo contra una respuesta reconstruida (misma deuda que T-909 tiene con la CMF).
+
+## Lo que este ADR no podía afirmar antes de esa corrida
+
+**La forma de la respuesta no estaba verificada contra una respuesta viva.** El entorno donde
 se escribió el módulo tiene bloqueado el egreso hacia `api.gael.cloud` (comprobado:
 `EGRESS_BLOCKED`). La forma viene de `docs/01-fuentes.md`, que a su vez viene de la
 documentación de Gael.
