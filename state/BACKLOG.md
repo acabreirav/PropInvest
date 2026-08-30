@@ -597,3 +597,48 @@ criterio_de_aceptacion:
   - [ ] Colector de proyectos nuevos con precio POR UNIDAD (PlanOK cotizador, T-042)
   - [ ] El comando `oportunidades` reporta la composicion nuevo/usado del universo rankeado,
         no solo del top
+
+## T-926 · El verificador de robots SUB-BLOQUEABA: la stdlib no entiende comodines
+estado: hecha · modulo: src/flujocero/sources/robots_rfc9309.py · agente: colector · fase: 1
+hallazgo: >
+  Lo destapo una CONTRAPRUEBA en los tests de Gael: puse un test que exigia que las rutas
+  que su robots.txt prohibe salieran prohibidas, y fallo. `/admin/x` salia PERMITIDO
+  teniendo un `Disallow: /admin/*` al frente.
+  La causa es el `RobotFileParser` de la libreria estandar de Python: **no implementa los
+  comodines del RFC 9309**. Guarda la regla como el literal `/admin/%2A` — trata el
+  asterisco como un caracter mas. O sea que cualquier `Disallow` con `*` o `$` no bloqueaba
+  nada. La direccion del error es la peligrosa: sobre-bloquear molesta, **sub-bloquear te
+  hace pedir lo que el sitio prohibio**, y el §3.5 es una regla dura.
+criterio_de_aceptacion:
+  - [x] Evaluador propio del RFC 9309: comodines `*` y `$`, gana el patron mas largo,
+        empate a favor de Allow, lineas malformadas ignoradas, grupo de user-agent mas
+        especifico
+  - [x] `_veredicto_desde_cuerpo` corre los DOS y toma la conjuncion: permitido solo si el
+        RFC y la stdlib coinciden. Sobre-bloquear es el lado seguro del error
+  - [x] Tests contra los robots.txt REALES, con contraprueba: lo prohibido sale prohibido
+  - [x] Modulo puro, sin red ni reloj
+impacto_medido: >
+  Ninguna recoleccion pasada violo robots. El unico robots con comodines que habiamos
+  evaluado es el de Gael (`/admin/*` etc.) y nunca pedimos esas rutas. El del portal
+  —`Disallow: /propiedades/`— no usa comodines y se evaluaba bien.
+  PERO hay un matiz que si conviene saber: su `Allow: /*_Desde_`, que es la justificacion
+  documentada del `legal_tier: html_permitido` del colector del portal, **la stdlib nunca
+  lo leyo**. El permiso venia de que ningun Disallow calzaba, no de ese Allow. Ahora si se
+  lee, y el veredicto es el mismo por dos caminos en vez de uno.
+
+## T-927 · La UF no es monotona ni lineal, y yo asumi las dos cosas
+estado: hecha · agente: colector · fase: 1
+hallazgo: >
+  Al escribir tests contra la respuesta REAL de la CMF (T-909) puse el invariante "la UF
+  nunca baja". Fallo: entre el 2026-01-10 y el 2026-02-09 cayo de 39.759,95 a 39.682,99,
+  un -0,2%, porque el IPC del mes anterior fue NEGATIVO.
+  Lo cambie por "se mueve en tramos lineales". Tambien fallo: dentro del mismo tramo el
+  monto diario va de 13,22 a 13,35.
+  Lo que si se cumple: la UF se recalcula el dia 10 de cada mes con el IPC del mes anterior
+  y **compone a tasa diaria constante** hasta el 9 del siguiente. La razon entre dias
+  consecutivos es constante hasta 4e-07, que es el redondeo al centavo. Ademas, con IPC
+  cero la UF queda EXACTAMENTE plana un mes entero (paso en feb-2026).
+consecuencia: >
+  Nada en el codigo asumia monotonia (verificado por grep), asi que no hubo bug. Pero queda
+  fijado por test, y es una advertencia para el motor y el dashboard: **la UF puede bajar**.
+  Cualquier grafico o proyeccion que la dibuje siempre creciente esta mintiendo.

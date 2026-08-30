@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import gzip
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -595,3 +595,102 @@ def test_el_registro_conoce_las_fuentes_que_tienen_colector() -> None:
 
     assert "cmf_indicadores" in fuentes_conocidas()
     assert entrada("una_fuente_que_no_existe") is None, "no se inventa un parser"
+
+
+# ------------------------------------------------------- contra la respuesta REAL (T-909)
+#
+# Las fixtures de arriba las reconstrui desde la documentacion de la CMF. Estas son los
+# bytes exactos que devolvio api.cmfchile.cl el 28-ago-2026 desde una IP chilena.
+# Ver tests/fixtures/cmf/PROCEDENCIA.md.
+
+REALES = FIXTURES / "real"
+
+
+def doc_real(nombre: str) -> RawDoc:
+    from flujocero.sources.base import leer_crudo
+
+    return leer_crudo(REALES / nombre)
+
+
+def test_parsea_la_respuesta_real_de_la_cmf() -> None:
+    filas = colector().parse(doc_real("uf_2026-01_2026-08.json.gz"))
+    assert len(filas) == 243
+    assert all(f.serie == "uf" for f in filas)
+    por_fecha = {f.fecha: f.valor for f in filas}
+    # Anclas verificables a ojo contra el blob crudo.
+    assert por_fecha[date(2026, 1, 1)] == Decimal("39731.79")
+    assert por_fecha[date(2026, 8, 29)] == Decimal("40871.14")
+    assert por_fecha[date(2026, 8, 31)] == Decimal("40873.77")
+
+
+def test_la_respuesta_real_no_filtra_la_apikey() -> None:
+    """`base.ocultar_secreto` la reemplaza ANTES de persistir, y por eso estas fixtures se
+    pueden versionar en un repo publico. Si algun dia deja de hacerlo, este test avisa."""
+    for nombre in ("uf_2024-01_2024-12", "uf_2025-01_2025-12", "uf_2026-01_2026-08"):
+        meta = (REALES / f"{nombre}.meta.json").read_text(encoding="utf-8")
+        assert "apikey=OCULTA" in meta
+        d = json.loads(meta)
+        assert "apikey=OCULTA" in d["source_url"]
+
+
+def test_la_uf_real_se_interpola_geometricamente_por_tramo() -> None:
+    """El invariante real de la UF, al tercer intento. Los dos primeros los desmintio el dato.
+
+    Escribi primero "la UF nunca baja": **falso**. Entre el 2026-01-10 y el 2026-02-09 cayo
+    de 39.759,95 a 39.682,99 (-0,2%), porque el IPC del mes anterior fue negativo.
+
+    Escribi despues "la UF se mueve en tramos lineales": **tambien falso**. Dentro de un
+    mismo tramo el monto diario va de 13,22 a 13,35, un +1%.
+
+    Lo que si se cumple: la UF se recalcula el dia 10 de cada mes con el IPC del mes
+    anterior y **compone a tasa diaria constante** hasta el 9 del mes siguiente. La razon
+    entre dias consecutivos es constante hasta 4e-07, que es el redondeo al centavo.
+
+    Como test es mucho mas fuerte que los dos anteriores: un solo valor con los miles mal
+    leidos —`39.759,95` interpretado como 39,75— da una razon de ~1000 en vez de ~1,0003.
+    """
+    filas = sorted(colector().parse(doc_real("uf_2026-01_2026-08.json.gz")), key=lambda f: f.fecha)
+    tramos: dict[tuple[int, int], list[Decimal]] = {}
+    for f in filas:
+        # El tramo va del 10 de un mes al 9 del siguiente: antes del dia 10 la fila
+        # pertenece al tramo que abrio el mes anterior.
+        if f.fecha.day >= 10:
+            clave = (f.fecha.year, f.fecha.month)
+        elif f.fecha.month > 1:
+            clave = (f.fecha.year, f.fecha.month - 1)
+        else:
+            clave = (f.fecha.year - 1, 12)
+        tramos.setdefault(clave, []).append(f.valor)
+
+    completos = [v for v in sorted(tramos.items()) if len(v[1]) >= 25]
+    assert len(completos) >= 5, f"solo {len(completos)} tramos completos: no prueba nada"
+    for clave, valores in completos:
+        razones = [b / a for a, b in zip(valores, valores[1:], strict=False)]
+        assert max(razones) - min(razones) < Decimal("2e-6"), (
+            f"el tramo {clave} no compone a tasa constante: razones entre "
+            f"{min(razones)} y {max(razones)}"
+        )
+
+
+def test_la_uf_real_efectivamente_baja_en_un_tramo_y_queda_plana_en_otro() -> None:
+    """Contraprueba: sin esto, una serie siempre creciente pasaria el test de arriba sin
+    haber ejercitado los dos casos que me desmintieron."""
+    por_fecha = {f.fecha: f.valor for f in colector().parse(doc_real("uf_2026-01_2026-08.json.gz"))}
+    # IPC negativo: la UF BAJA todos los dias del tramo.
+    assert por_fecha[date(2026, 2, 9)] < por_fecha[date(2026, 1, 10)]
+    # IPC cero (febrero 2026): la UF queda EXACTAMENTE plana un mes entero.
+    assert por_fecha[date(2026, 4, 9)] == por_fecha[date(2026, 3, 10)]
+
+
+def test_el_selftest_contra_la_respuesta_real_pasa(monkeypatch) -> None:
+    from flujocero.sources.base import RobotsVerdict
+
+    monkeypatch.setattr(
+        CmfIndicadores,
+        "robots_ok",
+        lambda self: RobotsVerdict(True, "https://api.cmfchile.cl/robots.txt", "sha"),
+    )
+    docs = [doc_real(f"uf_{p}.json.gz") for p in ("2024-01_2024-12", "2025-01_2025-12")]
+    rep = colector().selftest(muestra_viva=docs)
+    assert rep.ok, rep.detalle
+    assert rep.checks["forma_verificada"] is True

@@ -19,6 +19,7 @@ from flujocero import db
 from flujocero.quality import source_contract as gate
 from flujocero.sources.base import COLUMNAS_PROCEDENCIA, RawDoc, Scope
 from flujocero.sources.gael_indicadores import (
+    BASE,
     CUPO_PETICIONES,
     CUPO_VENTANA_S,
     CupoExcedido,
@@ -647,3 +648,120 @@ def test_una_fila_invalida_no_revienta_el_parseo_con_traceback(tmp_path: Path) -
             robots_snapshot_sha="s",
         )
     assert isinstance(exc.value, ValueError)
+
+
+# ------------------------------------------------------- contra la respuesta REAL
+#
+# Todo lo de arriba corre contra una fixture que reconstrui desde documentacion. Lo de aca
+# corre contra los bytes exactos que devolvio api.gael.cloud el 30-ago-2026 02:56 UTC desde
+# una IP chilena residencial. Ver tests/fixtures/gael/PROCEDENCIA.md.
+
+REALES = Path(__file__).resolve().parents[1] / "fixtures" / "gael" / "real"
+REALES_CMF = Path(__file__).resolve().parents[1] / "fixtures" / "cmf" / "real"
+
+
+def doc_real(nombre: str) -> RawDoc:
+    from flujocero.sources.base import leer_crudo
+
+    return leer_crudo(REALES / nombre)
+
+
+def test_parsea_la_respuesta_real_de_la_uf() -> None:
+    filas = colector().parse(doc_real("uf_vigente.json.gz"))
+    assert len(filas) == 1
+    f = filas[0]
+    assert f.serie == "uf"
+    assert f.valor == Decimal("40871.14")
+    assert f.unidad == "CLP"
+    for col in COLUMNAS_PROCEDENCIA:
+        assert getattr(f, col), f"{col} vacio"
+
+
+def test_parsea_la_respuesta_real_de_la_utm() -> None:
+    filas = colector().parse(doc_real("utm_vigente.json.gz"))
+    assert [(f.serie, f.valor) for f in filas] == [("utm", Decimal("68647.00"))]
+
+
+def test_la_marca_de_tiempo_real_de_gael_no_corre_la_fecha_un_dia() -> None:
+    """Gael fecha el valor `2026-08-29T22:00:03.403Z` — la hora de su refresco diario, no
+    una fecha de calendario limpia.
+
+    Si esa marca correspondiera al dia siguiente, TODA conversion de pesos a UF quedaria
+    corrida en un dia y no se notaria mirando la tabla. El test siguiente prueba contra la
+    CMF que no lo esta; este fija la lectura de la marca.
+    """
+    assert colector().parse(doc_real("uf_vigente.json.gz"))[0].fecha == date(2026, 8, 29)
+
+
+def test_las_dos_fuentes_reales_coinciden_al_peso() -> None:
+    """El hallazgo del 30-ago-2026, convertido en test.
+
+    Dos fuentes oficiales independientes —la CMF, que es el organismo que publica la UF, y
+    Gael, que es un intermediario— dan el MISMO valor para el mismo dia. Que ambas esten
+    mal igual es mucho menos probable que una sola este mal, asi que esto es evidencia
+    externa sobre el numero del que depende todo lo demas del modelo.
+
+    Ademas cruza dos formatos numericos distintos: la CMF manda `"40.871,14"` (punto de
+    miles + coma decimal) y Gael manda `"40871,14"` (solo coma). Pasan por ramas distintas
+    del parser y tienen que llegar al mismo Decimal.
+    """
+    from flujocero.sources.base import leer_crudo
+    from flujocero.sources.cmf_indicadores import CmfIndicadores
+
+    del_gael = colector().parse(doc_real("uf_vigente.json.gz"))[0]
+
+    cmf = CmfIndicadores(apikey="no-se-usa-al-parsear", user_agent="test")
+    de_la_cmf = {
+        f.fecha: f.valor for f in cmf.parse(leer_crudo(REALES_CMF / "uf_2026-01_2026-08.json.gz"))
+    }
+
+    assert del_gael.fecha in de_la_cmf, (
+        f"la CMF no tiene el dia {del_gael.fecha} que Gael dice tener: eso seria una senal "
+        "de que las dos fuentes fechan distinto el mismo valor"
+    )
+    assert de_la_cmf[del_gael.fecha] == del_gael.valor
+
+
+def test_el_selftest_contra_la_respuesta_real_pasa(monkeypatch) -> None:
+    _robots_ok(monkeypatch)
+    docs = [doc_real("uf_vigente.json.gz"), doc_real("utm_vigente.json.gz")]
+    rep = colector().selftest(muestra_viva=docs)
+    assert rep.ok, rep.detalle
+    assert rep.checks["forma_verificada"] is True
+    assert rep.n_filas == 2
+
+
+def test_el_robots_real_de_gael_permite_el_endpoint_publico() -> None:
+    """El archivo real trae una directiva MALFORMADA: `Allow /general/public/*`, sin los dos
+    puntos. El RFC 9309 manda ignorar la linea malformada, asi que el permiso NO viene de
+    ese `Allow` sino de que ningun `Disallow:` cubre /general/public/monedas.
+
+    Se fija con un test porque el dia que Gael arregle el typo el resultado no debe cambiar,
+    y porque alguien que lea el archivo a ojo puede creer que dependemos de esa linea.
+    """
+    import gzip
+
+    from flujocero.sources.robots_check import _veredicto_desde_cuerpo
+
+    crudo = gzip.open(REALES / "robots.txt.json.gz", "rb").read()
+    texto = crudo.decode("utf-8")
+    assert "Allow /general/public/*" in texto, "cambio el robots real; revisa el veredicto"
+    assert not [ln for ln in texto.splitlines() if ln.strip().lower().startswith("allow:")], (
+        "ahora SI hay un Allow bien formado: el permiso puede venir de ahi y no solo de "
+        "los Disallow. Revisa el razonamiento de este test."
+    )
+    v = _veredicto_desde_cuerpo(crudo, f"{BASE}/UF", UA, "https://api.gael.cloud/robots.txt", "")
+    assert v.allowed, v.motivo
+
+
+def test_el_robots_real_de_gael_si_prohibe_lo_que_dice_prohibir() -> None:
+    """Contraprueba del test anterior: si el parser diera `allowed` para TODO, el test de
+    arriba pasaria sin probar nada. Las rutas que Gael prohibe tienen que salir prohibidas."""
+    import gzip
+
+    from flujocero.sources.robots_check import _veredicto_desde_cuerpo
+
+    crudo = gzip.open(REALES / "robots.txt.json.gz", "rb").read()
+    for prohibida in ("/admin/x", "/general/auth/x", "/general/endpoints/x", "/mobileapp/x"):
+        v = _veredicto_desde_cuerpo(crudo, f"https://api.gael.cloud{prohibida}", UA, "u", "")
+        assert not v.allowed, f"{prohibida} deberia estar prohibida y salio permitida"

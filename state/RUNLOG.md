@@ -1325,3 +1325,66 @@ Miguel, y vale por la misma razon: dos caminos distintos que llegan al mismo num
 documentacion, igual que los de la CMF (T-909). El blob real ya existe en la maquina del
 usuario, en `data/raw/gael_indicadores/2026/08/30/`. Convertirlo en fixture es lo unico que
 falta para cerrar la deuda de las dos fuentes de indicadores a la vez.
+
+---
+
+## 2026-08-30 · Las fixtures reales cerraron T-909 y destaparon dos cosas que no buscabamos
+
+El usuario subio al repo los blobs reales: tres tramos de UF de la CMF (28-ago) y las dos
+respuestas de Gael (30-ago), con sus `.meta.json` y el snapshot de robots. Se pueden
+versionar porque `base.ocultar_secreto` reemplaza la apikey por `apikey=OCULTA` ANTES de
+persistir — hay test que lo fija.
+
+**Lo que confirmaron.** CMF: 243 registros solo en 2026, envoltorio `UFs`, `"40.871,14"`.
+Gael: `"40871,14"`, fecha `2026-08-29T22:00:03.403Z`. Los dos valores **identicos al peso**,
+y eso resolvio un riesgo concreto: Gael fecha con la marca de su refresco diario, no con una
+fecha de calendario limpia, asi que si esa marca correspondiera al dia siguiente **toda
+conversion de pesos a UF quedaria corrida en un dia**. No lo esta. Ademas cruza dos formatos
+distintos —`"40.871,14"` con punto de miles vs `"40871,14"` sin el— por ramas distintas del
+parser hasta el mismo Decimal.
+
+### Hallazgo 1 (T-926) · El verificador de robots SUB-BLOQUEABA
+
+Lo destapo una **contraprueba**: puse un test exigiendo que lo que el robots de Gael prohibe
+saliera prohibido, y fallo. `/admin/x` salia PERMITIDO teniendo un `Disallow: /admin/*` al
+frente.
+
+La causa es el `RobotFileParser` de la libreria estandar: **no implementa comodines**.
+Guarda la regla como el literal `/admin/%2A`. Cualquier `Disallow` con `*` o `$` no
+bloqueaba nada. Y la direccion del error es la peligrosa: sobre-bloquear molesta,
+**sub-bloquear te hace pedir lo que el sitio prohibio**, y el §3.5 es regla dura.
+
+Se escribio `robots_rfc9309.py`: comodines, gana el patron mas largo, empate a favor de
+Allow, lineas malformadas ignoradas, grupo de user-agent mas especifico. `robots_check`
+ahora corre los dos evaluadores y **toma la conjuncion**: permitido solo si los dos dicen
+que si. Sobre-bloquear es el lado seguro del error.
+
+**Impacto medido: ninguna recoleccion pasada violo robots.** El unico robots con comodines
+que habiamos evaluado es el de Gael y nunca pedimos esas rutas; el del portal
+—`Disallow: /propiedades/`— no usa comodines. Pero hay un matiz que conviene saber: su
+`Allow: /*_Desde_`, que es la justificacion documentada del `legal_tier: html_permitido` del
+colector del portal, **la stdlib nunca lo leyo**. El permiso venia de que ningun Disallow
+calzaba. Ahora el veredicto se sostiene por dos caminos en vez de uno.
+
+De paso: el robots real de Gael trae `Allow /general/public/*` **sin los dos puntos**. Es una
+linea malformada y el RFC manda ignorarla, asi que nuestro permiso no depende de ella. Queda
+anotado en la fixture porque quien lea el archivo a ojo puede creer lo contrario.
+
+### Hallazgo 2 (T-927) · La UF no es monotona ni lineal, y asumi las dos cosas
+
+Escribiendo tests contra la serie real puse el invariante "la UF nunca baja". **Falso**:
+entre el 2026-01-10 y el 2026-02-09 cayo -0,2%, porque el IPC del mes anterior fue negativo.
+Lo cambie por "se mueve en tramos lineales". **Tambien falso**: dentro del mismo tramo el
+monto diario va de 13,22 a 13,35.
+
+Lo que si se cumple: la UF se recalcula el dia 10 de cada mes con el IPC del mes anterior y
+**compone a tasa diaria constante** hasta el 9 del siguiente. La razon entre dias
+consecutivos es constante hasta 4e-07, el redondeo al centavo. Con IPC cero queda
+EXACTAMENTE plana un mes entero (paso en feb-2026, tramo 10-mar a 09-abr).
+
+Nada en el codigo asumia monotonia —verificado por grep— asi que no hubo bug. Pero queda
+fijado por test y es una advertencia para el dashboard: **la UF puede bajar**, y un grafico
+que la dibuje siempre creciente miente. Como test ademas es el mas fuerte de los tres que
+intente: un valor con los miles mal leidos da una razon de ~1000 en vez de ~1,0003.
+
+**Gates:** VERDE. 492 tests (eran 445).

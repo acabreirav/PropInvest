@@ -23,6 +23,7 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+from flujocero.sources import robots_rfc9309 as rfc9309
 from flujocero.sources.base import RobotsVerdict, escribir_crudo, sha_de
 
 TIMEOUT = 20.0
@@ -82,16 +83,43 @@ def snapshot_cacheado(
 def _veredicto_desde_cuerpo(
     cuerpo: bytes, url: str, user_agent: str, destino: str, motivo: str
 ) -> RobotsVerdict:
-    parser = RobotFileParser()
-    parser.parse(cuerpo.decode("utf-8", errors="replace").splitlines())
-    permitido = bool(parser.can_fetch(user_agent, url))
-    demora = parser.crawl_delay(user_agent)
+    """Evalua con el RFC 9309 y, ante desacuerdo con la stdlib, se queda con lo mas estricto.
+
+    Por que no basta `RobotFileParser` (T-926): **no implementa comodines**. Guarda
+    `Disallow: /admin/*` como el literal `/admin/%2A` y responde `allowed` para `/admin/x`.
+    O sea **sub-bloquea**, que es la direccion peligrosa: sobre-bloquear molesta, sub-bloquear
+    te hace pedir lo que el sitio prohibio, y el §3.5 es una regla dura.
+
+    Se corren los dos y se toma la conjuncion. La stdlib no entiende `*` pero si maneja
+    detalles del formato viejo que nuestro evaluador podria estar pasando por alto, asi que
+    un `False` suyo tambien vale. **Permitido solo si los dos dicen que si.**
+    """
+    texto = cuerpo.decode("utf-8", errors="replace")
+
+    v = rfc9309.evaluar(texto, user_agent, url)
+
+    stdlib = RobotFileParser()
+    stdlib.parse(texto.splitlines())
+    permitido_stdlib = bool(stdlib.can_fetch(user_agent, url))
+
+    permitido = v.permitido and permitido_stdlib
+    porque = v.porque
+    if v.permitido and not permitido_stdlib:
+        porque = f"{v.porque}; pero RobotFileParser lo niega — se toma lo mas estricto"
+
+    demora = v.crawl_delay
+    if demora is None:
+        de_stdlib = stdlib.crawl_delay(user_agent)
+        demora = float(de_stdlib) if de_stdlib is not None else None
+
     return RobotsVerdict(
         allowed=permitido,
         url_robots=destino,
         snapshot_sha=sha_de(cuerpo),
-        crawl_delay_s=float(demora) if demora is not None else None,
-        motivo=motivo if permitido else f"PROHIBIDO por robots.txt ({motivo})",
+        crawl_delay_s=demora,
+        motivo=f"{motivo} — {porque}".strip(" —")
+        if permitido
+        else f"PROHIBIDO por robots.txt ({porque})",
     )
 
 
