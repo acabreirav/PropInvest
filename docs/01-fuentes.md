@@ -134,7 +134,14 @@ Procedimiento estándar, barato y de bajo riesgo, para cada dominio:
 
 ## C · Arriendo
 
-### Assetplan — la mejor fuente, y la más amigable legalmente ✅
+### Assetplan — la más amigable legalmente, pero NO es arriendo efectivo ⚠️
+
+> **CORREGIDO el 30-ago-2026 contra la respuesta real** (ver `docs/adr/008-assetplan.md`).
+> Lo que sigue de esta sección describía a Assetplan como "mejor proxy de arriendo real y
+> vacancia". **La ficha de edificio no entrega ninguna de las dos.** Entrega coordenadas,
+> distancia medida a Metro y gastos comunes reales; los precios son un **"desde"** por
+> tipología, que el §12 excluye. La afirmación original venía de investigación secundaria.
+
 `robots.txt` **permite acceso irrestricto a `ClaudeBot`, `Claude-User`, `GPTBot`, `PerplexityBot`,
 `CCBot`, Google-Extended y otros**, y restringe query params solo a Googlebot/Bingbot ✅.
 `/cdn-cgi/` confirma **Cloudflare** delante (único WAF identificado positivamente en el estudio).

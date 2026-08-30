@@ -154,10 +154,27 @@ fuentes:
     legal_tier: html_permitido
     enabled: true
     sitemap: "https://www.assetplan.cl/edificios.xml"
-    robots_nota: "permite EXPLÍCITAMENTE ClaudeBot y Claude-User"
-    js_render: true
+    robots_nota: >
+      permite EXPLÍCITAMENTE ClaudeBot y Claude-User. OJO: trae
+      `Disallow: /arriendo/departamento/*/edificio/` CON COMODÍN, que el verificador de la
+      stdlib ignoraba. Sin el arreglo de T-926 habríamos entrado ahí creyendo que se podía.
+    js_render: "por decidir — ver ADR 008 §4"
     cadencia: diaria
-    notas: "175 edificios, lastmod diario. Mejor proxy de arriendo efectivo y vacancia multifamily"
+    adr: "docs/adr/008-assetplan.md"
+    notas: >
+      176 edificios, lastmod diario.
+      CORREGIDO 30-ago-2026 contra la respuesta REAL: la ficha de edificio NO entrega
+      arriendo efectivo ni vacancia. La descripción anterior ("mejor proxy de arriendo
+      efectivo y vacancia") venía de investigación secundaria, no de mirar bytes.
+    entrega_verificado: >
+      latlng (coordenadas reales) · nearby_transport[].distance_meters a estación de Metro,
+      vía Google Places · min_ggcc por tipología (gastos comunes reales por edificio) ·
+      commune, address, multifamily.
+    no_entrega_verificado: >
+      Nada por unidad: sin m², sin precio por departamento. `units_by_size` lo carga Livewire
+      por AJAX y NO está en el HTML. Sin vacancia. Y `min_price` es un "DESDE": el §12 lo
+      excluye como `evidence_level: E`, y usarlo como comparable sesgaría la mediana de
+      arriendo hacia abajo de forma sistemática — justo en el numerador del yield.
 
   - id: planok_cotizador
     capa: 3

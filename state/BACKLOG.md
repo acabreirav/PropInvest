@@ -781,3 +781,47 @@ consecuencia: >
   Providencia y `nunoa/estadio-nacional` que aparecian antes no debian estar ahi.
   Ademas explica la alerta de reconciliacion de la ultima corrida: las dos microzonas fuera
   de ±25% —las-condes +49%, providencia +29%— son justo comunas EXCLUIDAS del alcance.
+
+## T-022 · Assetplan — CORREGIDO: no es la fuente de arriendo efectivo que creiamos
+estado: bloqueada (espera una medicion) · adr: docs/adr/008-assetplan.md · fase: 1
+hallazgo: >
+  Se exploro con `cli explorar` desde IP chilena y se miraron los bytes. El catalogo la
+  describia como "mejor proxy de arriendo efectivo y vacancia". **No entrega ninguna de las
+  dos.** Esa afirmacion venia de investigacion secundaria, no de mirar una respuesta.
+  Lo que SI entrega, en un `x-data="buildingPage(JSON.parse(...))"` de 35 KB (Livewire +
+  Alpine; el unico JSON-LD es un BreadcrumbList inutil):
+    - `latlng` — las primeras coordenadas reales del sistema
+    - `nearby_transport[].distance_meters` a estacion de Metro, via Google Places
+    - `min_ggcc` por tipologia — gastos comunes REALES por edificio
+  Lo que NO entrega: nada por unidad (sin m2, sin precio por depto — `units_by_size` lo carga
+  Livewire por AJAX), y sin vacancia. Y `min_price` es un **"desde"**: el §12 lo excluye como
+  `E`, y usarlo como comparable sesgaria la mediana de arriendo hacia abajo de forma
+  sistematica, justo en el numerador del yield.
+decision_pendiente: >
+  Una sola medicion la resuelve: `cli explorar <ficha> --render`. Si al renderizar aparecen
+  unidades con m2 y precio, Assetplan pasa a ser la MEJOR fuente de comparables del catalogo
+  —precio por unidad con superficie, operador profesional, robots que nos permite
+  explicitamente— y eso justifica Playwright, que el §5 solo admite con justificacion en el
+  ADR de la fuente. Si no aparecen, Assetplan baja de capa 4 a capa 6: fuente de CONTEXTO
+  (Metro, gastos comunes, coordenadas), no de arriendo.
+
+## T-939 · El catalizador de Metro tiene una fuente posible que no sabiamos que existia
+estado: pendiente · agente: geo-microzonas · fase: 2 · depende_de: [T-022]
+motivo: >
+  El catalizador es el 10% del score y esta INERTE: sin fuente, reparte el mismo puntaje a
+  todas las unidades y no mueve una posicion. La exploracion de Assetplan encontro
+  `nearby_transport[].distance_meters` — distancia a estacion de Metro MEDIDA por Google
+  Places, con nombre y tipo (`subway_station`), para 176 edificios con coordenadas.
+  No resuelve el catalizador de nuestras unidades (que no tienen coordenadas), pero es la
+  primera medicion real de distancia a Metro que entra al sistema y sirve de ancla.
+nota: >
+  Antes de subirle peso hay que resolver T-922: si la cercania al Metro YA esta en el precio
+  de la microzona, el score la esta pagando dos veces.
+
+## T-940 · Validar el supuesto de gastos comunes contra dato real
+estado: pendiente · agente: auditor-datos · fase: 2 · depende_de: [T-022]
+motivo: >
+  `params.yml:gastos_operativos.gastos_comunes_clp_m2_mes` es un `E` de 3.000 CLP/m2/mes con
+  rango [2.000, 5.000], afinado a mano por comuna. Assetplan publica `min_ggcc` REAL por
+  edificio y tipologia (ej. Estudio $45.000 · 1D $60.000 · 2D $90.000). Validar un `E` contra
+  dato real es exactamente lo que el §3.2 pide de un `E`.
