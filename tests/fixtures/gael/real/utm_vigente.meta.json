@@ -1,0 +1,9 @@
+{
+  "source_id": "gael_indicadores",
+  "source_url": "https://api.gael.cloud/general/public/monedas/UTM",
+  "fetched_at": "2026-08-30T02:56:07.057903+00:00",
+  "robots_snapshot_sha": "2dbd031daf846b1c348dd40c0dcdebfda38c55216013f17faed56434ca72a888",
+  "parser_version": "gael_indicadores/1.0.0",
+  "sha_contenido": "fb78105317d995d4910e6cb0a453754884f1bcce8af0e3a6dff36bff49cc03cc",
+  "bytes": 124
+}

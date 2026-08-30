@@ -1,0 +1,9 @@
+{
+  "source_id": "cmf_indicadores",
+  "source_url": "https://api.cmfchile.cl/api-sbifv3/recursos_api/uf/periodo/2024/01/2024/12?apikey=OCULTA&formato=json",
+  "fetched_at": "2026-08-29T05:52:42.140936+00:00",
+  "robots_snapshot_sha": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "parser_version": "cmf_indicadores/1.1.0",
+  "sha_contenido": "541e63c729970afe89184c7df9ca710cd41eda4fba5792cd63e6a24eb3e93384",
+  "bytes": 25259
+}
