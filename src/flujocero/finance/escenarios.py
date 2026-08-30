@@ -124,17 +124,36 @@ def evaluar_universo(
     p: Config,
     inv: Config,
     pie_exacto: bool = True,
+    pie_cero_precalculado: dict[str, Decimal | None] | None = None,
 ) -> list[Evaluacion]:
     """`pie_exacto` busca por biseccion el pie de flujo cero sobre el modelo completo.
 
     Cuesta ~11 evaluaciones extra por unidad y vale cada una: la forma cerrada subestima el
     pie necesario en 24 a 30 puntos porcentuales, porque parte del yield bruto e ignora
     vacancia, incobrabilidad, erosion intra-anual y seguros.
+
+    `pie_cero_precalculado` reusa biseciones ya hechas, por `unidad_key`. Existe porque el
+    resultado **no depende del pie pedido**: la biseccion busca el pie donde el flujo cruza
+    cero, asi que mover `escenario.pie_pct` no lo cambia. Sin esto, la API rehace 90 s de
+    calculo cada vez que alguien mueve el control del pie, para llegar al mismo numero.
+
+    Ojo con el resto del escenario: tasa, vacancia, plazo y DFL2 **si** lo cambian. Por eso
+    quien pasa el diccionario es responsable de invalidarlo cuando cambie algo que no sea el
+    pie; `api.servicio` lo hace cacheando por la firma del escenario sin el pie.
     """
     evals = [evaluar(u, escenario, p, inv) for u in unidades]
     if pie_exacto:
+        cache = pie_cero_precalculado or {}
         for u, ev in zip(unidades, evals, strict=True):
-            if not ev.excluido:
-                ev.pie_flujo_cero_real = pie_flujo_cero_real(u, escenario, p, inv)
+            if ev.excluido:
+                continue
+            # `in` y no `.get()`: un `None` cacheado significa "ya se calculo y NO llega
+            # nunca a flujo cero", que es informacion. Tratarlo como ausente rehace la
+            # biseccion completa justo en las unidades mas caras de evaluar.
+            ev.pie_flujo_cero_real = (
+                cache[u.unidad_key]
+                if u.unidad_key in cache
+                else pie_flujo_cero_real(u, escenario, p, inv)
+            )
     puntuar(unidades, evals, p)
     return evals

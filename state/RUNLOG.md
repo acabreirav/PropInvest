@@ -1388,3 +1388,75 @@ que la dibuje siempre creciente miente. Como test ademas es el mas fuerte de los
 intente: un valor con los miles mal leidos da una razon de ~1000 en vez de ~1,0003.
 
 **Gates:** VERDE. 492 tests (eran 445).
+
+---
+
+## 2026-08-30 · T-027 · El tablero. Y el E2E encontro un error de diseno que ninguna revision vio
+
+Ya no hay que leer rankings en la consola: `make serve` levanta la API y el tablero en
+localhost:8000. Ranking filtrable por pie, comuna, m2 y pie de flujo cero maximo; ficha de
+unidad con las seis columnas de procedencia; el motivo textual de cada beneficio que el motor
+NEGO; y el desglose del score barra por barra.
+
+### El problema real era el rendimiento, y se resolvio con una propiedad del calculo
+
+El gate §7.5 pide que la pagina cargue en menos de 3 s. Calcular el ranking cuesta **~90 s
+sobre mil unidades**, casi todo en la biseccion de T-923. Servir eso por peticion es imposible.
+
+Lo que lo arregla no es un truco de cache: es que **la biseccion no depende del pie pedido**.
+Busca el pie donde el flujo cruza cero, asi que mover el control no cambia su resultado. Se
+cachea por unidad y el pie deja de costar 90 s. Lo que SI depende —tasa, vacancia, plazo,
+DFL2, y los supuestos de params.yml— entra en la firma de la cache, **incluido el hash de los
+dos YAML de configuracion**: editar un supuesto la invalida sola, en vez de servir un numero
+viejo, que es peor que servirlo lento.
+
+**Trampa que casi entra:** `escenario_id` se construye como `pie20`, `pie40`… o sea que
+codifica el pie. Meterlo en la firma habria dado una firma por cada pie y anulado la cache
+entera **sin que nada fallara**: solo lenta, para siempre, sin sintoma. Queda fijado por test.
+
+### El E2E encontro lo que yo no
+
+Escribi el test de los 3 s esperando que pasara. Dio **8,08 s**.
+
+La causa no era el test: la pagina mandaba `pie=20%` fijo en el primer request, mientras el
+servidor precalcula la foto del pie del PERFIL. O sea que **toda primera carga descartaba la
+foto precalculada y re-evaluaba el universo entero**. Medido con 10.000 unidades: 8,1 s
+contra 0,3 s. Ahora la primera carga no manda pie y el control se sincroniza con lo que el
+servidor uso de verdad.
+
+Es exactamente el tipo de error que una revision de codigo no ve —las dos mitades estaban
+bien por separado— y que un gate medido si.
+
+Tambien salto, al levantar el E2E, que Playwright buscaba un build exacto de Chromium
+(`chromium_headless_shell-1234`) que este contenedor no tiene, y se **saltaba los 7 tests en
+silencio**. Un gate que se salta sin avisar es un gate que no existe. Ahora cae al Chromium
+que haya en la maquina.
+
+### Lo que NO se pudo hacer, y no se disimulo
+
+**El mapa del §7.5 no existe.** `dim_microzona.geom` esta vacio en las 165 microzonas y
+`fact_unidad_venta` no guarda coordenadas. No hay nada que dibujar.
+
+La tentacion era poner el centroide de la comuna y que se viera completo. No se hizo, y la
+razon es del §2.4: **la microzona ES la unidad de analisis de este producto**. Todo el
+argumento se apoya en que dentro de Estacion Central el mismo producto renta $300.000 en
+Santa Isabel y $350.000 a pocas cuadras. Un mapa que ubique mal una microzona no es un mapa
+incompleto: es un mapa que **contradice la tesis del producto mientras aparenta confirmarla**.
+
+En su lugar el tablero dice por que falta, y `/api/microzonas` responde la misma pregunta con
+una tabla ordenada por el pie de flujo cero mas bajo. Abierta como T-928, bloqueada por T-014.
+El test `test_el_tablero_dice_por_que_no_hay_mapa` esta escrito para FALLAR cuando entre la
+geometria, para que nadie se olvide de reemplazarlo.
+
+### Desviacion declarada del §5
+
+El contrato sugiere Alpine.js + MapLibre + Chart.js por CDN. **No se uso ninguna.** El gate
+E2E corre en un contenedor sin internet: un tablero que depende de un CDN no se puede testear
+ahi, y el gate se saltaria en silencio. Ademas un tablero de decision financiera que se cae
+con un CDN ajeno es peor que uno que no se cae. Dos tests fijan la ausencia de dependencias
+externas: uno revisa el HTML, otro escucha las peticiones reales del navegador.
+
+Se pierde reactividad declarativa y graficos vistosos —el desglose del score va con barras de
+CSS— y se gana que el archivo funciona solo. Se revisa cuando haya mapa, con su ADR.
+
+**Gates:** VERDE. 531 tests (eran 492).

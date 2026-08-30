@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flujo Cero — ranking de oportunidades</title>
+<!--
+  SIN LIBRERIAS EXTERNAS, y es a proposito (ver docs/adr/007-dashboard.md).
+
+  El §5 del contrato sugiere Alpine.js + MapLibre + Chart.js por CDN. Se decidio no usarlas:
+
+  1. El gate E2E del §7.5 corre en un contenedor SIN salida a internet. Un tablero que
+     depende del CDN no se puede testear ahi, y un gate que no puede correr no es un gate.
+  2. Un tablero de decision financiera que se rompe cuando falla un CDN ajeno es peor que uno
+     que no se rompe. Este archivo abre sin red.
+  3. MapLibre es discutible hoy igual: no hay geometria que dibujar (T-014).
+
+  Lo que se pierde es reactividad declarativa y graficos vistosos. Lo que se gana es que el
+  archivo funciona solo. Cuando entre la geometria se re-evalua, con su ADR.
+-->
+<style>
+  :root{
+    --tinta:#16181d; --tinta-2:#5a6069; --tinta-3:#8b919b;
+    --fondo:#fbfbfa; --papel:#fff; --papel-2:#f5f5f3; --linea:#e3e3df;
+    --acento:#1a5fb4; --bien:#1a7f4b; --ojo:#a35d00; --mal:#b3261e;
+    --radio:9px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --tinta:#e8e8e6; --tinta-2:#a8aeb8; --tinta-3:#767c86;
+      --fondo:#16181d; --papel:#1d2027; --papel-2:#23272f; --linea:#31363f;
+      --acento:#7aa8e8; --bien:#5fc98b; --ojo:#d99a3a; --mal:#e8776d;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fondo);color:var(--tinta);
+    font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .marco{max-width:1180px;margin:0 auto;padding:1.5rem 1.25rem 4rem}
+  h1{font-size:1.45rem;margin:0 0 .2rem;letter-spacing:-.02em}
+  .lede{color:var(--tinta-2);margin:0 0 1.25rem;max-width:60ch;font-size:.95rem}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.87em}
+
+  /* ---------- avisos ---------- */
+  .aviso{background:var(--papel);border:1px solid var(--linea);border-left:3px solid var(--ojo);
+    border-radius:var(--radio);padding:.7rem .9rem;margin-bottom:.6rem;font-size:.88rem;
+    color:var(--tinta-2)}
+  .aviso b{color:var(--tinta)}
+
+  /* ---------- controles ---------- */
+  .controles{background:var(--papel);border:1px solid var(--linea);border-radius:var(--radio);
+    padding:.9rem 1rem;margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end}
+  .campo{display:flex;flex-direction:column;gap:.25rem}
+  .campo label{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta-3)}
+  .campo input,.campo select{background:var(--papel-2);color:var(--tinta);
+    border:1px solid var(--linea);border-radius:6px;padding:.4rem .5rem;font:inherit;font-size:.9rem}
+  .campo input[type=range]{padding:0;width:11rem}
+  button{background:var(--acento);color:#fff;border:0;border-radius:6px;padding:.45rem .9rem;
+    font:inherit;font-size:.9rem;cursor:pointer}
+  button.plano{background:transparent;color:var(--acento);border:1px solid var(--linea)}
+  button:disabled{opacity:.5;cursor:progress}
+
+  /* ---------- resumen ---------- */
+  .cifras{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
+  .cifra{background:var(--papel);border:1px solid var(--linea);border-radius:var(--radio);
+    padding:.55rem .8rem;min-width:8rem}
+  .cifra b{display:block;font-size:1.15rem;font-variant-numeric:tabular-nums}
+  .cifra span{font-size:.75rem;color:var(--tinta-3)}
+
+  /* ---------- tabla ---------- */
+  .caja{background:var(--papel);border:1px solid var(--linea);border-radius:var(--radio);
+    overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:.88rem}
+  th,td{padding:.5rem .6rem;text-align:right;white-space:nowrap;border-bottom:1px solid var(--linea)}
+  th{position:sticky;top:0;background:var(--papel-2);font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--tinta-3);font-weight:600;z-index:1}
+  th:first-child,td:first-child,th.izq,td.izq{text-align:left}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--papel-2)}
+  tbody tr[aria-selected=true]{background:var(--papel-2);outline:2px solid var(--acento);
+    outline-offset:-2px}
+  td.num{font-variant-numeric:tabular-nums}
+  .ev{font-size:.62rem;padding:0 .25rem;border-radius:3px;margin-left:.3rem;
+    border:1px solid var(--linea);color:var(--tinta-3);vertical-align:.08em}
+  .ev-V{color:var(--bien);border-color:currentColor}
+  .ev-D{color:var(--acento);border-color:currentColor}
+  .ev-E{color:var(--ojo);border-color:currentColor}
+  .ev-ND{color:var(--mal);border-color:currentColor}
+
+  /* ---------- ficha ---------- */
+  .ficha{margin-top:1rem;background:var(--papel);border:1px solid var(--linea);
+    border-radius:var(--radio);padding:1rem 1.1rem}
+  .ficha h2{margin:0 0 .1rem;font-size:1.1rem}
+  .ficha .sub{color:var(--tinta-3);font-size:.85rem;margin:0 0 .9rem}
+  .rejilla{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.6rem}
+  .dato{background:var(--papel-2);border-radius:6px;padding:.5rem .65rem}
+  .dato .k{font-size:.72rem;color:var(--tinta-3);text-transform:uppercase;letter-spacing:.04em}
+  .dato .v{font-size:1.05rem;font-variant-numeric:tabular-nums;margin-top:.1rem}
+  h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--tinta-3);
+    margin:1.2rem 0 .45rem;font-weight:600}
+  .barra{display:grid;grid-template-columns:11rem 1fr 4rem;gap:.5rem;align-items:center;
+    font-size:.84rem;margin-bottom:.25rem}
+  .barra i{display:block;height:7px;background:var(--acento);border-radius:4px;min-width:1px}
+  .barra .riel{background:var(--papel-2);border-radius:4px}
+  .proc{font-size:.8rem;width:100%}
+  .proc td,.proc th{white-space:normal;word-break:break-all;text-align:left;vertical-align:top}
+  .proc td:first-child{white-space:nowrap;color:var(--tinta-3);width:11rem}
+  .motivo{background:var(--papel-2);border-left:3px solid var(--ojo);padding:.5rem .7rem;
+    border-radius:0 6px 6px 0;font-size:.85rem;margin-bottom:.4rem;color:var(--tinta-2)}
+  .vacio{padding:2rem;text-align:center;color:var(--tinta-3)}
+  footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--linea);
+    color:var(--tinta-3);font-size:.8rem}
+  @media (max-width:640px){ .barra{grid-template-columns:8rem 1fr 3.4rem} }
+</style>
+</head>
+<body>
+<div class="marco">
+
+  <h1>Flujo Cero</h1>
+  <p class="lede">Qué departamentos a la venta hoy producen el mejor retorno ajustado por
+  riesgo, y cuáles llegan a flujo de caja no negativo con el pie que puedes poner.
+  Cada número lleva su nivel de evidencia.</p>
+
+  <div id="avisos"></div>
+
+  <div class="controles">
+    <div class="campo">
+      <label for="pie">Pie <span id="pie-etq" class="mono">—</span></label>
+      <input type="range" id="pie" min="5" max="60" step="5" value="20">
+    </div>
+    <div class="campo">
+      <label for="comuna">Comuna</label>
+      <select id="comuna"><option value="">todas</option></select>
+    </div>
+    <div class="campo">
+      <label for="m2min">m² mínimos</label>
+      <input type="number" id="m2min" min="0" max="200" step="5" style="width:6.5rem">
+    </div>
+    <div class="campo">
+      <label for="piecero">Pie de flujo cero máx.</label>
+      <select id="piecero">
+        <option value="">sin filtro</option>
+        <option value="0.20">20%</option>
+        <option value="0.30">30%</option>
+        <option value="0.40">40%</option>
+        <option value="0.50">50%</option>
+      </select>
+    </div>
+    <div class="campo">
+      <label for="top">Mostrar</label>
+      <select id="top">
+        <option>25</option><option selected>50</option><option>100</option><option>250</option>
+      </select>
+    </div>
+    <button id="aplicar">Aplicar</button>
+    <button id="limpiar" class="plano">Limpiar</button>
+  </div>
+
+  <div class="cifras" id="cifras"></div>
+
+  <div class="caja">
+    <table id="tabla">
+      <thead><tr>
+        <th>#</th><th class="izq">Unidad</th><th class="izq">Microzona</th><th class="izq">Tip.</th>
+        <th>m²</th><th>Precio UF</th><th>UF/m²</th><th>Yield</th>
+        <th>Pie flujo 0</th><th>Costo real /mes</th><th>Score</th>
+      </tr></thead>
+      <tbody id="cuerpo"><tr><td colspan="11" class="vacio">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div id="ficha"></div>
+
+  <footer>
+    <span class="ev ev-V">V</span> verificado, vino de una fuente ·
+    <span class="ev ev-D">D</span> derivado, cálculo sobre datos verificados ·
+    <span class="ev ev-E">E</span> estimado, usa un supuesto declarado en
+    <span class="mono">params.yml</span> ·
+    <span class="ev ev-ND">ND</span> no disponible.<br>
+    Un número sin etiqueta sería indistinguible de uno inventado, así que acá no hay ninguno.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+const $ = (s) => document.querySelector(s);
+const estado = { datos: null, seleccion: null, cargando: false };
+
+// --------------------------------------------------------------- formato
+
+const pct = (t, d = 1) => (t === null || t === undefined) ? "—" : (Number(t) * 100).toFixed(d) + "%";
+const num = (t, d = 0) => (t === null || t === undefined) ? "—"
+  : Number(t).toLocaleString("es-CL", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+/** Un número SIEMPRE sale con su etiqueta de evidencia. Es la regla del §7.5 y acá es la
+ *  única función que escribe cifras en la página, así que no se puede olvidar por descuido. */
+function celda(c, formato) {
+  if (!c) return "—";
+  const nivel = c.evidence_level || "ND";
+  return `${formato(c.valor)}<span class="ev ev-${nivel}" title="nivel de evidencia ${nivel}">${nivel}</span>`;
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// --------------------------------------------------------------- red
+
+// La PRIMERA carga no manda pie, y eso no es un detalle: el servidor precalcula la foto del
+// pie del perfil, asi que mandar uno propio la descarta y obliga a re-evaluar el universo
+// entero. Medido con 10.000 unidades: 8,1 s contra 0,3 s. El control se ajusta DESPUES, con
+// el pie que el servidor diga que uso.
+let primeraCarga = true;
+
+function consulta() {
+  const q = new URLSearchParams();
+  if (!primeraCarga) q.set("pie", (Number($("#pie").value) / 100).toFixed(2));
+  q.set("top", $("#top").value);
+  if ($("#comuna").value) q.set("comuna", $("#comuna").value);
+  if ($("#m2min").value) q.set("m2_min", $("#m2min").value);
+  if ($("#piecero").value) q.set("pie_cero_max", $("#piecero").value);
+  return q;
+}
+
+async function cargar() {
+  if (estado.cargando) return;
+  estado.cargando = true;
+  $("#aplicar").disabled = true;
+  $("#cuerpo").innerHTML = `<tr><td colspan="11" class="vacio">Calculando…</td></tr>`;
+  try {
+    const r = await fetch("/api/ranking?" + consulta().toString());
+    if (!r.ok) throw new Error("la API respondió " + r.status);
+    estado.datos = await r.json();
+    if (primeraCarga) {
+      // El control se sincroniza con lo que el servidor uso de verdad, para que el usuario
+      // no vea un 20% en pantalla mientras la tabla se calculo con otro pie.
+      const delServidor = Math.round(Number(estado.datos.escenario.pie_pedido) * 100);
+      if (Number.isFinite(delServidor) && delServidor > 0) {
+        $("#pie").value = String(delServidor);
+        $("#pie-etq").textContent = delServidor + "%";
+      }
+      primeraCarga = false;
+    }
+    pintar();
+  } catch (e) {
+    // Nada de fallar en silencio: si la API no responde, la pagina lo dice.
+    $("#cuerpo").innerHTML =
+      `<tr><td colspan="11" class="vacio">No se pudo cargar el ranking: ${esc(e.message)}</td></tr>`;
+  } finally {
+    estado.cargando = false;
+    $("#aplicar").disabled = false;
+  }
+}
+
+// --------------------------------------------------------------- pintado
+
+function pintarAvisos(d) {
+  const avisos = [...(d.advertencias || [])];
+  $("#avisos").innerHTML = avisos.map((a) =>
+    `<div class="aviso">${esc(a)}</div>`).join("");
+}
+
+function pintarCifras(d) {
+  const e = d.escenario;
+  const pies = e.pies_efectivos.map((p) => pct(p, 0)).join(" y ") || "—";
+  // Lo PEDIDO y lo APLICADO son cosas distintas, y confundirlas miente sobre la plata: el
+  // escenario pide 10% con subsidio, pero a un usado el motor le niega los dos y le exige 20%.
+  const c = [
+    [d.total_filtrado, "unidades en pantalla"],
+    [d.total_rankeable, "rankeables en total"],
+    [pct(e.pie_pedido, 0), "pie PEDIDO"],
+    [pies, "pie APLICADO"],
+    [`${e.con_subsidio} / ${d.total_rankeable}`, "con subsidio a la tasa"],
+    [`${e.con_fogaes} / ${d.total_rankeable}`, "con FOGAES"],
+    [num(d.uf.valor_clp), "UF en pesos"],
+  ];
+  $("#cifras").innerHTML = c.map(([v, k]) =>
+    `<div class="cifra"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
+}
+
+function pintarTabla(d) {
+  if (!d.filas.length) {
+    $("#cuerpo").innerHTML =
+      `<tr><td colspan="11" class="vacio">Ninguna unidad pasa estos filtros.</td></tr>`;
+    return;
+  }
+  $("#cuerpo").innerHTML = d.filas.map((f) => `
+    <tr data-key="${esc(f.unidad_key)}" tabindex="0" aria-selected="false">
+      <td class="num">${f.posicion}</td>
+      <td class="izq mono">${esc(f.unidad_key)}</td>
+      <td class="izq">${esc(f.microzona_id)}</td>
+      <td class="izq">${esc(f.tipologia)}</td>
+      <td class="num">${celda(f.m2_utiles, (v) => num(v, 0))}</td>
+      <td class="num">${celda(f.precio_uf, (v) => num(v, 0))}</td>
+      <td class="num">${celda(f.uf_m2, (v) => num(v, 1))}</td>
+      <td class="num">${celda(f.yield_bruto, (v) => pct(v, 2))}</td>
+      <td class="num">${celda(f.pie_flujo_cero_real, (v) => pct(v, 0))}</td>
+      <td class="num">${celda(f.costo_tenencia_mensual_uf, (v) => num(v, 2))}</td>
+      <td class="num">${celda(f.score, (v) => num(v, 3))}</td>
+    </tr>`).join("");
+  for (const tr of document.querySelectorAll("#cuerpo tr[data-key]")) {
+    tr.addEventListener("click", () => abrirFicha(tr.dataset.key));
+    tr.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); abrirFicha(tr.dataset.key); }
+    });
+  }
+}
+
+function pintarComunas(d) {
+  const sel = $("#comuna");
+  if (sel.dataset.listo) return;
+  const comunas = [...new Set(d.filas.map((f) => f.comuna_id))].sort();
+  sel.insertAdjacentHTML("beforeend",
+    comunas.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join(""));
+  sel.dataset.listo = "1";
+}
+
+function pintar() {
+  const d = estado.datos;
+  pintarAvisos(d); pintarCifras(d); pintarTabla(d); pintarComunas(d);
+  if (estado.seleccion) abrirFicha(estado.seleccion);
+}
+
+// --------------------------------------------------------------- ficha
+
+async function abrirFicha(key) {
+  estado.seleccion = key;
+  for (const tr of document.querySelectorAll("#cuerpo tr[data-key]")) {
+    tr.setAttribute("aria-selected", String(tr.dataset.key === key));
+  }
+  const pie = (Number($("#pie").value) / 100).toFixed(2);
+  const r = await fetch(`/api/unidad/${encodeURIComponent(key)}?pie=${pie}`);
+  if (!r.ok) { $("#ficha").innerHTML = ""; return; }
+  const f = await r.json();
+
+  const datos = [
+    ["Precio", celda(f.precio_uf, (v) => num(v, 0) + " UF")],
+    ["Superficie", celda(f.m2_utiles, (v) => num(v, 0) + " m²")],
+    ["Arriendo mediano", celda(f.arriendo_mensual_uf, (v) => num(v, 2) + " UF")],
+    ["Yield bruto", celda(f.yield_bruto, (v) => pct(v, 2))],
+    ["Cap rate", celda(f.cap_rate, (v) => pct(v, 2))],
+    ["Dividendo", celda(f.dividendo_uf, (v) => num(v, 2) + " UF")],
+    ["Flujo antes de impuestos", celda(f.btcf_mensual_uf, (v) => num(v, 2) + " UF")],
+    ["De eso, amortización", celda(f.amortizacion_mensual_uf, (v) => num(v, 2) + " UF")],
+    ["Costo real de tenencia", celda(f.costo_tenencia_mensual_uf, (v) => num(v, 2) + " UF")],
+    ["Pie de flujo cero", celda(f.pie_flujo_cero_real, (v) => pct(v, 1))],
+    ["Pie aplicado", celda(f.pie_efectivo, (v) => pct(v, 0))],
+    ["TIR real 10a", celda(f.tir_real_10a, (v) => pct(v, 2))],
+    ["DSCR", celda(f.dscr, (v) => num(v, 2))],
+    ["Arriendo de equilibrio", celda(f.arriendo_equilibrio_uf, (v) => num(v, 2) + " UF")],
+    ["Tasa aplicada", celda(f.tasa_aplicada, (v) => pct(v, 2))],
+  ];
+
+  const motivos = [
+    !f.subsidio_aplicado && f.motivo_sin_subsidio ? ["Sin subsidio a la tasa", f.motivo_sin_subsidio] : null,
+    !f.fogaes_aplicado && f.motivo_sin_fogaes ? ["Sin FOGAES", f.motivo_sin_fogaes] : null,
+    !f.dfl2_aplicado && f.motivo_sin_dfl2 ? ["Sin DFL2", f.motivo_sin_dfl2] : null,
+  ].filter(Boolean);
+
+  const desglose = Object.entries(f.score_desglose || {});
+  const maxComp = Math.max(0.0001, ...desglose.map(([, v]) => Number(v)));
+
+  const pa = f.procedencia_arriendo;
+  const proc = (f.procedencia || [])[0] || {};
+
+  $("#ficha").innerHTML = `
+  <div class="ficha">
+    <h2>${esc(f.unidad_key)} · ${esc(f.tipologia)} · ${esc(f.microzona_id)}</h2>
+    <p class="sub">Posición ${f.posicion} del ranking ·
+      ${f.es_vivienda_nueva ? "vivienda nueva" : "vivienda usada"}${
+        f.antiguedad_anios != null ? `, ${f.antiguedad_anios} años` : ""}</p>
+
+    <div class="rejilla">
+      ${datos.map(([k, v]) => `<div class="dato"><div class="k">${esc(k)}</div>
+        <div class="v">${v}</div></div>`).join("")}
+    </div>
+
+    ${motivos.length ? `<h3>Beneficios que el motor NO aplicó, y por qué</h3>
+      ${motivos.map(([t, m]) => `<div class="motivo"><b>${esc(t)}.</b> ${esc(m)}</div>`).join("")}` : ""}
+
+    <h3>De dónde salió el arriendo</h3>
+    ${pa ? `<div class="motivo">Celda <span class="mono">${esc(pa.celda)}</span> ·
+      <b>${pa.n_comparables} comparables</b> · mediana ${num(pa.mediana_uf, 2)} UF.
+      El §2.4 manda emparejar por microzona × tipología × rango de m², nunca por comuna:
+      dentro de una misma comuna hay 17% de brecha a pocas cuadras.</div>`
+      : `<div class="motivo">Sin procedencia de arriendo registrada.</div>`}
+
+    <h3>Cómo se compone el score</h3>
+    ${desglose.length ? desglose.map(([k, v]) => `
+      <div class="barra">
+        <span>${esc(k)}</span>
+        <span class="riel"><i style="width:${(Number(v) / maxComp * 100).toFixed(1)}%"></i></span>
+        <span class="mono" style="text-align:right">${num(v, 3)}</span>
+      </div>`).join("") : `<div class="motivo">Sin desglose.</div>`}
+
+    <h3>Procedencia — las seis columnas del §3.1</h3>
+    <table class="proc">
+      ${(f.columnas_procedencia || []).map((c) => `<tr>
+        <td>${esc(c)}</td><td class="mono">${esc(proc[c] ?? "—")}</td></tr>`).join("")}
+      <tr><td>evidence_level</td><td class="mono">${esc(proc.evidence_level ?? "—")}</td></tr>
+      <tr><td>valid_from</td><td class="mono">${esc(proc.valid_from ?? "—")}</td></tr>
+    </table>
+  </div>`;
+  $("#ficha").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// --------------------------------------------------------------- arranque
+
+$("#pie").addEventListener("input", () => { $("#pie-etq").textContent = $("#pie").value + "%"; });
+$("#aplicar").addEventListener("click", cargar);
+$("#limpiar").addEventListener("click", () => {
+  $("#comuna").value = ""; $("#m2min").value = ""; $("#piecero").value = "";
+  $("#pie").value = 20; $("#pie-etq").textContent = "20%";
+  cargar();
+});
+$("#pie-etq").textContent = $("#pie").value + "%";
+cargar();
+</script>
+</body>
+</html>

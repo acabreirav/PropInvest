@@ -205,10 +205,46 @@ nota: >
   Ningun check borra ni imputa: el §7.3 y el §3.2 lo prohiben.
 
 ## T-027 · API + dashboard v1
-estado: pendiente · agente: dashboard · fase: 1 · depende_de: [T-004, T-026]
+estado: hecha (con una excepcion declarada) · modulo: src/flujocero/api/ · agente: dashboard · fase: 1
+adr: docs/adr/007-dashboard.md · comando: `make serve`
 criterio_de_aceptacion:
-  - Ranking, ficha, mapa y simulador funcionando
-  - E2E Playwright verde; ningún número sin `evidence_level`
+  - [x] Ranking filtrable por pie, comuna, m2 y pie de flujo cero maximo
+  - [x] Ficha de unidad con las SEIS columnas de procedencia del §3.1
+  - [x] Simulador de pie: mover el control re-evalua sin rehacer la biseccion
+  - [x] E2E Playwright verde: carga <3 s con 10.000 unidades, el filtro muerde, la ficha
+        muestra la procedencia, ningun numero sin `evidence_level` EN EL DOM
+  - [ ] **El mapa NO se dibuja.** `dim_microzona.geom` esta vacio en las 165 microzonas y
+        los avisos no traen coordenadas. Bloqueado por T-014. El tablero lo DICE en vez de
+        dibujar puntos aproximados: una microzona mal ubicada contradice la tesis del §2.4
+        mientras aparenta confirmarla. `test_el_tablero_dice_por_que_no_hay_mapa` esta
+        escrito para FALLAR cuando entre la geometria.
+hallazgos: >
+  1. La primera carga de la pagina mandaba un pie fijo del 20% y descartaba la foto que el
+     servidor precalcula con el pie del perfil: **8,1 s contra 0,3 s** con 10.000 unidades.
+     Lo encontro el E2E, no una revision de codigo.
+  2. `escenario_id` codifica el pie (`pie20`, `pie40`), asi que meterlo en la firma de la
+     cache la habria anulado entera SIN QUE NADA FALLARA: solo lenta, para siempre.
+  3. El aviso de micro-unidades saltaba con el ranking vacio: "0 de las 15 primeras son de
+     menos de 35 m2", una advertencia sobre unidades que no existen.
+desviacion_declarada: >
+  El §5 sugiere Alpine.js + MapLibre + Chart.js por CDN. No se uso ninguna: el gate E2E corre
+  en un contenedor SIN internet, y un gate que no puede correr se salta en silencio. Ademas
+  un tablero de decision financiera que se cae con un CDN ajeno es peor que uno que no.
+  Hay dos tests que fijan la ausencia de dependencias externas. Ver ADR 007 §1.1.
+
+## T-928 · El mapa de microzonas
+estado: bloqueada · agente: dashboard · fase: 2 · depende_de: [T-014]
+motivo: >
+  Es el unico criterio del §7.5 que T-027 no pudo cumplir. Necesita geometria: hoy
+  `dim_microzona.geom` esta vacio en las 165 microzonas y `fact_unidad_venta` no guarda
+  coordenadas. Se destraba con el Censo 2024 por manzanas del INE.
+criterio_de_aceptacion:
+  - [ ] Geometria cargada en `dim_microzona.geom` desde el Censo
+  - [ ] El mapa dibuja las microzonas coloreadas por pie de flujo cero minimo
+  - [ ] `capacidades.mapa` pasa a `true` y `test_el_tablero_dice_por_que_no_hay_mapa` se
+        reemplaza por uno que verifique que el mapa se dibuja
+  - [ ] Evaluar vendorizar MapLibre (copiarlo al repo, NO por CDN): el gate E2E tiene que
+        seguir corriendo sin internet
 
 ## T-028 · Cerrar el vacío #2: arriendo UF/m² de Cerrillos, Recoleta, Independencia, Macul
 estado: pendiente · agente: analista-arriendo · fase: 1 · depende_de: [T-023]
