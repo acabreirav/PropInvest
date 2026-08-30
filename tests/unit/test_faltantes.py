@@ -288,3 +288,57 @@ def test_la_prioridad_por_comuna_es_la_que_usa_la_recoleccion_dirigida() -> None
     # Macul necesita MÁS avisos (tres celdas desde cero) pero Ñuñoa tiene más unidades.
     assert por_comuna["macul"][1] > por_comuna["nunoa"][1]
     assert list(por_comuna)[0] == "nunoa", "se ordenó por esfuerzo en vez de por resultado"
+
+
+# --------------------------------------------------------------- el tamaño típico de la celda
+
+
+def test_la_celda_guarda_el_tamano_tipico_de_sus_comparables() -> None:
+    """Una banda de m² NO es homogénea, y sin `m2_mediana` no hay forma de saberlo.
+
+    Medido el 30-ago-2026 sobre 1D1B en la banda `0-35`: el 60% de los comparables mide
+    31-35 m² y la mediana de arriendo de la banda es $350.000, mientras que los de 22-26
+    rentan $300.000. Acreditar la mediana de la banda a un depto de 22 m² le regala +17% de
+    arriendo, y el arriendo es el numerador del yield.
+    """
+    from flujocero.agg.arriendo import Comparable, agregar
+
+    comps = [
+        *[Comparable("a/uno", "1D1B", Decimal(34), Decimal("11.0")) for _ in range(9)],
+        Comparable("a/uno", "1D1B", Decimal(22), Decimal("8.0")),
+    ]
+    ag = agregar(comps, RANGOS)[0]
+    assert ag.n == 10
+    assert ag.m2_mediana == 34, "la mediana la fijan los grandes, que son mayoría"
+
+
+def test_el_emparejamiento_mide_cuanto_se_desvia_la_unidad_de_su_celda() -> None:
+    """No corrige el arriendo —eso sería imputar (§3.2)— pero deja el sesgo medido."""
+    from flujocero.agg.oportunidades import emparejar
+
+    con = _base(unidades=[("CHICA", "a/uno", "1D1B", 22.0)], celdas=[])
+    con.execute(
+        "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, "
+        "arriendo_uf_mediana, n, m2_mediana) VALUES ('a/uno','1D1B','0-35',10.0,20,34.0)"
+    )
+    try:
+        r = emparejar(con, RANGOS)
+    finally:
+        con.close()
+    assert r.unidades, "la unidad tiene que rankear: el desvío no la excluye"
+    # 22 contra 34: la unidad es 35% más chica que el depto típico de su celda.
+    assert r.desvio_m2["CHICA"] == pytest.approx(Decimal("-0.3529"), abs=Decimal("0.001"))
+
+
+def test_sin_m2_mediana_no_se_inventa_un_desvio() -> None:
+    """Una celda vieja, anterior a la columna, no tiene con qué comparar. Devolver 0 diría
+    "no hay sesgo", que es una afirmación distinta de "no se puede medir"."""
+    from flujocero.agg.oportunidades import emparejar
+
+    con = _base(unidades=[("X", "a/uno", "1D1B", 22.0)], celdas=[("a/uno", "1D1B", "0-35", 20)])
+    try:
+        r = emparejar(con, RANGOS)
+    finally:
+        con.close()
+    assert r.unidades
+    assert "X" not in r.desvio_m2

@@ -1504,21 +1504,27 @@ def bandas(
         typer.echo("No hay comparables cargados. Corré `agregar-arriendo` primero.")
         raise typer.Exit(1)
 
-    typer.echo(f"\n  {len(comps)} comparables de arriendo\n")
+    m2_min = min(c.m2_utiles for c in comps)
+    typer.echo(f"\n  {len(comps)} comparables de arriendo · el más chico mide {m2_min:.0f} m²\n")
+    guardadas: dict[str, list] = {}
     for etiqueta, rangos in (("ACTUAL  ", actuales), ("PROPUESTA", nuevos)):
         ags = ag.agregar(comps, rangos)
         utiles = [a for a in ags if a.n >= ag.MIN_COMPARABLES]
-        # El sesgo que queda: cuanto se aleja el extremo de cada banda de su mediana. Es el
-        # error maximo que la banda le puede meter a una unidad de su borde.
-        anchos = [(D(str(b)) - D(str(a))) / D(str(a or 1)) for a, b in [tuple(x) for x in rangos]]
+        guardadas[etiqueta.strip()] = utiles
+        # Cuantas veces mas grande es el techo de la banda que su piso: el factor de
+        # heterogeneidad. En una banda de 2x, dos unidades del mismo grupo pueden diferir al
+        # doble de superficie y compartir mediana de arriendo.
+        # La primera banda empieza en 0, asi que su piso REAL es el m2 mas chico observado.
+        # Dividir por cero —o por 1, que era el parche— daba un "35x" que no medía nada.
+        factores = [D(str(b)) / max(D(str(a)), m2_min) for a, b in [tuple(x) for x in rangos]]
         typer.echo(
             f"  {etiqueta}  {len(rangos)} bandas · {len(ags)} celdas · "
-            f"{len(utiles)} con n>=8 · ancho relativo máx {max(anchos):.1f}x"
+            f"{len(utiles)} con n>=8 · la banda más heterogénea mezcla hasta "
+            f"{max(factores):.1f}x de superficie"
         )
         typer.echo(f"             cortes: {[r[0] for r in rangos] + [rangos[-1][1]]}")
 
-    ags_act = [a for a in ag.agregar(comps, actuales) if a.n >= ag.MIN_COMPARABLES]
-    ags_new = [a for a in ag.agregar(comps, nuevos) if a.n >= ag.MIN_COMPARABLES]
+    ags_act, ags_new = guardadas["ACTUAL"], guardadas["PROPUESTA"]
     delta = len(ags_new) - len(ags_act)
     typer.echo(f"\n  Celdas que pueden rankear: {len(ags_act)} → {len(ags_new)} ({delta:+d})")
     if delta < 0:
@@ -1534,6 +1540,57 @@ def bandas(
     typer.echo(
         "\n  Si decidís cambiarlas, van en `config/params.yml:ingresos.rangos_m2`."
         "\n  Es un cambio de supuesto: queda registrado en docs/05-decisiones.md."
+    )
+    # Las CELDAS no son la unidad de decision: importa cuantas UNIDADES dejan de rankear y
+    # cuantas quedan comparadas contra un depto de su tamano. Una celda perdida con 2
+    # unidades y otra con 80 pesan distinto, y contar celdas las trata igual.
+    _unidades_afectadas(ags_act, ags_new, actuales, nuevos)
+
+
+def _unidades_afectadas(ags_act, ags_new, actuales, nuevos) -> None:
+    """Cuantas unidades de venta pierden su celda y cuantas quedan bien emparejadas.
+
+    Es el numero con el que se decide. `cli bandas` contaba CELDAS, y una celda con 2
+    unidades pesa igual que una con 80 si se cuentan celdas.
+    """
+    import duckdb
+
+    from flujocero.agg.arriendo import etiqueta_rango
+    from flujocero.agg.faltantes import CONSULTA
+
+    vivas_act = {(a.microzona_id, a.tipologia, a.rango_m2) for a in ags_act}
+    vivas_new = {(a.microzona_id, a.tipologia, a.rango_m2) for a in ags_new}
+    m2_tipico = {(a.microzona_id, a.tipologia, a.rango_m2): a.m2_mediana for a in ags_new}
+
+    alc = desde_config(cargar("zonas"))
+    con = duckdb.connect(str(db.crear()))
+    try:
+        filas = con.execute(CONSULTA).fetchall()
+    finally:
+        con.close()
+
+    pierden = ganan = bien_emparejadas = 0
+    for mz, tip, m2 in filas:
+        if not alc.unidad_rankeable(mz)[0]:
+            continue
+        val = D(str(m2))
+        ra, rn = etiqueta_rango(val, actuales), etiqueta_rango(val, nuevos)
+        antes = ra is not None and (mz, tip, ra) in vivas_act
+        despues = rn is not None and (mz, tip, rn) in vivas_new
+        if antes and not despues:
+            pierden += 1
+        elif despues and not antes:
+            ganan += 1
+        elif antes and despues:
+            tipico = m2_tipico.get((mz, tip, rn))
+            if tipico and abs(val - tipico) / tipico < D("0.15"):
+                bien_emparejadas += 1
+
+    typer.echo(
+        "\n  En UNIDADES, que es lo que importa para decidir:"
+        f"\n    dejan de rankear:                                    {pierden}"
+        f"\n    empiezan a rankear:                                  {ganan}"
+        f"\n    quedan comparadas contra un depto de su tamaño (±15%): {bien_emparejadas}"
     )
 
 
