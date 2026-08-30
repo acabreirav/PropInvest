@@ -55,6 +55,7 @@ class Agregado:
     mediana: Decimal
     p75: Decimal
     uf_m2_mediana: Decimal
+    m2_mediana: Decimal = D(0)
 
     @property
     def suficiente(self) -> bool:
@@ -128,6 +129,10 @@ def agregar(comparables: list[Comparable], rangos: list[list[int]]) -> list[Agre
                 mediana=percentil(arriendos, D("0.5")),
                 p75=percentil(arriendos, D("0.75")),
                 uf_m2_mediana=percentil(por_m2, D("0.5")),
+                # La superficie tipica de la celda. Un rango de m2 NO es homogeneo: en
+                # `0-35` el 60% de los comparables mide 31-35, asi que la mediana de
+                # arriendo describe a un depto grande de la banda y no al chico.
+                m2_mediana=percentil([c.m2_utiles for c in items], D("0.5")),
             )
         )
     return salida
@@ -241,7 +246,8 @@ def cargar_en_duckdb(conexion: Any, agregados: list[Agregado], ahora: datetime) 
         conexion.execute(
             "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, n, "
             "arriendo_uf_p25, arriendo_uf_mediana, arriendo_uf_p75, arriendo_uf_m2_mediana, "
-            "avisos_activos, calculado_en) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "m2_mediana, avisos_activos, calculado_en) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 a.microzona_id,
                 a.tipologia,
@@ -251,6 +257,7 @@ def cargar_en_duckdb(conexion: Any, agregados: list[Agregado], ahora: datetime) 
                 a.mediana,
                 a.p75,
                 a.uf_m2_mediana,
+                a.m2_mediana,
                 a.n,
                 ahora,
             ),

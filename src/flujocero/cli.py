@@ -1083,7 +1083,41 @@ def oportunidades(
     typer.echo("\n  De dónde salió el arriendo de las tres primeras:")
     for u, _ in vivos[:3]:
         celda, n, arr = r.procedencia_arriendo[u.unidad_key]
-        typer.echo(f"    {u.unidad_key}: UF {arr:.2f}/mes · mediana de {n} avisos en {celda}")
+        dv = r.desvio_m2.get(u.unidad_key)
+        nota = ""
+        if dv is not None and abs(dv) >= D("0.15"):
+            nota = f"  ⚠ la unidad es {dv:+.0%} vs el depto típico de esa celda"
+        typer.echo(f"    {u.unidad_key}: UF {arr:.2f}/mes · mediana de {n} avisos en {celda}{nota}")
+
+    # T-941 · Una banda de m2 NO es homogenea, y el sesgo cae justo en las primeras filas.
+    # Medido el 30-ago-2026 sobre 1D1B en la banda `0-35`: el 60% de los comparables mide
+    # 31-35 m2 y la mediana de la banda es $350.000, mientras que los de 22-26 rentan
+    # $300.000. A un depto de 22 m2 se le acredita +17% de arriendo, y el arriendo es el
+    # numerador del yield: el mismo +17% se traslada entero al yield y lo sube en el ranking.
+    UMBRAL_DESVIO = D("0.15")
+    sesgadas = [
+        (u, ev, r.desvio_m2[u.unidad_key])
+        for u, ev in vivos[:20]
+        if u.unidad_key in r.desvio_m2 and r.desvio_m2[u.unidad_key] <= -UMBRAL_DESVIO
+    ]
+    if sesgadas:
+        typer.echo(
+            f"\n  ⚠ {len(sesgadas)} de las 20 primeras son MÁS CHICAS que el depto típico"
+            "\n    de su celda de arriendo, así que su arriendo está SOBREestimado y su"
+            "\n    yield también. El rango de m² se trata como homogéneo y no lo es:"
+        )
+        for u, _ev, dv in sesgadas[:6]:
+            celda, n, _arr = r.procedencia_arriendo[u.unidad_key]
+            typer.echo(
+                f"      {u.unidad_key}  {u.m2_utiles:>5.0f} m²  {dv:+.0%} vs su celda "
+                f"({n} comparables)"
+            )
+        typer.echo(
+            "\n    NO se corrige el arriendo: inventar un ajuste sería imputar (§3.2)."
+            "\n    Lo que corresponde es angostar las bandas de `ingresos.rangos_m2`, y eso"
+            "\n    mueve el ranking más de un 10%, así que es una decisión tuya (§8.4)."
+            "\n    Corré `cli bandas` para ver el costo de angostarlas."
+        )
 
 
 @app.command()
@@ -1428,6 +1462,79 @@ def _forma(cuerpo: bytes) -> list[str]:
     if re.search(r"\bUF\s?[\d.,]+", texto):
         lineas.append("hay montos en UF")
     return lineas
+
+
+@app.command()
+def bandas(
+    propuesta: str = typer.Option("0,25,35,50,70,100,140", help="cortes en m2, separados por coma"),
+) -> None:
+    """T-941 · cuanto cuesta angostar las bandas de m2, y cuanto sesgo saca.
+
+    El problema: una banda de m2 se trata como si fuera homogenea y no lo es. Medido sobre
+    1D1B en la banda `0-35`, el 60% de los comparables mide 31-35 m2 y la mediana de la banda
+    es $350.000, mientras que los de 22-26 rentan $300.000. A un depto de 22 m2 se le acredita
+    **+17% de arriendo**, que es el numerador del yield: el mismo +17% se traslada entero al
+    yield y lo sube en el ranking. Las primeras filas del top son justo unidades de 18-23 m2.
+
+    Angostar arregla el sesgo y **cuesta comparables**: cada banda nueva parte la muestra, y
+    una celda que caiga bajo los 8 del §7.3 deja de rankear a todas sus unidades. Este
+    comando mide las dos cosas sobre los datos reales para que la decision sea informada.
+
+    No cambia nada: solo mide. El §8.4 dice que un supuesto que mueve el ranking mas de un
+    10% se decide con el humano, y este lo mueve.
+    """
+    import duckdb
+
+    from flujocero.agg import arriendo as ag
+
+    cortes = [int(x.strip()) for x in propuesta.split(",") if x.strip()]
+    if len(cortes) < 2 or cortes != sorted(cortes):
+        typer.echo("✗ los cortes tienen que ir en orden ascendente y ser al menos dos.")
+        raise typer.Exit(2)
+    nuevos = [[a, b] for a, b in zip(cortes, cortes[1:], strict=False)]
+    actuales = cargar("params").crudo("ingresos.rangos_m2")
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        # Devuelve `(comparables, descartes)`; aca solo interesan los comparables.
+        comps, _descartes = ag.comparables_desde_duckdb(con)
+    finally:
+        con.close()
+    if not comps:
+        typer.echo("No hay comparables cargados. Corré `agregar-arriendo` primero.")
+        raise typer.Exit(1)
+
+    typer.echo(f"\n  {len(comps)} comparables de arriendo\n")
+    for etiqueta, rangos in (("ACTUAL  ", actuales), ("PROPUESTA", nuevos)):
+        ags = ag.agregar(comps, rangos)
+        utiles = [a for a in ags if a.n >= ag.MIN_COMPARABLES]
+        # El sesgo que queda: cuanto se aleja el extremo de cada banda de su mediana. Es el
+        # error maximo que la banda le puede meter a una unidad de su borde.
+        anchos = [(D(str(b)) - D(str(a))) / D(str(a or 1)) for a, b in [tuple(x) for x in rangos]]
+        typer.echo(
+            f"  {etiqueta}  {len(rangos)} bandas · {len(ags)} celdas · "
+            f"{len(utiles)} con n>=8 · ancho relativo máx {max(anchos):.1f}x"
+        )
+        typer.echo(f"             cortes: {[r[0] for r in rangos] + [rangos[-1][1]]}")
+
+    ags_act = [a for a in ag.agregar(comps, actuales) if a.n >= ag.MIN_COMPARABLES]
+    ags_new = [a for a in ag.agregar(comps, nuevos) if a.n >= ag.MIN_COMPARABLES]
+    delta = len(ags_new) - len(ags_act)
+    typer.echo(f"\n  Celdas que pueden rankear: {len(ags_act)} → {len(ags_new)} ({delta:+d})")
+    if delta < 0:
+        typer.echo(
+            "\n  Angostar SACA celdas: al partir la muestra, algunas caen bajo los 8"
+            "\n  comparables del §7.3 y dejan de rankear a todas sus unidades. El umbral"
+            "\n  NO se baja para compensar: una mediana de tres avisos es ruido con cara"
+            "\n  de dato. Se compensa recolectando (`recolectar-portal --dirigida`)."
+        )
+    else:
+        typer.echo("\n  Angostar no cuesta celdas con los datos de hoy.")
+
+    typer.echo(
+        "\n  Si decidís cambiarlas, van en `config/params.yml:ingresos.rangos_m2`."
+        "\n  Es un cambio de supuesto: queda registrado en docs/05-decisiones.md."
+    )
 
 
 if __name__ == "__main__":

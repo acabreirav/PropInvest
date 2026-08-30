@@ -1509,3 +1509,49 @@ que el parser de la stdlib ignoraba.
 Lo otro: **1 MB de HTML por ficha y el unico JSON-LD es un `BreadcrumbList`**, o sea inutil.
 El dato esta enterrado en el HTML o en un estado de app que el detector no reconocio. No se
 escribe el parser hasta ver los bytes — se pidieron como fixture.
+
+---
+
+## 2026-08-30 · El arreglo del alcance se ve, y el top del ranking puede ser un artefacto
+
+**El alcance funciona.** La corrida del usuario despues de T-938:
+`fuera_de_alcance: 837` · `microzona_saturada: 188`. Mil veinticinco unidades que antes se
+colaban al ranking ya no estan. El ranking quedo en 1.045 contra 1.048 de antes: numero
+parecido, composicion distinta.
+
+**Pero las primeras filas son de 18, 21, 22 y 23 m2**, todas emparejadas contra la celda
+`0-35 m2`. Se midio si eso es oportunidad o artefacto, sobre 1D1B en esa banda:
+
+```
+  17-21 m2   n= 11   $320.000
+  22-26 m2   n= 37   $300.000
+  27-30 m2   n=145   $334.800
+  31-35 m2   n=289   $370.000
+  LA BANDA   n=482   $350.000
+```
+
+El **60% de los comparables mide 31-35 m2**. La mediana de la banda describe a un depto
+grande, y acreditarsela a uno de 22-26 le regala **+17% de arriendo**. Como el arriendo es el
+numerador del yield, ese +17% se traslada entero al yield y lo sube en el ranking. Las
+primeras filas del top **pueden ser un artefacto del banding**.
+
+Lo que se hizo: `m2_mediana` por celda, el desvio medido por unidad, el aviso en el ranking
+con el numero, y `cli bandas` para medir el costo de angostar.
+
+Lo que NO se hizo, a proposito: **no se corrige el arriendo** —inventar un ajuste por m2 es
+imputar (§3.2)— y **no se cambian las bandas por mi cuenta**, porque mover `rangos_m2` cambia
+el ranking en mas de un 10% de posiciones y el §8.4 manda decidir eso con el humano.
+
+**Bug que salio de paso, y era de los que rompen la base del usuario.** `schema.sql` usa
+`CREATE TABLE IF NOT EXISTS`, asi que una base ya creada **nunca recibe una columna nueva**:
+el DDL corre sin error y sin efecto, y el primer INSERT que la mencione revienta. Paso con
+`m2_mediana` en la base de desarrollo y habria pasado igual en la del usuario. Ahora
+`db.migrar()` agrega las columnas nuevas de forma idempotente, con test que simula una base
+vieja.
+
+## 2026-08-30 · Assetplan renderizado: +664 KB, pendiente de mirar
+
+`explorar --render` sobre la misma ficha: **1.679.613 bytes contra 1.015.671 del estatico**.
+Livewire cargo algo. Los montos visibles siguen siendo `$231.000` y `$45.000`, que son el
+`min_price` y el `min_ggcc` del Estudio, o sea los mismos del estatico. Falta mirar el blob
+para saber si aparecieron unidades con m2. Pedido al usuario.

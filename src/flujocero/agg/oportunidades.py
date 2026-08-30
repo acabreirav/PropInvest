@@ -34,6 +34,10 @@ class Emparejamiento:
     unidades: list[Unidad] = field(default_factory=list)
     # De dónde salió el arriendo de cada unidad, para que la ficha lo pueda mostrar.
     procedencia_arriendo: dict[str, tuple[str, int, Decimal]] = field(default_factory=dict)
+    # `unidad_key -> (m2 de la unidad - m2 mediana de su celda) / m2 mediana`. Negativo =
+    # la unidad es mas chica que el depto tipico contra el que se la comparo, o sea que su
+    # arriendo esta SOBREestimado.
+    desvio_m2: dict[str, Decimal] = field(default_factory=dict)
     descartes: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -41,12 +45,25 @@ class Emparejamiento:
         return len(self.unidades) + sum(self.descartes.values())
 
 
-def celdas_de_arriendo(conexion: Any) -> dict[tuple[str, str, str], tuple[Decimal, int]]:
-    """`(microzona, tipología, rango)` -> `(mediana_uf, n)`, solo celdas que pueden rankear."""
+def celdas_de_arriendo(
+    conexion: Any,
+) -> dict[tuple[str, str, str], tuple[Decimal, int, Decimal | None]]:
+    """`(microzona, tipología, rango)` -> `(mediana_uf, n, m2_mediana)`.
+
+    `m2_mediana` viaja porque **una banda de m² no es homogénea**. Medido el 30-ago-2026
+    sobre 1D1B en la banda `0-35`: el 60% de los comparables mide 31-35 m² y la mediana de
+    la banda es $350.000, mientras que los de 22-26 m² rentan $300.000. Acreditarle la
+    mediana de la banda a un depto de 22 m² le regala **+17% de arriendo**, y el arriendo es
+    el numerador del yield.
+    """
     return {
-        (f[0], f[1], f[2]): (Decimal(str(f[3])), int(f[4]))
+        (f[0], f[1], f[2]): (
+            Decimal(str(f[3])),
+            int(f[4]),
+            Decimal(str(f[5])) if f[5] is not None else None,
+        )
         for f in conexion.execute(
-            "SELECT microzona_id, tipologia, rango_m2, arriendo_uf_mediana, n "
+            "SELECT microzona_id, tipologia, rango_m2, arriendo_uf_mediana, n, m2_mediana "
             "FROM agg_arriendo_microzona WHERE n >= ?",
             (MIN_COMPARABLES,),
         ).fetchall()
@@ -141,7 +158,7 @@ def emparejar(
             continue
         vistos.add(firma)
 
-        arriendo, n = celda
+        arriendo, n, m2_celda = celda
         r.unidades.append(
             Unidad(
                 unidad_key=key,
@@ -163,6 +180,11 @@ def emparejar(
             )
         )
         r.procedencia_arriendo[key] = (f"{mz} · {tip} · {rango} m²", n, arriendo)
+        # Cuanto se aleja esta unidad del depto TIPICO de su celda. No corrige el arriendo
+        # —eso seria imputar (§3.2)— pero deja medido el sesgo para que la ficha lo muestre
+        # y para poder decidir con numeros si las bandas hay que angostarlas.
+        if m2_celda:
+            r.desvio_m2[key] = (Decimal(str(m2)) - m2_celda) / m2_celda
     return r
 
 

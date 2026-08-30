@@ -258,3 +258,34 @@ def test_las_comunas_del_e2e_estan_en_alcance() -> None:
         assert a.en_alcance(comuna), f"{comuna} salió del alcance; arregla el fixture del E2E"
     for mz in MICROZONAS:
         assert a.unidad_rankeable(mz)[0], f"{mz} no rankearía y el E2E quedaría sin filas"
+
+
+def test_la_migracion_agrega_la_columna_a_una_base_que_ya_existia() -> None:
+    """`schema.sql` usa `CREATE TABLE IF NOT EXISTS`, así que una base ya creada **nunca
+    recibe una columna nueva**: el DDL corre sin error y sin efecto, y el primer INSERT que
+    la mencione revienta.
+
+    Pasó el 30-ago-2026 con `m2_mediana`. Este test simula una base vieja —crea la tabla sin
+    la columna— y verifica que `migrar()` la agrega y que correrlo dos veces no falla.
+    """
+    con = duckdb.connect(":memory:")
+    con.execute(
+        "CREATE TABLE agg_arriendo_microzona (microzona_id VARCHAR, tipologia VARCHAR, "
+        "rango_m2 VARCHAR, n INTEGER)"
+    )
+    columnas = lambda: {  # noqa: E731
+        f[0] for f in con.execute("DESCRIBE agg_arriendo_microzona").fetchall()
+    }
+    assert "m2_mediana" not in columnas()
+    assert db.migrar(con) == ["agg_arriendo_microzona.m2_mediana"]
+    assert "m2_mediana" in columnas()
+    db.migrar(con)  # idempotente
+    assert "m2_mediana" in columnas()
+    con.close()
+
+
+def test_la_migracion_no_revienta_sobre_una_base_vacia() -> None:
+    """En una base recién creada la tabla no existe todavía y el DDL ya la trae completa."""
+    con = duckdb.connect(":memory:")
+    assert db.migrar(con) == []
+    con.close()

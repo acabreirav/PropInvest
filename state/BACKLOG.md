@@ -825,3 +825,37 @@ motivo: >
   rango [2.000, 5.000], afinado a mano por comuna. Assetplan publica `min_ggcc` REAL por
   edificio y tipologia (ej. Estudio $45.000 · 1D $60.000 · 2D $90.000). Validar un `E` contra
   dato real es exactamente lo que el §3.2 pide de un `E`.
+
+## T-941 · Una banda de m2 no es homogenea, y el sesgo cae justo en el top del ranking
+estado: medido · decision PENDIENTE DEL USUARIO (§8.4) · comando: `cli bandas` · fase: 1
+hallazgo: >
+  Las primeras filas del ranking real son unidades de **18 a 23 m2**, todas emparejadas
+  contra la celda de arriendo `0-35 m2`. Medido sobre 1D1B en esa banda:
+
+    17-21 m2   n= 11   arriendo mediano $320.000
+    22-26 m2   n= 37                    $300.000
+    27-30 m2   n=145                    $334.800
+    31-35 m2   n=289                    $370.000
+    LA BANDA   n=482                    $350.000
+
+  El **60% de los comparables mide 31-35 m2**, asi que la mediana de la banda describe a un
+  depto grande. Acreditarsela a uno de 22-26 le regala **+17% de arriendo**, y el arriendo es
+  el numerador del yield: el mismo +17% se traslada entero al yield y lo sube en el ranking.
+  O sea que **las primeras filas del top pueden ser un artefacto del banding**, no una
+  oportunidad.
+lo_hecho:
+  - [x] `agg_arriendo_microzona.m2_mediana`: la superficie tipica de cada celda
+  - [x] Migracion idempotente en `db.migrar()` — `CREATE TABLE IF NOT EXISTS` no agrega
+        columnas a una base que ya existe, y esto habria roto la base del usuario
+  - [x] `emparejar()` mide el desvio de cada unidad contra el depto tipico de su celda
+  - [x] `cli oportunidades` avisa cuando una de las 20 primeras esta 15% o mas bajo el
+        tamano tipico de su celda, con el numero
+  - [x] `cli bandas` mide el costo de angostar: cuantas celdas caen bajo los 8 del §7.3
+lo_que_NO_se_hizo_y_por_que: >
+  **No se corrige el arriendo.** Inventar un ajuste por m2 seria imputar (§3.2). Y no se
+  cambian las bandas por mi cuenta: mover `ingresos.rangos_m2` cambia el ranking en mas de un
+  10% de posiciones, y el §8.4 dice que eso se decide con el humano.
+decision_para_el_usuario: >
+  Correr `cli bandas` sobre la base real. Si angostar `0-35` en `0-25` + `25-35` no cuesta
+  celdas, es gratis y se hace. Si cuesta, el cambio es: menos sesgo a cambio de menos
+  unidades rankeables, y se compensa recolectando dirigido.

@@ -101,6 +101,12 @@ CREATE TABLE IF NOT EXISTS agg_arriendo_microzona (
   arriendo_uf_mediana DECIMAL(10,3),
   arriendo_uf_p75 DECIMAL(10,3),
   arriendo_uf_m2_mediana DECIMAL(10,4),
+  -- La superficie MEDIANA de los comparables de la celda. No es decorativa: una banda como
+  -- `0-35` esta dominada por sus unidades grandes (medido: 60% de los comparables 1D1B caen
+  -- en 31-35 m2), asi que acreditarle esa mediana a un depto de 22 m2 le regala ~17% de
+  -- arriendo — justo en el numerador del yield. Guardarla permite MEDIR ese desvio por
+  -- unidad en vez de suponer que la banda es homogenea.
+  m2_mediana DECIMAL(10,2),
   avisos_activos INTEGER,          -- proxy de saturación
   calculado_en TIMESTAMPTZ,
   PRIMARY KEY (microzona_id, tipologia, rango_m2)
