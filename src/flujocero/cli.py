@@ -1308,16 +1308,51 @@ def explorar(
     )
 
 
+AYUDA_NAVEGADOR = (
+    "falta el navegador de Playwright. Se descarga una vez:\n\n"
+    "    uv run playwright install chromium\n\n"
+    "  (son ~150 MB; `make setup` tambien lo hace)"
+)
+
+
+def navegador_ausente(exc: Exception) -> typer.BadParameter | None:
+    """Traduce "no esta el binario" a un comando. `None` si el error es otro.
+
+    Es puro para poder testearlo sin instalar ni desinstalar un navegador. Playwright busca
+    un build EXACTO —`chromium_headless_shell-1234`— asi que este error aparece tanto en una
+    maquina recien clonada como en una donde el paquete se actualizo y el binario no.
+    """
+    texto = str(exc)
+    if "Executable doesn't exist" in texto or "playwright install" in texto:
+        return typer.BadParameter(AYUDA_NAVEGADOR)
+    return None
+
+
 def _render(url: str, ua: str) -> tuple[bytes, str]:
-    """Trae la pagina con un navegador. Solo para fuentes que lo justifiquen en su ADR (§5)."""
+    """Trae la pagina con un navegador. Solo para fuentes que lo justifiquen en su ADR (§5).
+
+    El navegador se descarga aparte de las dependencias de Python, asi que en una maquina
+    recien clonada esto falla. Antes reventaba con un traceback de 60 lineas terminado en un
+    cartel en ingles; ahora dice el comando. Un error de instalacion que exige leer un
+    traceback para saber que hacer es un error mal reportado.
+    """
+    from playwright.sync_api import Error as ErrorPlaywright
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
-        nav = pw.chromium.launch()
-        pag = nav.new_page(user_agent=ua)
-        pag.goto(url, wait_until="networkidle", timeout=45_000)
-        html = pag.content()
-        nav.close()
+        try:
+            nav = pw.chromium.launch()
+        except ErrorPlaywright as exc:
+            amable = navegador_ausente(exc)
+            if amable is not None:
+                raise amable from exc
+            raise
+        try:
+            pag = nav.new_page(user_agent=ua)
+            pag.goto(url, wait_until="networkidle", timeout=45_000)
+            html = pag.content()
+        finally:
+            nav.close()
     return html.encode("utf-8"), "text/html (renderizado)"
 
 

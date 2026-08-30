@@ -54,3 +54,24 @@ def test_detecta_montos_en_uf_y_en_pesos():
 
 def test_no_revienta_con_bytes_no_utf8():
     assert _forma(b"\xff\xfe\x00mal") is not None
+
+
+def test_la_falta_del_navegador_se_traduce_a_un_comando():
+    """Reventaba con un traceback de 60 lineas terminado en un cartel en ingles. Un error de
+    instalacion que exige leer un traceback para saber que hacer esta mal reportado."""
+    from flujocero.cli import navegador_ausente
+
+    exc = RuntimeError(
+        "BrowserType.launch: Executable doesn't exist at "
+        "C:\\\\...\\\\chromium_headless_shell-1234\\\\chrome-headless-shell.exe"
+    )
+    amable = navegador_ausente(exc)
+    assert amable is not None
+    assert "playwright install chromium" in amable.message
+
+
+def test_otro_error_del_navegador_no_se_disfraza_de_falta_de_instalacion():
+    """Si el navegador esta y falla por otra cosa, decir "instalalo" manda a perder el rato."""
+    from flujocero.cli import navegador_ausente
+
+    assert navegador_ausente(RuntimeError("Target page crashed")) is None
