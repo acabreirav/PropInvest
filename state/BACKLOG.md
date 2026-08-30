@@ -678,3 +678,51 @@ consecuencia: >
   Nada en el codigo asumia monotonia (verificado por grep), asi que no hubo bug. Pero queda
   fijado por test, y es una advertencia para el motor y el dashboard: **la UF puede bajar**.
   Cualquier grafico o proyeccion que la dibuje siempre creciente esta mintiendo.
+
+## T-935 · Diagnostico de huecos: que recolectar para desbloquear mas unidades
+estado: hecha · modulo: src/flujocero/agg/faltantes.py · comando: `cli faltantes` · fase: 1
+hallazgo: >
+  El cuello de botella del proyecto NO son los avisos de venta. De 2.380 unidades con precio
+  verificado, **2.043 (86%) se caen por `sin_comparables`**: su celda de arriendo no llega a
+  los 8 comparables del §7.3. Y el desbalance esta concentrado de forma explotable —
+  `san-miguel/el-llano 2D2B` tiene 108 unidades en venta y 2 comparables de arriendo, o sea
+  que **seis avisos desbloquean 108 unidades**.
+  Recolectar "mas arriendo" a ciegas reparte el esfuerzo entre celdas que ya sirven y celdas
+  que no le importan a nadie. Este comando lo convierte en un plan.
+criterio_de_aceptacion:
+  - [x] Ordena las celdas por PALANCA: unidades desbloqueadas por cada aviso que falta
+  - [x] El rango de m2 se calcula con la MISMA funcion que la agregacion de arriendo, o el
+        diagnostico apuntaria a celdas que el emparejamiento nunca mira
+  - [x] Vista por comuna, que es como recorre el colector
+  - [x] NO baja el umbral de 8: la respuesta a "faltan comparables" es conseguirlos
+
+## T-936 · Explorador de fuentes: capturar antes de parsear
+estado: hecha · comando: `cli explorar` · fase: 1
+motivo: >
+  Un parser de HTML escrito a ciegas contra una fuente que nunca vimos es adivinanza con cara
+  de codigo. Con Gael se pudo porque era JSON documentado; con Assetplan no. Este comando es
+  el paso `fuente-scout` del §8 antes del paso `colector`: verifica robots, baja unos pocos
+  documentos a la zona cruda con procedencia completa, y describe su FORMA —JSON-LD,
+  `__NEXT_DATA__`, sitemap, montos— para escribir el parser sobre bytes reales.
+criterio_de_aceptacion:
+  - [x] Se niega a descargar lo que robots prohibe, y lo dice citando el §3.5
+  - [x] Respeta el `Crawl-delay` declarado
+  - [x] Escribe a la zona cruda con las seis columnas (§3.6)
+  - [x] `--render` para paginas con JS, solo cuando el ADR de la fuente lo justifique (§5)
+  - [x] Detecta JSON-LD y estado de app embebido, que evitan parsear HTML
+
+## T-022 · Colector Assetplan (arriendo efectivo + vacancia)
+estado: en_curso · agente: colector · fase: 1 · depende_de: [T-936]
+PRIORIDAD ALTA, y por dos razones a la vez:
+  1. Publica **arriendo EFECTIVO**, no precio pedido. Hoy el yield se calcula sobre una
+     aspiracion y probablemente sea optimista.
+  2. Publica **vacancia**, que es justo lo que le falta a `riesgo_microzona` — el 15% del
+     score que hoy esta muerto. Destraba parte del 25% inerte SIN esperar el Censo.
+legal: >
+  Su robots.txt permite EXPLICITAMENTE a ClaudeBot y Claude-User. Pero trae
+  `Disallow: /arriendo/departamento/*/edificio/` **con comodin**, que el verificador de la
+  stdlib ignoraba: sin el arreglo de T-926 habriamos entrado a una ruta prohibida creyendo
+  que estaba permitida.
+siguiente_paso: >
+  El usuario corre `cli explorar https://www.assetplan.cl/edificios.xml --seguir 3` desde su
+  IP chilena y manda los blobs. Con esos bytes se escribe el parser y su ADR.

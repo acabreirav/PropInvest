@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal as D
@@ -1070,6 +1071,242 @@ def gates() -> None:
             typer.echo(f"✗ {f}")
         raise typer.Exit(1)
     typer.echo("\ngates: VERDE")
+
+
+@app.command()
+def faltantes(
+    top: int = typer.Option(15, help="cuantas celdas mostrar"),
+    comuna: str = typer.Option("", help="filtrar a una comuna"),
+) -> None:
+    """Que recolectar para desbloquear mas unidades, ordenado por cuantas desbloquea cada aviso.
+
+    El cuello de botella del proyecto NO son los avisos de venta: hay miles con precio
+    verificado. Es que su celda de arriendo no llega a los 8 comparables del §7.3, y sin eso
+    la unidad no se rankea. Este comando dice DONDE recolectar para que el esfuerzo pague.
+    """
+    import duckdb
+
+    from flujocero.agg import faltantes as fa
+
+    p = cargar("params")
+    con = duckdb.connect(str(db.crear()))
+    try:
+        dg = fa.diagnosticar(con, p.crudo("ingresos.rangos_m2"))
+    finally:
+        con.close()
+
+    if not dg.huecos:
+        typer.echo("No hay celdas bloqueadas: todas las unidades con precio ya rankean.")
+        return
+
+    pct = dg.unidades_rankeables_hoy / dg.unidades_con_precio if dg.unidades_con_precio else 0
+    typer.echo(
+        f"\n  {dg.unidades_con_precio} unidades con precio verificado · "
+        f"{dg.unidades_rankeables_hoy} rankean hoy ({pct:.0%})"
+    )
+    typer.echo(
+        f"  {dg.desbloqueables} esperan comparables de arriendo. "
+        f"Conseguir {dg.avisos_necesarios} avisos las desbloquea TODAS."
+    )
+
+    huecos = [h for h in dg.huecos if not comuna or h.comuna_id == comuna]
+    typer.echo(f"\n  Las {min(top, len(huecos))} celdas que mas rinden:\n")
+    typer.echo(f"  {'celda':<48} {'unids':>6} {'tiene':>6} {'faltan':>7} {'x aviso':>8}")
+    typer.echo(f"  {'-' * 48} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 8}")
+    for h in huecos[:top]:
+        celda = f"{h.microzona_id} · {h.tipologia} · {h.rango_m2} m2"
+        typer.echo(
+            f"  {celda:<48} {h.unidades_bloqueadas:>6} {h.comparables_actuales:>6} "
+            f"{h.faltan:>7} {float(h.palanca):>8.1f}"
+        )
+
+    typer.echo("\n  Por comuna, para planear la corrida:\n")
+    for c, (unidades, avisos) in list(dg.por_comuna().items())[:10]:
+        typer.echo(f"    {c:<28} {unidades:>5} unidades esperan  ·  faltan {avisos:>4} avisos")
+
+    typer.echo(
+        "\n  El umbral de 8 comparables es del §7.3 y NO se baja: una mediana de tres avisos"
+        "\n  es ruido con cara de dato. La respuesta correcta es conseguirlos."
+        "\n\n  Siguiente paso: recolecta ARRIENDO en las comunas de arriba y vuelve a correr"
+        "\n  `agregar-arriendo` y `oportunidades`."
+    )
+
+
+@app.command()
+def explorar(
+    url: str = typer.Argument(..., help="URL a explorar"),
+    seguir: int = typer.Option(0, help="si es un sitemap, cuantas URLs hijas traer tambien"),
+    render: bool = typer.Option(False, "--render", help="usar navegador (paginas con JS)"),
+) -> None:
+    """Captura documentos crudos de una fuente nueva SIN escribir todavia su parser.
+
+    Existe por disciplina de metodo: un parser de HTML escrito a ciegas contra una fuente que
+    nunca vimos es adivinanza con cara de codigo. Este comando verifica robots, baja unos
+    pocos documentos a la zona cruda con procedencia completa (§3.6), y describe su FORMA —
+    no su contenido— para que el parser se escriba sobre bytes reales.
+
+    Es el paso `fuente-scout` del §8 antes del paso `colector`.
+    """
+    import os
+
+    import httpx
+    from dotenv import load_dotenv
+
+    from flujocero.sources import robots_check
+    from flujocero.sources.base import escribir_crudo
+
+    load_dotenv(RAIZ / ".env")
+    ua = os.environ.get("USER_AGENT", "").strip() or "FlujoCero-ResearchBot/1.0"
+    ahora = datetime.now(UTC)
+
+    typer.echo(f"user-agent: {ua}\n")
+    veredicto = robots_check.verificar(url, ua, source_id="_explorar")
+    marca = "PERMITE" if veredicto.allowed else "PROHIBE"
+    typer.echo(f"robots.txt {marca}: {veredicto.motivo}")
+    if veredicto.crawl_delay_s:
+        typer.echo(f"  Crawl-delay declarado: {veredicto.crawl_delay_s}s (se respeta)")
+    if not veredicto.allowed:
+        typer.echo(
+            "\n  No se descarga nada. El §3.5 es regla dura: un `html_prohibido` necesita"
+            "\n  aprobacion humana explicita registrada en docs/05-decisiones.md."
+        )
+        raise typer.Exit(1)
+
+    demora = float(veredicto.crawl_delay_s or 1.0)
+    objetivos = [url]
+    cliente = httpx.Client(timeout=30.0, follow_redirects=True)
+    capturados: list[tuple[str, bytes, str]] = []
+    try:
+        while objetivos:
+            destino = objetivos.pop(0)
+            if destino != url:
+                v = robots_check.verificar(destino, ua, source_id="_explorar")
+                if not v.allowed:
+                    typer.echo(f"  - {destino}: PROHIBIDA por robots, se salta")
+                    continue
+                time.sleep(demora)
+            if render:
+                cuerpo, tipo = _render(destino, ua)
+            else:
+                r = cliente.get(destino, headers={"User-Agent": ua})
+                if r.status_code != 200:
+                    typer.echo(f"  ! {destino} respondio {r.status_code}")
+                    continue
+                cuerpo, tipo = r.content, r.headers.get("content-type", "")
+            capturados.append((destino, cuerpo, tipo))
+            escribir_crudo(
+                source_id="_explorar",
+                url=destino,
+                contenido=cuerpo,
+                momento=ahora,
+                robots_snapshot_sha=veredicto.snapshot_sha,
+                nombre=destino.replace("https://", "").replace("/", "_")[:80],
+                parser_version="explorar/1.0.0",
+            )
+            hijas = _urls_de_sitemap(cuerpo)
+            if hijas and seguir and len(capturados) == 1:
+                typer.echo(f"\n  es un sitemap con {len(hijas)} URLs; se traen {seguir}")
+                objetivos.extend(hijas[:seguir])
+    finally:
+        cliente.close()
+
+    typer.echo(f"\n  {len(capturados)} documentos en data/raw/_explorar/\n")
+    for destino, cuerpo, tipo in capturados:
+        typer.echo(f"  {destino}")
+        typer.echo(f"    {len(cuerpo):>9,} bytes · {tipo}")
+        for linea in _forma(cuerpo):
+            typer.echo(f"    {linea}")
+    typer.echo(
+        "\n  Mandame estos archivos y escribo el parser sobre bytes reales."
+        "\n  Estan en: data/raw/_explorar/"
+    )
+
+
+def _render(url: str, ua: str) -> tuple[bytes, str]:
+    """Trae la pagina con un navegador. Solo para fuentes que lo justifiquen en su ADR (§5)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        nav = pw.chromium.launch()
+        pag = nav.new_page(user_agent=ua)
+        pag.goto(url, wait_until="networkidle", timeout=45_000)
+        html = pag.content()
+        nav.close()
+    return html.encode("utf-8"), "text/html (renderizado)"
+
+
+def _urls_de_sitemap(cuerpo: bytes) -> list[str]:
+    """Las URLs de un sitemap XML, o vacio si no lo es. No usa un parser XML a proposito:
+    un sitemap malformado tiene que devolver lo que se pueda, no reventar la exploracion."""
+    import re
+
+    texto = cuerpo[:5_000_000].decode("utf-8", errors="replace")
+    if "<urlset" not in texto and "<sitemapindex" not in texto:
+        return []
+    return re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", texto)
+
+
+def _forma(cuerpo: bytes) -> list[str]:
+    """Describe la FORMA del documento, no su contenido.
+
+    Lo que un parser necesita saber antes de escribirse: si trae JSON-LD (que es dato
+    estructurado y evita parsear HTML), cuantos bloques, si es un sitemap y de que tamano.
+    """
+    import json
+    import re
+
+    texto = cuerpo[:2_000_000].decode("utf-8", errors="replace")
+    lineas: list[str] = []
+
+    locs = _urls_de_sitemap(cuerpo)
+    if locs:
+        lineas.append(f"sitemap con {len(locs)} <loc>; primera: {locs[0]}")
+        return lineas
+
+    if texto.lstrip()[:1] in "{[":
+        try:
+            datos = json.loads(texto)
+            claves = sorted(datos)[:12] if isinstance(datos, dict) else f"lista de {len(datos)}"
+            lineas.append(f"JSON · {claves}")
+            return lineas
+        except ValueError:
+            pass
+
+    # JSON-LD es el mejor regalo que puede dar una pagina: dato estructurado, sin parsear HTML.
+    ld = re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        texto,
+        re.S | re.I,
+    )
+    if ld:
+        tipos = []
+        for bloque in ld:
+            try:
+                d = json.loads(bloque)
+            except ValueError:
+                tipos.append("(no parsea)")
+                continue
+            for item in d if isinstance(d, list) else [d]:
+                if isinstance(item, dict):
+                    tipos.append(str(item.get("@type", "?")))
+        lineas.append(f"JSON-LD: {len(ld)} bloques · @type {tipos}")
+    else:
+        lineas.append("sin JSON-LD")
+
+    for etiqueta, patron in (
+        ("__NEXT_DATA__", r"__NEXT_DATA__"),
+        ("window.__NUXT__", r"window\.__NUXT__"),
+        ("data-page (Inertia)", r"data-page="),
+    ):
+        if re.search(patron, texto):
+            lineas.append(f"trae {etiqueta}: hay estado de la app embebido, mejor que el HTML")
+
+    precios = re.findall(r"\$\s?[\d.]{6,}", texto)[:3]
+    if precios:
+        lineas.append(f"montos en pesos visibles, ej: {precios}")
+    if re.search(r"\bUF\s?[\d.,]+", texto):
+        lineas.append("hay montos en UF")
+    return lineas
 
 
 if __name__ == "__main__":
