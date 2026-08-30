@@ -1460,3 +1460,52 @@ Se pierde reactividad declarativa y graficos vistosos —el desglose del score v
 CSS— y se gana que el archivo funciona solo. Se revisa cuando haya mapa, con su ADR.
 
 **Gates:** VERDE. 531 tests (eran 492).
+
+---
+
+## 2026-08-30 · Donde esta el cuello de botella, medido sobre la base real
+
+El usuario corrio `cli faltantes` sobre su base:
+
+```
+  3875 unidades con precio verificado · 2227 rankean hoy (57%)
+  1648 esperan comparables de arriendo. Conseguir 4135 avisos las desbloquea TODAS.
+```
+
+**Correccion primero.** Yo habia dicho "el 86% se cae por sin_comparables". Ese numero salio
+de la base PARCIAL de mi contenedor. En la base real es el 43%. El diagnostico de DONDE
+estaba el hueco era correcto; la gravedad no. Se lo dije.
+
+**La palanca es mejor de lo que estime.** Las 20 celdas de mayor rendimiento suman ~290
+unidades esperando y necesitan **~35 avisos en total**. `nunoa/estadio-nacional 3D2B 70-100`
+tiene **30 unidades esperando y le falta UN aviso**. No es una recoleccion grande: es
+quirurgica. Nunoa concentra 571 unidades esperando, Providencia 286, Macul 246.
+
+`recolectar-portal --dirigida N` toma las N comunas con mas unidades esperando, recolecta
+SOLO arriendo, y al terminar **mide cuantas unidades desbloqueo**. Sin esa medida, "traje 340
+avisos" es una metrica de esfuerzo y no de resultado: los 340 pueden haber caido todos en
+celdas que ya tenian sus 8 comparables.
+
+El orden es por unidades que esperan, no por avisos que faltan, y hay test: Macul necesita
+mas avisos que Nunoa pero rinde menos unidades. Ordenar por esfuerzo en vez de por resultado
+manda la corrida al lugar equivocado.
+
+## 2026-08-30 · Exploracion de Assetplan: el robots permite y el HTML no regala nada
+
+```
+robots.txt PERMITE: ninguna regla del grupo calza con la ruta
+  es un sitemap con 176 URLs; se traen 3
+  https://www.assetplan.cl/arriendo/departamento/estacion-central/alto-conde/2933/estudio
+    1,015,671 bytes · text/html
+    JSON-LD: 1 bloques · @type ['BreadcrumbList']
+    hay montos en UF
+```
+
+Dos cosas. El motivo del veredicto —"ninguna regla del grupo calza"— es el evaluador RFC de
+T-926 razonando bien: el permiso no viene de un `Allow` generico sino de que ningun `Disallow`
+cubre esa ruta. Y su robots trae `Disallow: /arriendo/departamento/*/edificio/` con comodin,
+que el parser de la stdlib ignoraba.
+
+Lo otro: **1 MB de HTML por ficha y el unico JSON-LD es un `BreadcrumbList`**, o sea inutil.
+El dato esta enterrado en el HTML o en un estado de app que el detector no reconocio. No se
+escribe el parser hasta ver los bytes — se pidieron como fixture.

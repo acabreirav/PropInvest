@@ -260,3 +260,31 @@ def test_el_umbral_entra_por_argumento_pero_su_valor_es_del_contrato(minimo: int
         assert dg.unidades_rankeables_hoy == 1
     else:
         assert dg.huecos[0].faltan == max(0, MIN_COMPARABLES - 5)
+
+
+# --------------------------------------------------------------- recoleccion dirigida
+
+
+def test_la_prioridad_por_comuna_es_la_que_usa_la_recoleccion_dirigida() -> None:
+    """`--dirigida N` toma las N primeras comunas de `por_comuna()`.
+
+    El orden tiene que ser por unidades que esperan, no por avisos que faltan: una comuna
+    donde faltan 900 avisos para 200 unidades rinde menos que una donde faltan 300 para 570.
+    Ordenar por esfuerzo en vez de por resultado mandaría la corrida al lugar equivocado.
+    """
+    con = _base(
+        unidades=[
+            *[(f"N-{i}", "nunoa/uno", "2D2B", 55.0) for i in range(30)],
+            *[(f"M-{i}", "macul/uno", "2D2B", 55.0) for i in range(5)],
+            *[(f"M2-{i}", "macul/dos", "1D1B", 40.0) for i in range(5)],
+            *[(f"M3-{i}", "macul/tres", "3D2B", 80.0) for i in range(5)],
+        ],
+        celdas=[],
+    )
+    try:
+        por_comuna = diagnosticar(con, RANGOS).por_comuna()
+    finally:
+        con.close()
+    # Macul necesita MÁS avisos (tres celdas desde cero) pero Ñuñoa tiene más unidades.
+    assert por_comuna["macul"][1] > por_comuna["nunoa"][1]
+    assert list(por_comuna)[0] == "nunoa", "se ordenó por esfuerzo en vez de por resultado"

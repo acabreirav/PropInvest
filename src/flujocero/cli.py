@@ -683,6 +683,11 @@ def recolectar_portal(
     operaciones: str = typer.Option("venta,arriendo"),
     paginas: int = typer.Option(3, help="paginas por comuna y operacion (48 avisos c/u)"),
     tipo: str = typer.Option("usadas", help="usadas | nuevas | proyectos | '' para todo"),
+    dirigida: int = typer.Option(
+        0,
+        "--dirigida",
+        help="recolecta ARRIENDO en las N comunas con mas unidades esperando (ver `faltantes`)",
+    ),
 ) -> None:
     """T-920 · recolecta Portal Inmobiliario por la ruta que el robots.txt PERMITE.
 
@@ -706,10 +711,27 @@ def recolectar_portal(
         typer.echo("✗ falta USER_AGENT en el .env. Es la identidad con la que nos presentamos.")
         raise typer.Exit(2)
 
-    lista = [c.strip() for c in comunas.split(",") if c.strip()] or [
-        z["comuna"] for z in cargar("zonas").crudo("fase_1")
-    ]
-    ops = tuple(o.strip() for o in operaciones.split(",") if o.strip())
+    antes = None
+    if dirigida:
+        # El cuello de botella medido no son los avisos de venta: es que la celda de arriendo
+        # de la unidad no llega a los 8 comparables del §7.3. Recolectar "mas arriendo" a
+        # ciegas reparte el esfuerzo entre celdas que ya sirven; esto lo manda donde paga.
+        antes = _diagnostico()
+        prioridad = list(antes.por_comuna())[:dirigida]
+        if not prioridad:
+            typer.echo("No hay comunas con unidades esperando: nada que dirigir.")
+            raise typer.Exit(0)
+        lista, ops = prioridad, ("arriendo",)
+        typer.echo("  RECOLECCION DIRIGIDA (`--dirigida`): solo arriendo, solo donde falta\n")
+        for c in prioridad:
+            unidades, avisos = antes.por_comuna()[c]
+            typer.echo(f"    {c:<24} {unidades:>5} unidades esperan · faltan {avisos:>4} avisos")
+        typer.echo("")
+    else:
+        lista = [c.strip() for c in comunas.split(",") if c.strip()] or [
+            z["comuna"] for z in cargar("zonas").crudo("fase_1")
+        ]
+        ops = tuple(o.strip() for o in operaciones.split(",") if o.strip())
     typer.echo(f"  comunas: {', '.join(lista)}\n  operaciones: {', '.join(ops)}")
 
     col = pb.PortalBusqueda(user_agent=ua)
@@ -745,6 +767,51 @@ def recolectar_portal(
         bitacora.cerrar(con, corrida, filas_corrida_anterior=None)
         con.close()
         col.cerrar()
+
+    if antes is not None:
+        _rendimiento_de_la_corrida(antes)
+
+
+def _diagnostico():
+    """El diagnostico de huecos sobre la base actual. Se abre y cierra la conexion aca."""
+    import duckdb
+
+    from flujocero.agg import faltantes as fa
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        return fa.diagnosticar(con, cargar("params").crudo("ingresos.rangos_m2"))
+    finally:
+        con.close()
+
+
+def _rendimiento_de_la_corrida(antes) -> None:
+    """Cuantas unidades desbloqueo esta corrida. Es la unica medida honesta de si sirvio.
+
+    Sin esto, "traje 340 avisos" es una metrica de esfuerzo, no de resultado: los 340 pueden
+    haber caido todos en celdas que ya tenian sus 8 comparables. Lo que importa es cuantas
+    unidades pasaron de no evaluables a evaluables.
+
+    Ojo: hay que correr `agregar-arriendo` ANTES de que esto tenga algo que medir. Los avisos
+    recien recolectados no cuentan hasta que la agregacion los convierte en comparables.
+    """
+    typer.echo("\n  Recalculando la agregacion de arriendo para medir el rendimiento...")
+    agregar_arriendo()
+    despues = _diagnostico()
+    ganadas = despues.unidades_rankeables_hoy - antes.unidades_rankeables_hoy
+    typer.echo(
+        f"\n  RENDIMIENTO DE LA CORRIDA"
+        f"\n    rankeables antes:   {antes.unidades_rankeables_hoy}"
+        f"\n    rankeables ahora:   {despues.unidades_rankeables_hoy}"
+        f"\n    unidades DESBLOQUEADAS: {ganadas:+d}"
+        f"\n    todavia esperan:    {despues.desbloqueables}"
+    )
+    if ganadas <= 0:
+        typer.echo(
+            "\n  Cero desbloqueadas. No es necesariamente una corrida perdida: los avisos"
+            "\n  pueden haber caido en celdas que aun no llegan a 8. Corre `faltantes` para"
+            "\n  ver si las celdas objetivo se acercaron al umbral o si no llego nada de ellas."
+        )
 
 
 @app.command()

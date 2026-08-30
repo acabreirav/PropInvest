@@ -726,3 +726,26 @@ legal: >
 siguiente_paso: >
   El usuario corre `cli explorar https://www.assetplan.cl/edificios.xml --seguir 3` desde su
   IP chilena y manda los blobs. Con esos bytes se escribe el parser y su ADR.
+
+
+## T-937 · Recoleccion dirigida, y medir su rendimiento
+estado: hecha · comando: `cli recolectar-portal --dirigida N` · fase: 1 · depende_de: [T-935]
+hallazgo: >
+  Medido sobre la base REAL del usuario el 30-ago-2026: 3.875 unidades con precio verificado,
+  **2.227 rankean (57%)**, 1.648 esperan comparables. Y las 20 celdas de mayor palanca suman
+  ~290 unidades esperando con solo **~35 avisos** de arriendo faltantes.
+  `nunoa/estadio-nacional 3D2B 70-100` tiene **30 unidades esperando y le falta UN aviso**.
+criterio_de_aceptacion:
+  - [x] `--dirigida N` toma las N comunas con mas unidades esperando y recolecta SOLO arriendo
+  - [x] El orden es por unidades que esperan, NO por avisos que faltan: ordenar por esfuerzo
+        en vez de por resultado manda la corrida al lugar equivocado
+  - [x] Al terminar corre `agregar-arriendo` y reporta **cuantas unidades desbloqueo**
+  - [x] Cero desbloqueadas no se presenta como fracaso: los avisos pueden haber caido en
+        celdas que aun no llegan a 8, y eso se dice
+nota: >
+  La URL del portal solo permite filtrar por COMUNA, no por tipologia ni rango de m2, asi que
+  la direccion es a nivel de comuna. La celda exacta la resuelve la agregacion despues.
+correccion: >
+  Antes de tener la base del usuario yo habia medido "86% se cae por sin_comparables" sobre la
+  base PARCIAL de mi contenedor. En la base real es 43%. El diagnostico de DONDE estaba el
+  hueco era correcto; la gravedad no. Corregido.
