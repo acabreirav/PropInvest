@@ -1,6 +1,7 @@
 """Tests del explorador de fuentes."""
 
 from __future__ import annotations
+
 from flujocero.cli import _forma, _urls_de_sitemap
 
 SITEMAP = b"""<?xml version="1.0"?><urlset xmlns="x">
