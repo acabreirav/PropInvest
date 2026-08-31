@@ -140,6 +140,34 @@ def test_marca_el_outlier_pero_no_lo_borra() -> None:
     assert all("sospechoso" not in f or not f["sospechoso"] for f in filas[:20])
 
 
+def test_una_zona_limpia_no_tiene_outliers() -> None:
+    """La version con percentiles interpolados marcaba el min y el max de CADA zona.
+
+    Ocho precios dispersos pero razonables no tienen ningun outlier. Este test la version
+    vieja lo reprobaba: `min < p1` en cuanto los dos valores mas chicos difieren, asi que
+    los "161 outliers" del gate eran dos fantasmas por microzona. Ver D-019.
+    """
+    filas = [
+        unidad(unidad_key=f"U{i}", precio_uf=D(p), m2_utiles=35.0)
+        for i, p in enumerate((1750, 1925, 2100, 2170, 2275, 2450, 2625, 2800))
+    ]
+    h = q.marcar_outliers(filas)
+    assert h.severidad is q.Severidad.OK, h.detalle
+    assert not any(f.get("sospechoso") for f in filas)
+
+
+def test_precios_identicos_mas_uno_apenas_distinto_no_marcan() -> None:
+    """IQR 0 no puede significar cerca de ancho 0: el piso es ±10% de la mediana.
+
+    Diez unidades del mismo proyecto al mismo precio + una 4% mas cara es un patron
+    normalisimo de lista de precios, no un outlier.
+    """
+    filas = [unidad(unidad_key=f"U{i}", precio_uf=D(2600), m2_utiles=35.0) for i in range(10)]
+    filas.append(unidad(unidad_key="X", precio_uf=D(2700), m2_utiles=35.0))
+    h = q.marcar_outliers(filas)
+    assert h.severidad is q.Severidad.OK, h.detalle
+
+
 def test_con_menos_de_tres_unidades_no_se_calcula_percentil() -> None:
     filas = [unidad(precio_uf=D(2600)), unidad(precio_uf=D(90000))]
     h = q.marcar_outliers(filas)

@@ -77,6 +77,15 @@ def rebuild(
             n = ent.cargar(con, filas) if filas else 0
             total += n
             typer.echo(f"  {source_id:<26} {n:>6} filas -> {ent.tabla}")
+        # T-043 · el flag `sospechoso` es un derivado del conjunto vigente: se recalcula
+        # aca para que la base reconstruida quede identica a la original (§3.6), filtro de
+        # medianas incluido.
+        from flujocero.quality import sospechosos
+
+        mv, _ = sospechosos.marcar_venta(con)
+        ma, _ = sospechosos.marcar_arriendo(con)
+        if mv or ma:
+            typer.echo(f"  sospechosos remarcados: {mv} venta · {ma} arriendo (D-019)")
     finally:
         con.close()
 
@@ -833,6 +842,14 @@ def recolectar_portal(
 
         corrida.filas_insertadas = pb.cargar_en_duckdb(con, tarjetas)
         typer.echo(f"✓ {corrida.filas_insertadas} filas nuevas o versionadas")
+        # T-043 · datos nuevos mueven la cerca de su microzona, asi que el flag `sospechoso`
+        # se recalcula sobre el conjunto vigente completo, en las dos tablas.
+        from flujocero.quality import sospechosos
+
+        mv, _ = sospechosos.marcar_venta(con)
+        ma, _ = sospechosos.marcar_arriendo(con)
+        if mv or ma:
+            typer.echo(f"  sospechosos remarcados: {mv} venta · {ma} arriendo (D-019)")
     except pb.Bloqueado as exc:
         corrida.notas = str(exc)
         typer.echo(f"✗ {exc}")
@@ -954,6 +971,16 @@ def agregar_arriendo() -> None:
         # obliga a adivinar si falta el insumo o si el codigo esta roto.
         estado = agg.estado_serie(con)
         typer.echo(f"  {estado}")
+        # T-043 · el flag se escribe ANTES de leer: la consulta de abajo filtra
+        # `sospechoso = FALSE` desde siempre, y hasta ahora filtraba una columna vacia.
+        from flujocero.quality import sospechosos
+
+        marcados, evaluados = sospechosos.marcar_arriendo(con)
+        if marcados:
+            typer.echo(
+                f"  {marcados} de {evaluados} avisos marcados `sospechoso` (fuera de la cerca"
+                f"\n  de su microzona, D-019): se conservan, no entran a las medianas."
+            )
         comparables, descartes = agg.comparables_desde_duckdb(con, datetime.now(UTC))
         total = sum(descartes.values()) + len(comparables)
         typer.echo(f"  {total} comparables activos · {len(comparables)} utilizables")

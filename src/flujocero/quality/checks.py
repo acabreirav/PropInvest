@@ -312,11 +312,41 @@ def precio_implausible(filas: list[dict[str, Any]]) -> Hallazgo:
     )
 
 
+def limites_outlier(valores: list[Decimal]) -> tuple[Decimal, Decimal]:
+    """La cerca fuera de la cual un valor es outlier de su grupo. Tukey, no percentiles.
+
+    La regla original del §7.3 —fuera de `[p1, p99]`— se implemento con percentiles
+    interpolados, y con eso **el minimo y el maximo de CADA grupo quedaban marcados
+    siempre**: con interpolacion lineal, `min < p1` en cuanto los dos valores mas chicos
+    difieren. Los "161 outliers" del gate eran en su mayoria eso — exactamente dos por
+    microzona, sus dos extremos, tambien en zonas perfectamente limpias. No era deteccion,
+    era recorte. Y con `sospechoso` a punto de persistirse y excluirse de las medianas,
+    habria echado dos comparables buenos por zona justo donde el umbral n>=8 muerde.
+
+    Un percentil de cola no es estimable con 8-200 observaciones por zona, que es lo que
+    hay: interpolado sobre-marca (lo de arriba) y por rango se abstiene incluso ante un
+    valor absurdo. La herramienta correcta a ese tamano es una cerca robusta:
+
+        [p25 - 3*IQR, p75 + 3*IQR]     (Tukey, "far out")
+
+    con un **piso de ancho de ±10% de la mediana**: sin el piso, un grupo de precios
+    identicos (10 unidades del mismo proyecto a UF 2.600) tendria IQR 0 y cerca de ancho
+    cero, y la unidad 11 a 2.700 —perfectamente normal— quedaria marcada. Ver D-019.
+    """
+    q1 = _percentil(valores, Decimal("0.25"))
+    q3 = _percentil(valores, Decimal("0.75"))
+    mediana = _percentil(valores, Decimal("0.5"))
+    margen = max(Decimal(3) * (q3 - q1), abs(mediana) * Decimal("0.10"))
+    return q1 - margen, q3 + margen
+
+
 def marcar_outliers(filas: list[dict[str, Any]]) -> Hallazgo:
-    """§7.3 · `precio_uf/m²` fuera de [p1, p99] de su microzona.
+    """§7.3 · `precio_uf/m²` fuera de la cerca robusta de su microzona (`limites_outlier`).
 
     **Marca, no borra.** La fila se conserva y queda fuera del cálculo de medianas.
     Muta `sospechoso` en el dict recibido, que es la única mutación de todo el módulo.
+    La persistencia del flag vive en `quality/sospechosos.py`, sobre la MISMA cerca:
+    dos definiciones de outlier serian dos verdades.
     """
     por_zona: dict[str, list[tuple[int, Decimal]]] = {}
     for i, f in enumerate(filas):
@@ -327,12 +357,11 @@ def marcar_outliers(filas: list[dict[str, Any]]) -> Hallazgo:
 
     marcadas: list[str] = []
     for zona, pares in por_zona.items():
-        if len(pares) < 3:  # con menos de tres, el percentil no significa nada
+        if len(pares) < 3:  # con menos de tres, ni la cerca significa nada
             continue
-        valores = [v for _, v in pares]
-        p1, p99 = _percentil(valores, Decimal("0.01")), _percentil(valores, Decimal("0.99"))
+        lo, hi = limites_outlier([v for _, v in pares])
         for i, v in pares:
-            if v < p1 or v > p99:
+            if v < lo or v > hi:
                 filas[i]["sospechoso"] = True
                 marcadas.append(f"{filas[i].get('unidad_key', i)} en {zona}: {v:.1f} UF/m²")
     if marcadas:

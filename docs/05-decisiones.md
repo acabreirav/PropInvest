@@ -649,3 +649,36 @@ aprobó el 30-ago-2026.
 
 Cambiando una línea en `params.yml`. Ningún dato se pierde: la agregación es un derivado que
 se recalcula con `agregar-arriendo`.
+
+## D-019 · La detección de outliers cambia de percentiles interpolados a cerca de Tukey — 31-ago-2026
+
+**Contexto.** El §7.3 pide marcar `sospechoso` todo `precio_uf/m²` "fuera del rango [p1, p99]
+de su microzona". La implementación usaba percentiles por interpolación lineal y una
+desigualdad estricta. En la auditoría del 31-ago se probó que con eso **el mínimo y el máximo
+de cada microzona quedaban marcados siempre**: con interpolación, `min < p1` en cuanto los dos
+valores más chicos difieren. Los "161 outliers" del gate eran, en su mayoría, exactamente dos
+por zona — sus dos extremos, también en zonas perfectamente limpias. No era detección: era
+recorte.
+
+**Por qué importaba ahora.** El flag estaba a punto de empezar a persistirse (T-043: la
+consulta de la mediana de arriendo filtraba `sospechoso = FALSE` sobre una columna que nadie
+escribía). Persistir la versión rota habría echado dos comparables buenos por microzona,
+justo donde el umbral n≥8 del §7.3 muerde: celdas con 8–9 avisos habrían perdido su mediana
+sin razón.
+
+**Decisión.** Un percentil de cola no es estimable con 8–200 observaciones por grupo, que es
+lo que hay. Se reemplaza por la cerca robusta estándar para ese tamaño:
+
+    [q1 − margen, q3 + margen]   con   margen = max(3·IQR, 10% de la mediana)
+
+- `3·IQR` es Tukey "far out": conservador a propósito — preferimos dejar pasar un valor raro
+  antes que marcar uno bueno, porque lo absurdo global ya lo agarra el rango del §7.1.
+- El piso de ±10% de la mediana evita el caso degenerado: diez unidades del mismo proyecto
+  al mismo precio dan IQR 0, y sin piso la undécima un 4% más cara quedaría marcada.
+
+**Medido sobre el corpus de mayo:** venta 161 → **13** marcadas (0,6%; la peor: 300 UF/m² en
+barrio-italia). Arriendo 0 → **2** (avisos a 2–3× la banda por m² de su zona). La semántica
+del §7.3 no cambia: se marca y se conserva, se excluye de medianas, jamás se borra.
+
+**Se revierte** restaurando `limites_outlier` a percentiles — pero antes hay que responder
+por qué dos extremos por zona serían outliers.
