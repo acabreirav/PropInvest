@@ -1,6 +1,6 @@
 # ADR 008 · Assetplan no es la fuente de arriendo efectivo que creíamos
 
-- **Estado:** aceptado — con una decisión pendiente de una medición
+- **Estado:** aceptado y **cerrado** el 31-ago-2026 (ver §7)
 - **Fecha:** 30-ago-2026
 - **Tarea:** T-022
 - **Fuente:** `https://www.assetplan.cl/edificios.xml` + fichas de edificio
@@ -105,3 +105,80 @@ contrario.
 arriendo efectivo y vacancia"*. **Sobre la página estática no es ninguna de las dos.** Se
 corrigen los dos archivos citando este ADR; la afirmación original venía de investigación
 secundaria y no de haber mirado una respuesta.
+
+
+---
+
+## 7. La decisión, cerrada · 31-ago-2026
+
+**`units_by_size` NO viaja en el HTML, ni siquiera renderizado con navegador.** Assetplan
+queda como fuente de **contexto**, no de arriendo. El §4 quedaba abierto en este punto y ya
+tiene respuesta medida.
+
+### Cómo se verificó, y por qué la primera lectura no bastaba
+
+Sobre el blob renderizado de `alto-conde` (1.678.663 caracteres), `units_by_size` aparece
+**18 veces y las 18 son código**:
+
+    Object.values(this.localBuilding?.units_by_size || {})
+    Object.keys(localBuilding?.units_by_size || {}).length
+    <template x-for="unitType in Object.values(localBuilding?.units_by_size || {})">
+
+Es el JavaScript que *dibujaría* las unidades. El `|| {}` de cada referencia es el plan B
+para cuando el objeto no está.
+
+**Un "no aparece" no prueba nada por sí solo**, así que se corrió un control: buscar un campo
+que sabemos que SÍ está en los datos. `min_ggcc` aparece 5 veces y viene dentro del payload,
+con la forma escapada que usa la página:
+
+    \u0022min_price\u0022:255000,\u0022min_ggcc\u0022:60000
+
+O sea que el buscador encuentra datos cuando los hay. `units_by_size` no está entre ellos: lo
+carga Livewire por AJAX después de renderizar, y el render no lo esperó.
+
+**Consecuencia:** no se escribe colector de arriendo para Assetplan, y **Playwright no queda
+justificado por esta fuente** (§5). `config/fuentes.yml` y `docs/01-fuentes.md` pasan de capa
+4 a capa 6.
+
+### Lo que sí entrega, y cuánto vale
+
+El payload trae, por tipología del edificio: `min_price` (Estudio $231.000 · 1D $255.000 ·
+2D $308.000) y `min_ggcc` ($45.000 · $60.000 · $90.000), más `min_ggcc_fijo`, `accept_pets`,
+`features_list`, `latlng` y `nearby_transport[].distance_meters`.
+
+**El `min_price` sigue sin servir**: es un "desde", y el §12 excluye del ranking todo precio
+`E`. Usarlo como comparable sesgaría la mediana hacia abajo de forma sistemática.
+
+**El `min_ggcc` sí es dato real**, y valida el supuesto `E` de `params.yml`. Contra los m²
+medianos por tipología de nuestros propios avisos (n=1.014 en 1D1B, n=813 en 2D2B):
+
+| tipología | ggcc real | m² típico | CLP/m²/mes | `params.yml` |
+|---|---|---|---|---|
+| Estudio | $45.000 | 35 | 1.286 | 2.200 |
+| 1 Dorm | $60.000 | 35 | 1.714 | 2.200 |
+| 2 Dorm | $90.000 | 58 | 1.552 | 2.200 |
+
+Nuestro supuesto para Estación Central está **30-40% por encima**. Parecía material y **no lo
+es**, y esto hay que decirlo porque yo mismo lo di por grave antes de medirlo. Medido sobre
+`MLC-4420580204` (30 m²):
+
+| ggcc | $/mes | pie de flujo cero | flujo a 20% de pie |
+|---|---|---|---|
+| 2.200 CLP/m² (supuesto) | $66.000 | 29,8% | −$23.304 |
+| 1.500 CLP/m² (Assetplan) | $45.000 | **29,1%** | −$21.621 |
+
+**0,7 puntos de pie.** La razón está en el §14 del contrato: **los gastos comunes los paga el
+arrendatario, salvo en vacancia.** El modelo solo los carga durante la vacancia (8%), así que
+$21.000 de diferencia mensual entran al flujo como ~$1.680. El parámetro es casi inerte para
+este inversionista, y el modelo ya lo trataba bien.
+
+No se cambia el supuesto sobre un edificio: `min_ggcc` es además un **mínimo** ("desde"), y
+un multifamily profesional no representa a un edificio antiguo de administración individual.
+Queda como T-053.
+
+### Lo que queda vivo de Assetplan
+
+**`nearby_transport[].distance_meters`**, medido por Google Places, para 176 edificios con
+coordenadas. El catalizador es el 10% del score y hoy está **inerte**: reparte el mismo
+puntaje a todas las unidades y no mueve una posición. Esa sigue siendo la razón para volver
+a esta fuente — y no necesita navegador, porque viaja en el HTML estático.

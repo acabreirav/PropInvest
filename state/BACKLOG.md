@@ -1283,3 +1283,29 @@ criterio_de_aceptacion:
   - [x] `descuento_stock_usado`: medicion aparte, MARCA, no aprueba ni reprueba
   - [ ] Cerrar el ancla de verdad requiere stock nuevo en la base (T-925)
   - [ ] `comparables_suficientes` sigue sin conectarse a `cli gates`
+
+
+## T-053 · El gasto comun de `params.yml` esta 30-40% alto, y casi no importa
+estado: pendiente
+agente: analista-arriendo
+fase: 2
+depende_de: [T-022]
+
+Assetplan entrega `min_ggcc` real por tipologia. Contra los m2 medianos de nuestros propios
+avisos, el supuesto `E` de Estacion Central (2.200 CLP/m2/mes) esta **30-40% por encima**:
+el edificio Alto Conde da 1.286-1.714.
+
+**Y medirlo antes de alarmarse era lo correcto.** Sobre `MLC-4420580204` (30 m2), bajar el
+supuesto de 2.200 a 1.500 mueve el pie de flujo cero de **29,8% a 29,1%**: siete decimas.
+La razon esta en el §14 del contrato — **los gastos comunes los paga el arrendatario, salvo
+en vacancia**—, asi que el modelo solo los carga el 8% del tiempo. El parametro es casi
+inerte para este inversionista y el modelo ya lo trataba bien.
+
+No se cambia sobre un edificio: `min_ggcc` es un **minimo** ("desde") y un multifamily
+profesional no representa a un edificio antiguo de administracion individual.
+
+criterio_de_aceptacion:
+  - [ ] `min_ggcc` de los 176 edificios del sitemap, no de uno
+  - [ ] Contrastado por comuna contra `params.yml`, con n por comuna
+  - [ ] Si se cambia el supuesto, la sensibilidad va en el mismo commit — un `E` que se
+        mueve sin medir cuanto mueve el ranking viola el §8.4

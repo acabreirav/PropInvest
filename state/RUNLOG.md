@@ -2149,3 +2149,33 @@ cada hallazgo. Sin parser, sin red, sin mover nada. Y cuando no encuentra, dice 
 blobs miró**: "no está" sobre cero archivos no significa nada.
 
 gates: VERDE — 650 tests.
+
+## 31-ago-2026 · ADR 008 cerrado — Assetplan no es fuente de arriendo
+
+`units_by_size` aparece **18 veces en la ficha renderizada y las 18 son código**:
+`Object.values(this.localBuilding?.units_by_size || {})`. Es el JavaScript que dibujaría las
+unidades; el `|| {}` de cada referencia es el plan B para cuando el objeto no está. Lo carga
+Livewire por AJAX después de renderizar, y el render no lo esperó.
+
+**Un "no aparece" no prueba nada solo**, así que se corrió un control: `min_ggcc`, que sabemos
+que está en los datos, aparece 5 veces dentro del payload
+(`"min_price":255000,"min_ggcc":60000`). El buscador encuentra datos
+cuando los hay; `units_by_size` no está entre ellos.
+
+Assetplan pasa de capa 4 a capa 6 en `fuentes.yml`, y **Playwright no queda justificado por
+esta fuente**: renderizar no trae las unidades, y lo único que sí vale —las distancias a
+Metro, que alimentarían el 10% del score que hoy está inerte— viaja en el HTML estático.
+
+**Y un susto propio, medido a tiempo.** `min_ggcc` valida el supuesto `E` de gastos comunes,
+y contra los m² medianos de nuestros avisos sale que `params.yml` está 30-40% alto en
+Estación Central (2.200 vs 1.286-1.714 reales). Lo di por material antes de medirlo. Sobre
+`MLC-4420580204` mueve el pie de flujo cero de **29,8% a 29,1%** — siete décimas.
+
+La razón está en el §14 y el modelo ya la tenía bien: **los gastos comunes los paga el
+arrendatario, salvo en vacancia**, así que solo se cargan el 8% del tiempo. $21.000 de
+diferencia mensual entran al flujo como ~$1.680.
+
+Es la segunda vez hoy que una aritmética de servilleta parecía un hallazgo y la medición lo
+desarmó. La primera fue el "49,4% de avisos perdidos" que resultó ser 98,7%.
+
+gates: VERDE.

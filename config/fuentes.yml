@@ -150,7 +150,10 @@ fuentes:
     selftest: "verde — 97% parseado, m2 99,4% sobre avisos de unidad, cero datos personales"
 
   - id: assetplan_arriendo
-    capa: 4
+    # Capa 6 (contexto), NO capa 4 (arriendo). Cerrado el 31-ago-2026 con la medicion del
+    # ADR 008 §7: `units_by_size` aparece 18 veces en la ficha renderizada y las 18 son
+    # codigo, no dato. Lo carga Livewire por AJAX despues del render.
+    capa: 6
     legal_tier: html_permitido
     enabled: true
     sitemap: "https://www.assetplan.cl/edificios.xml"
@@ -158,7 +161,9 @@ fuentes:
       permite EXPLÍCITAMENTE ClaudeBot y Claude-User. OJO: trae
       `Disallow: /arriendo/departamento/*/edificio/` CON COMODÍN, que el verificador de la
       stdlib ignoraba. Sin el arreglo de T-926 habríamos entrado ahí creyendo que se podía.
-    js_render: "por decidir — ver ADR 008 §4"
+    # Playwright NO queda justificado por esta fuente (§5): renderizar no trae las unidades,
+    # y lo unico que si vale —las distancias a Metro— viaja en el HTML estatico.
+    js_render: false
     cadencia: diaria
     adr: "docs/adr/008-assetplan.md"
     notas: >
