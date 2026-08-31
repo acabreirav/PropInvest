@@ -2525,14 +2525,23 @@ def permanencia(
         )
     typer.echo("")
 
-    filas = []
+    # **Hace falta minimo en las DOS fotos, no solo en la vieja.** Las Condes esta fuera del
+    # alcance y no se recolecto en agosto: sus 120 avisos de mayo daban 0% de permanencia y
+    # subian al primer lugar de la tabla como "la que mas rapido rota". No rota: no se midio.
+    # Un cero que significa "sin dato" ordenado junto a ceros que significan "se arrendo todo"
+    # es la misma enfermedad de siempre — una casilla vacia leyendose como un resultado.
+    filas, sin_foto = [], []
     for mz, ids in vieja.items():  # noqa: PLC0206
         if microzona and mz != microzona:
             continue
         if len(ids) < minimo:
             continue
-        siguen = len(ids & nueva.get(mz, set()))
-        filas.append((siguen / len(ids), mz, len(ids), siguen, len(nueva.get(mz, set()))))
+        despues = nueva.get(mz, set())
+        if len(despues) < minimo:
+            sin_foto.append(mz)
+            continue
+        siguen = len(ids & despues)
+        filas.append((siguen / len(ids), mz, len(ids), siguen, len(despues)))
     if not filas:
         typer.echo(f"  Ninguna microzona llega a {minimo} avisos en la foto vieja.")
         raise typer.Exit(1)
@@ -2543,11 +2552,19 @@ def permanencia(
         marca = "  <--" if microzona and mz == microzona else ""
         typer.echo(f"  {mz:<40} {antes:>6} {siguen:>7} {pct:>5.0%} {ahora:>6}{marca}")
 
+    if sin_foto:
+        typer.echo(
+            f"\n  {len(sin_foto)} microzonas quedaron FUERA por no tener foto nueva "
+            f"(menos de {minimo} avisos):"
+            f"\n    {', '.join(sorted(sin_foto)[:8])}"
+            + ("…" if len(sin_foto) > 8 else "")
+            + "\n  Sin foto nueva la permanencia sale 0% y parece la mejor. No rota: no se midio."
+        )
     typer.echo(
         "\n  Menos % = la oferta rota mas rapido = mas facil arrendar ahi."
         "\n  Un aviso que sigue publicado cuatro meses despues no se arrendo."
-        "\n\n  Ojo con el nivel absoluto: los operadores republican con MLC- nuevo, asi que la"
-        "\n  permanencia real es MAYOR que esta. La comparacion entre microzonas si vale."
+        "\n\n  Ojo con el nivel absoluto: si el aviso cambia de titulo al republicarse se cuenta"
+        "\n  como arrendado, asi que la permanencia real es MAYOR. La comparacion si vale."
     )
 
 
