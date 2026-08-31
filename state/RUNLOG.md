@@ -1989,3 +1989,37 @@ comunas × 5 páginas × 2 operaciones × 48, luego las trajo todas"— que es j
 razonamiento que no aguanta.
 
 gates: VERDE — 641 tests.
+
+## 31-ago-2026 · el blob existe, se parseó, y las filas no llegaron
+
+`cli crudo` cerró la pregunta anterior:
+
+    2026-08-31  portal_busqueda  40 blobs · 8 busquedas distintas
+        venta_antofagasta · venta_chiguayante · venta_concepcion · venta_coquimbo
+        venta_hualpen · venta_la-serena · venta_san-pedro-de-la-paz · venta_talcahuano
+
+**Las ocho comunas están en disco**, cinco páginas cada una, y `rebuild --from-raw` las
+parseó (12.884 filas de portal_busqueda). Cuatro no dejaron una sola unidad en la base.
+
+Eso descarta de una vez las dos explicaciones que veníamos barajando: no es que el colector
+no las trajera, y no es el precio en pesos. **El blob existe, se leyó, y la fila no llegó.**
+
+`cli autopsia <parte-del-nombre>` abre los blobs y cuenta qué sobrevive a cada paso del
+parseo: tarjetas encontradas, cuántas en UF, cuántas en CLP, cuántas con microzona, con
+tipología y con m². No toca la base — solo lee la zona cruda.
+
+La línea base, sobre San Miguel, que sí funciona:
+
+    venta_san-miguel_p07..p10   48 tarjetas por página · 2% sin microzona · 1% sin tipología
+
+Con eso, correrlo sobre `venta_concepcion` separa tres diagnósticos que llevan a acciones
+distintas: **cero tarjetas** (el parser no entiende ese HTML y recolectar de nuevo no
+arregla nada), **tarjetas sin microzona** (el texto de ubicación de regiones no trae barrio,
+y sin barrio no hay microzona — §2.4), o **tarjetas completas** (el problema está en la
+carga, no en el parseo).
+
+Es la tercera herramienta de diagnóstico del día, y las tres nacieron de lo mismo: yo venía
+contestando preguntas de hecho por deducción. `embudo` para "¿dónde se cayó?", `crudo` para
+"¿se trajo?", `autopsia` para "¿se entendió?".
+
+gates: VERDE — 641 tests.

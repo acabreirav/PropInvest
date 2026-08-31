@@ -2015,5 +2015,98 @@ def crudo(
             typer.echo(f"      {d}")
 
 
+@app.command()
+def autopsia(
+    contiene: str = typer.Argument(..., help="parte del nombre del blob, ej. 'venta_concepcion'"),
+    max_blobs: int = typer.Option(5, help="cuantos blobs abrir"),
+) -> None:
+    """Abre blobs crudos y cuenta que sobrevive a cada paso del parseo.
+
+    `cli crudo` contesta si el blob existe. Esto contesta la otra mitad: **existe, se leyo, y
+    aun asi no llego ninguna fila — ¿donde se cayo?** Las ocho comunas de fase 3 estan en
+    disco con cinco paginas cada una, el rebuild las parseo, y cuatro no dejaron una sola
+    unidad. Entre "el portal no lo tiene" y "nuestro parser no lo entiende" hay una diferencia
+    que ninguna cantidad de recoleccion arregla si es la segunda.
+
+    No toca la base: solo lee la zona cruda y parsea. Correrlo es gratis y no cambia nada.
+    """
+    from flujocero.sources.base import blobs_crudos, leer_crudo
+    from flujocero.sources.portal_busqueda import parse_busqueda
+
+    blobs = [b for b in blobs_crudos("portal_busqueda") if contiene in b.name][:max_blobs]
+    if not blobs:
+        typer.echo(f"  Ningun blob de portal_busqueda con {contiene!r} en el nombre.")
+        typer.echo("  `cli crudo` lista lo que si hay.")
+        raise typer.Exit(1)
+
+    # Se llama `parse_busqueda` directo y no el colector: parsear es una funcion pura sobre
+    # bytes que ya estan en disco, y construir el colector pediria un user-agent para una
+    # operacion que no toca la red.
+    def parsear(doc):
+        return parse_busqueda(
+            doc.contenido.decode("utf-8", errors="ignore"),
+            doc.url,
+            "arriendo" if "/arriendo/" in doc.url else "venta",
+            doc.fetched_at,
+            str(doc.ruta),
+            doc.robots_snapshot_sha,
+        )
+
+    typer.echo(f"\n  {len(blobs)} blobs\n")
+    typer.echo(
+        f"  {'blob':<34} {'KB':>6} {'tarj':>5} {'UF':>4} {'CLP':>4} "
+        f"{'mzona':>6} {'tipo':>5} {'m2':>4}"
+    )
+    totales = dict.fromkeys(("tarjetas", "uf", "clp", "mzona", "tipo", "m2"), 0)
+    for b in blobs:
+        doc = leer_crudo(b)
+        ts = parsear(doc)
+        fila = {
+            "tarjetas": len(ts),
+            "uf": sum(1 for t in ts if t.moneda == "UF"),
+            "clp": sum(1 for t in ts if t.moneda == "CLP"),
+            "mzona": sum(1 for t in ts if t.microzona_id),
+            "tipo": sum(1 for t in ts if t.tipologia),
+            "m2": sum(1 for t in ts if t.m2_utiles),
+        }
+        for k, v in fila.items():
+            totales[k] += v
+        typer.echo(
+            f"  {b.name[:34]:<34} {len(doc.contenido) / 1024:>6.0f} "
+            + " ".join(
+                f"{fila[k]:>{w}}"
+                for k, w in (
+                    ("tarjetas", 5),
+                    ("uf", 4),
+                    ("clp", 4),
+                    ("mzona", 6),
+                    ("tipo", 5),
+                    ("m2", 4),
+                )
+            )
+        )
+
+    t = totales["tarjetas"]
+    typer.echo(f"\n  {t} tarjetas en total")
+    if not t:
+        typer.echo(
+            "\n  ✗ CERO tarjetas. El blob existe pero el parser no encuentra avisos adentro."
+            "\n    Recolectar de nuevo NO lo arregla: hay que mirar el HTML guardado."
+        )
+        raise typer.Exit(1)
+    for clave, texto in (
+        ("mzona", "sin microzona -> no se pueden cruzar con arriendo (§2.4)"),
+        ("tipo", "sin tipologia  -> no entran a ninguna celda"),
+        ("m2", "sin m2         -> no entran a ninguna banda"),
+    ):
+        faltan = t - totales[clave]
+        if faltan:
+            typer.echo(f"  ⚠ {faltan} de {t} ({faltan / t:.0%}) {texto}")
+    typer.echo(
+        "\n  Una tarjeta necesita microzona Y tipologia Y m2 para rankear. "
+        "El limite lo pone la columna mas flaca."
+    )
+
+
 if __name__ == "__main__":
     app()
