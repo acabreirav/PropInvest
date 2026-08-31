@@ -245,6 +245,8 @@ CLAVES_NO_NUMERICAS = {
     "antiguedad_anios",
     "es_vivienda_nueva",
     "score_desglose",
+    # Nombres de componentes, no cifras de mercado: dicen QUE no se midio, no cuanto.
+    "score_inertes",
     "subsidio_aplicado",
     "motivo_sin_subsidio",
     "fogaes_aplicado",

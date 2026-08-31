@@ -95,6 +95,11 @@ def _fila_json(f: Fila) -> dict[str, Any]:
         # --- lo que produce el motor
         "score": cifra(ev.score, con_supuestos, "0-1"),
         "score_desglose": {k: str(v) for k, v in ev.score_desglose.items()},
+        # Los componentes del §12 que no variaron en todo el conjunto y por eso no entraron
+        # al score. Sin esto la ficha muestra un desglose mas corto y nadie sabe por que:
+        # el §7.5 exige que ningun numero aparezca sin decir de donde sale, y "no se midio"
+        # es de donde sale la ausencia.
+        "score_inertes": list(ev.score_inertes),
         "yield_bruto": cifra(ev.rentabilidad_bruta, nivel_derivado("V", "V"), "%"),
         "cap_rate": cifra(ev.cap_rate, con_supuestos, "%"),
         "dividendo_uf": cifra(ev.dividendo_total_uf, nivel_derivado("V", "E"), "UF/mes"),

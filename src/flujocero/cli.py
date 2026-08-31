@@ -1209,6 +1209,30 @@ def oportunidades(
             "    estado y gastos comunes antes de emocionarte con las primeras filas."
         )
 
+    # **30 de los 100 puntos del score no se estaban midiendo.** `riesgo_microzona` (15%),
+    # `catalizador` (10%) y `descuento_vs_microzona` (5%) salian con el mismo valor en TODAS
+    # las unidades porque nada los poblaba, y un componente constante no ordena nada: se
+    # sumaba identico a cada score, inflandolos, y aparecia en la ficha con un numero como si
+    # midiera. `puntuar()` ahora los detecta, reparte su peso entre los que si varian, y
+    # devuelve sus nombres. Decirlo aca es la mitad del arreglo: un score "sobre 100" que
+    # midio 70 y no lo dice es la misma casilla vacia de siempre.
+    inertes = vivos[0][1].score_inertes if vivos else ()
+    if inertes:
+        pesos_cfg = cargar("params").crudo("score.pesos")
+        perdido = sum(D(str(pesos_cfg.get(k, 0))) for k in inertes)
+        typer.echo(
+            f"\n  ⚠ El score se calculó sobre {1 - perdido:.0%} del §12, no sobre el 100%."
+            f"\n    Estos componentes valen lo mismo en todas las unidades, así que no ordenan"
+            f"\n    nada y su peso se repartió entre los que sí miden:"
+        )
+        for k in inertes:
+            typer.echo(f"      {k:<28} {D(str(pesos_cfg.get(k, 0))):>5.0%} del §12 — sin poblar")
+        typer.echo(
+            "\n    No es un empate real: es que la fuente no existe todavía. `catalizador`\n"
+            "    necesita distancia a Metro y `riesgo_microzona` necesita vacancia y stock\n"
+            "    entrando. Hasta entonces el ranking ordena por economía de la unidad sola."
+        )
+
     typer.echo("\n  De dónde salió el arriendo de las tres primeras:")
     for u, _ in vivos[:3]:
         celda, n, arr = r.procedencia_arriendo[u.unidad_key]

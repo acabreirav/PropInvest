@@ -390,6 +390,11 @@ async function abrirFicha(key) {
         <span class="riel"><i style="width:${(Number(v) / maxComp * 100).toFixed(1)}%"></i></span>
         <span class="mono" style="text-align:right">${num(v, 3)}</span>
       </div>`).join("") : `<div class="motivo">Sin desglose.</div>`}
+    ${(f.score_inertes || []).length ? `<div class="motivo">
+      No entraron al score, porque valen lo mismo en todas las unidades y por lo tanto no
+      ordenan nada: <b>${(f.score_inertes || []).map(esc).join(", ")}</b>.
+      Sus pesos se repartieron entre los componentes que sí miden, así que el score sigue
+      siendo sobre 100 — pero sobre 100 de lo que se pudo medir.</div>` : ""}
 
     <h3>Procedencia — las seis columnas del §3.1</h3>
     <table class="proc">

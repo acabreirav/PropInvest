@@ -2281,3 +2281,34 @@ coincidencias y el `MLC-` da las mismas 38. En una ventana corta las dos llaves 
 en cuatro meses solo sobrevive la firma. Eso es lo que hace creíble el arreglo.
 
 gates: VERDE — 650 tests.
+
+## 2026-08-31 · T-057 · 30 de los 100 puntos del score no se estaban midiendo
+
+Buscando T-043 (`sospechoso` que nadie escribe) aparecio algo mas grande, en el score mismo.
+
+Medido sobre las unidades emparejadas:
+
+    descuento_vs_microzona   {'0': 25}      peso 5%   — nadie lo calcula nunca
+    riesgo_microzona         {'0.5': 25}    peso 15%  — default del dataclass
+    catalizador              {'0': 25}      peso 10%  — necesita distancia a Metro
+
+Los tres son constantes. `_normalizar` con `hi == lo` devuelve 0,5 a todo el mundo, asi que
+cada uno se convertia en una constante sumada identica a cada unidad: **no movia una sola
+posicion del ranking**, pero inflaba todos los scores y aparecia en la ficha con un numero,
+como si midiera. El ranking ordenaba con el 70% del §12 diciendo que ordenaba con el 100%.
+
+Arreglo: `puntuar()` detecta los componentes que no varian, reparte su peso entre los que si,
+y devuelve sus nombres. Viajan en `Evaluacion.score_inertes` hasta la API y la ficha. Repartir
+en silencio habria sido el mismo error con otra cara.
+
+El orden del ranking **no cambia**: quitar una constante y reescalar es una transformacion
+afin positiva. Lo que cambia es que el score vuelve a tener 100 alcanzables y que se declara
+sobre que se puntuo.
+
+Autocritica (§7.6, hecha en linea): el detector encontro un quinto caso en el test que escribi
+para probarlo — con `pie_exacto=False`, `pie_flujo_cero_real` es None en todas y el componente
+del pie (20%) cae al mismo D(1) para todas. La API usa pie exacto; el atajo no.
+
+Pendiente y anotado: `descuento_vs_microzona` es calculable HOY con lo que hay en la base
+(UF/m2 de la unidad contra la mediana de su microzona). `catalizador` y `riesgo_microzona`
+necesitan fuentes que no existen todavia (Metro, vacancia, stock entrando).

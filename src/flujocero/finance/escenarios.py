@@ -79,12 +79,31 @@ def _normalizar(valores: list[Decimal], mayor_es_mejor: bool) -> list[Decimal]:
     return [((v - lo) / (hi - lo)) if mayor_es_mejor else ((hi - v) / (hi - lo)) for v in valores]
 
 
-def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
-    """Score 0–100, normalizado sobre el conjunto vivo. Cada componente queda auditable."""
+def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> list[str]:
+    """Score 0–100, normalizado sobre el conjunto vivo. Cada componente queda auditable.
+
+    Devuelve los componentes **inertes**: los que valen lo mismo en todas las unidades vivas.
+
+    Un componente que no varia no ordena nada. Al normalizarlo, `_normalizar` le da 0,5 a
+    todo el mundo y su peso se convierte en una constante que se le suma identica a cada
+    unidad: no cambia una sola posicion del ranking, pero infla todos los scores y aparece
+    en la ficha con un numero, como si midiera. Es la enfermedad de siempre — una casilla
+    vacia leyendose como un resultado — y aca costaba **30 puntos de 100**: `riesgo_microzona`
+    (15%) salia 0,5 fijo, `catalizador` (10%) salia 0 fijo y `descuento_vs_microzona` (5%)
+    salia 0 fijo, porque nada los poblaba.
+
+    Asi que sus pesos se redistribuyen entre los componentes que si varian, y sus nombres se
+    devuelven para que quien muestre el score diga cuales no se midieron. Repartir en
+    silencio seria el mismo error con otra cara: el score diria "sobre 100" midiendo 70.
+
+    No se distingue —ni se puede desde aca— entre "nadie lo poblo" y "todas las unidades
+    empatan de verdad". No hace falta: la consecuencia es la misma, el componente no
+    discrimina, y gastarle peso es gastar escala en nada.
+    """
     pesos = {k: D(str(v)) for k, v in p.crudo("score.pesos").items()}
     vivos = [(u, e) for u, e in zip(unidades, evals) if not e.excluido]
     if not vivos:
-        return
+        return []
 
     comps = {
         "costo_tenencia_mensual_uf": _normalizar(
@@ -112,10 +131,21 @@ def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> None:
         "catalizador": _normalizar([u.catalizador for u, _ in vivos], True),
         "descuento_vs_microzona": _normalizar([u.descuento_vs_microzona for u, _ in vivos], True),
     }
+    # Con una sola unidad viva todo es constante por definicion; ahi no hay nada que
+    # declarar inerte, simplemente no hay ranking.
+    inertes = sorted(k for k, v in comps.items() if min(v) == max(v)) if len(vivos) > 1 else []
+    activos = {k: w for k, w in pesos.items() if k not in inertes}
+    total = sum(activos.values(), D(0))
+    if total <= 0:
+        # Ningun componente varia: el score no puede ordenar. Cero para todos, y que se note.
+        for _, ev in vivos:
+            ev.score_desglose, ev.score = {}, D(0)
+        return sorted(pesos)
     for i, (_, ev) in enumerate(vivos):
-        desglose = {k: comps[k][i] * pesos[k] * D(100) for k in pesos}
+        desglose = {k: comps[k][i] * (w / total) * D(100) for k, w in activos.items()}
         ev.score_desglose = desglose
         ev.score = sum(desglose.values(), D(0))
+    return inertes
 
 
 def evaluar_universo(
@@ -155,5 +185,7 @@ def evaluar_universo(
                 if u.unidad_key in cache
                 else pie_flujo_cero_real(u, escenario, p, inv)
             )
-    puntuar(unidades, evals, p)
+    inertes = tuple(puntuar(unidades, evals, p))
+    for ev in evals:
+        ev.score_inertes = inertes
     return evals

@@ -492,3 +492,51 @@ def test_el_DFL2_sin_confirmar_es_lo_que_mas_encarece_el_pie(cfg) -> None:
     con = pie_flujo_cero_real(unidad(**base, acogida_dfl2=True, antiguedad_anios=5), e, p, inv)
     assert sin is not None and con is not None
     assert sin - con > D("0.30"), "verificar el DFL2 vale mas de 30 puntos de pie"
+
+
+# --------------------------------------------------------------- 8 · componentes inertes del score
+
+
+def test_score_declara_los_componentes_que_no_miden(cfg):
+    """Un componente constante no ordena nada: no debe gastar peso ni fingir que midio.
+
+    `riesgo_microzona`, `catalizador` y `descuento_vs_microzona` salen con el mismo valor en
+    todas las unidades porque nada los pobla — 30 de los 100 puntos del §12. Antes se sumaban
+    identicos a cada score, inflandolos, y aparecian en la ficha con un numero.
+    """
+    p, inv = cfg
+    us = [
+        unidad(unidad_key="A", precio_uf=D(2500), arriendo_mensual_uf=D(12)),
+        unidad(unidad_key="B", precio_uf=D(3500), arriendo_mensual_uf=D(9)),
+        unidad(unidad_key="C", precio_uf=D(3000), arriendo_mensual_uf=D(11)),
+    ]
+    # `pie_exacto=True` no es decoracion del test: con la biseccion apagada,
+    # `pie_flujo_cero_real` es None en todas y el componente cae al mismo D(1) para todas —
+    # o sea, un QUINTO componente inerte, otro 20% del score apagado en silencio. Lo detecto
+    # este mismo detector la primera vez que corrio. La API usa pie exacto; el atajo no.
+    evals = evaluar_universo(us, escenario_base(p, inv), p, inv, pie_exacto=True)
+    vivos = [e for e in evals if not e.excluido]
+    assert vivos, "el caso necesita unidades vivas para tener algo que puntuar"
+
+    inertes = set(vivos[0].score_inertes)
+    assert inertes == {"riesgo_microzona", "catalizador", "descuento_vs_microzona"}
+
+    # Ninguno aparece en el desglose: no se muestra un numero de algo que no se midio.
+    for ev in vivos:
+        assert not inertes & set(ev.score_desglose)
+        # Y el desglose sigue sumando el score completo: los pesos se repartieron, no se
+        # perdieron. Un score "sobre 100" que suma 70 seria el mismo error con otra cara.
+        assert abs(sum(ev.score_desglose.values()) - ev.score) < D("1e-9")
+
+    # El maximo alcanzable vuelve a ser 100: con los tres inertes dentro, ninguna unidad
+    # podia pasar de 70 + las tres constantes, y el tope real quedaba escondido.
+    assert max(e.score for e in vivos) <= D(100)
+
+
+def test_score_con_una_sola_unidad_no_declara_nada_inerte(cfg):
+    """Con una unidad todo es constante por definicion. Declararlo todo inerte seria ruido."""
+    p, inv = cfg
+    evals = evaluar_universo([unidad()], escenario_base(p, inv), p, inv, pie_exacto=True)
+    vivos = [e for e in evals if not e.excluido]
+    if vivos:
+        assert vivos[0].score_inertes == ()

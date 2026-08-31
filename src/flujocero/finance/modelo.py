@@ -106,6 +106,10 @@ class Evaluacion:
     motivo_exclusion: str | None = None
     score: Decimal = D(0)
     score_desglose: dict[str, Decimal] = field(default_factory=dict)
+    # Componentes del §12 que no variaron en todo el conjunto vivo y por eso no entraron al
+    # score. Viaja en cada evaluacion para que la ficha pueda decir sobre que se puntuo de
+    # verdad, en vez de mostrar un desglose que suma 100 sin haber medido 100.
+    score_inertes: tuple[str, ...] = ()
 
 
 def deficit_caja_max_uf(params: Config, inv: Config) -> Decimal | None:
