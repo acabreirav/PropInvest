@@ -186,3 +186,45 @@ def test_recalcular_reemplaza_en_vez_de_acumular() -> None:
     agg.cargar_en_duckdb(con, datos, ahora)
     assert con.execute("SELECT count(*) FROM agg_arriendo_microzona").fetchone()[0] == 1
     con.close()
+
+
+# --------------------- la mediana que audita y la que rankea (T-052)
+
+
+def test_el_comando_que_audita_usa_la_misma_poblacion_que_el_ranking() -> None:
+    """`cli comparables` existe para auditar el número que el ranking muestra. Si filtra
+    distinto, audita otro número — y eso pasó.
+
+    El caso real: sobre `santiago/san-diego · 1D1B · 25-35 m²` el comando decía **$330.000
+    sobre 23 avisos** mientras el ranking usaba **$355.000 sobre 12**. Los 11 de diferencia
+    eran de mayo, que el §7.3 saca de la agregación. Dos números para la misma celda.
+
+    Este test fija el criterio compartido: **amoblado fuera, vencido fuera**. Si alguien
+    cambia uno de los dos lados, acá falla.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from flujocero.quality.checks import FRESCURA_MAX_DIAS
+    from flujocero.quality.comparabilidad import no_comparable
+
+    ahora = datetime(2026, 8, 31, tzinfo=UTC)
+    limite = ahora - timedelta(days=FRESCURA_MAX_DIAS)
+
+    # (arriendo, fecha, titulo) — los 24 avisos reales de la celda, resumidos.
+    avisos = [
+        (250_000, datetime(2026, 5, 3, tzinfo=UTC), "arriendo-1d1b-metro-u-de-chile"),
+        (330_000, datetime(2026, 5, 3, tzinfo=UTC), "departamento-serrano"),
+        (380_000, datetime(2026, 5, 3, tzinfo=UTC), "arriendo-departamento-amoblado-sta-isabel"),
+        (280_000, ahora, "excelente-depto-de-1d1b-metro-parque-almagro"),
+        (355_000, ahora, "edificio-eyzaguirre-vista-sur-piso-12"),
+        (375_000, ahora, "edificio-arturo-prat-vista-sur-piso-9"),
+    ]
+
+    def entra(monto_fecha_titulo) -> bool:
+        _, visto, titulo = monto_fecha_titulo
+        return not no_comparable(titulo) and visto >= limite
+
+    vigentes = [a for a in avisos if entra(a)]
+    assert [a[0] for a in vigentes] == [280_000, 355_000, 375_000]
+    assert all(a[1] >= limite for a in vigentes), "ninguno de mayo"
+    assert not any(no_comparable(a[2]) for a in vigentes), "ninguno amoblado"

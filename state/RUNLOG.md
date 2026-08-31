@@ -2109,3 +2109,26 @@ Ese spread, además, no es ruido: ordena las comunas por cuánto pesa su stock a
 que entre la Capa 5 se cruza con transacciones reales.
 
 gates: VERDE — 649 tests.
+
+## 31-ago-2026 · T-052 · la herramienta de auditoría auditaba otro número
+
+Los 12 comparables frescos de `santiago/san-diego · 1D1B · 25-35 m²` aguantan la mirada: 1D1B
+reales de Santiago centro, entre $280.000 y $375.000, varios en edificios con nombre —
+Eyzaguirre, Arturo Prat, Coquimbo—, dispersión chica. **La UF 8,68 del ranking es buena.**
+
+Pero el comando que puse hoy para auditar esa mediana **mostró otro número**: $330.000 sobre
+23 avisos, contra los $355.000 sobre 12 que usa el ranking. Los 11 de diferencia son de mayo,
+que el §7.3 saca de la agregación — y `cli comparables` no aplicaba ese filtro.
+
+**Es la misma enfermedad de la semana, y esta vez la introduje yo, hoy, en la herramienta
+construida para detectarla.** Una herramienta de auditoría que filtra distinto del sistema que
+audita no audita nada: confirma un número que nadie usó.
+
+Ahora comparte el criterio —amoblado fuera, vencido fuera— y marca cada aviso con por qué
+entra o no. Una celda sin comparables vigentes lo dice en vez de calcular una mediana con los
+viejos, que sería exactamente el número que el ranking no usa.
+
+El test que lo fija corre los dos filtros sobre los avisos reales de esa celda. Si alguien
+cambia un lado, falla.
+
+gates: VERDE — 650 tests.

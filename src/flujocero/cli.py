@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
 from decimal import getcontext
 from typing import Any
@@ -1932,31 +1932,64 @@ def comparables(
         typer.echo(f"  Sin comparables activos en {microzona} con ese filtro.")
         raise typer.Exit(1)
 
-    from flujocero.quality.comparabilidad import dudoso, marca, no_comparable
+    from flujocero.quality.checks import FRESCURA_MAX_DIAS
+    from flujocero.quality.comparabilidad import dudoso, no_comparable
 
-    montos = sorted(f[3] for f in filas if not no_comparable(f[6]))
-    mediana = (
-        montos[len(montos) // 2]
-        if len(montos) % 2
-        else (montos[len(montos) // 2 - 1] + montos[len(montos) // 2]) // 2
+    # **La mediana tiene que salir de la MISMA poblacion que usa el ranking.** Este comando
+    # nacio para auditar el numero que el ranking muestra, y sin este filtro auditaba otro:
+    # sobre `santiago/san-diego 1D1B 25-35` decia $330.000 sobre 23 avisos mientras el
+    # ranking usaba $355.000 sobre 12. Los 11 de diferencia eran de mayo, que el §7.3 saca de
+    # la agregacion. Dos numeros para la misma celda es exactamente lo que este proyecto
+    # viene cazando toda la semana — y esta vez lo habia puesto yo.
+    limite = datetime.now(UTC) - timedelta(days=FRESCURA_MAX_DIAS)
+
+    def entra(f: Any) -> bool:
+        return not no_comparable(f[6]) and f[5] is not None and f[5] >= limite
+
+    def senal(f: Any) -> str:
+        if no_comparable(f[6]):
+            return "✗ "
+        if f[5] is None or f[5] < limite:
+            return "· "
+        return "? " if dudoso(f[6]) else "  "
+
+    montos = sorted(f[3] for f in filas if entra(f))
+    amoblados = sum(1 for f in filas if no_comparable(f[6]))
+    viejos = sum(1 for f in filas if not no_comparable(f[6]) and (f[5] is None or f[5] < limite))
+    cabecera = (
+        f"  {len(filas)} avisos · {amoblados} amoblados · {viejos} de más de "
+        f"{FRESCURA_MAX_DIAS} días · "
     )
-    fuera = [f for f in filas if no_comparable(f[6])]
-    typer.echo(
-        f"  {len(filas)} avisos · {len(fuera)} amoblados o de estadia corta · "
-        f"{len(montos)} comparables · mediana ${mediana:,.0f}/mes\n"
-    )
+    if montos:
+        mediana = (
+            montos[len(montos) // 2]
+            if len(montos) % 2
+            else (montos[len(montos) // 2 - 1] + montos[len(montos) // 2]) // 2
+        )
+        typer.echo(f"{cabecera}{len(montos)} alimentan la mediana de ${mediana:,.0f}/mes\n")
+    else:
+        # Sin comparables vigentes NO hay mediana, y no se calcula una con los viejos: seria
+        # exactamente el numero que el ranking no usa. La celda no rankea y hay que decirlo.
+        typer.echo(
+            f"{cabecera}ninguno alimenta la mediana.\n\n"
+            "  ✗ Esta celda NO produce arriendo para el ranking: todo lo que tiene está\n"
+            "    amoblado o vencido. Los avisos se listan igual porque son historia."
+        )
     typer.echo(f"    {'arriendo':>12s} {'m2':>5s} {'$/m2':>7s} {'tipo':6s} {'visto':10s} aviso")
-    for _cid, tip, m2, clp, _uf, visto, url in filas:
+    for fila in filas:
+        _cid, tip, m2, clp, _uf, visto, url = fila
         # `arriendo_clp` es DECIMAL y `m2_utiles` FLOAT: dividirlos directo revienta.
         por_m2 = f"{float(clp) / m2:>7,.0f}" if m2 else "      —"
         typer.echo(
-            f"  {marca(url)}${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} "
+            f"  {senal(fila)}${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} "
             f"{visto:%Y-%m-%d} {url}"
         )
     typer.echo(
-        "\n  ✗ = el aviso DECLARA amoblado o estadia corta: otro producto, no entra a la"
-        "\n      mediana.  ? = merece una mirada (cocina equipada, gastos comunes incluidos)."
-        f"\n  La mediana sale de los {len(montos)} comparables, no de los {len(filas)} avisos."
+        "\n  ✗ = amoblado o estadia corta: otro producto.   · = de más de "
+        f"{FRESCURA_MAX_DIAS} días: el §7.3 lo saca del ranking, se conserva como historia."
+        "\n  ? = merece una mirada (cocina equipada, gastos comunes incluidos)."
+        f"\n  La mediana sale de los {len(montos)} marcados con espacio, "
+        f"no de los {len(filas)} avisos."
     )
     if len(montos) < 8:
         # El umbral del §7.3 existe para que la mediana no sea ruido. Once avisos de tres
