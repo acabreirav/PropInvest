@@ -2247,3 +2247,37 @@ Contexto que sí se pudo medir hoy: en avisos activos de 1D1B 25-35 m², `santia
 tiene 14 — a mitad de tabla, contra 30 de Santa Isabel y 28 del centro histórico.
 
 gates: VERDE — 650 tests.
+
+## 31-ago-2026 · el undécimo check vacío lo escribí yo, una hora antes
+
+`cli permanencia` devolvió **0% en 61 de 63 microzonas**. Ni un aviso de mayo sobrevivió a
+agosto, en ninguna parte. Eso no es un mercado que rota: es una medida rota.
+
+**La causa:** el portal **expira y republica con código nuevo**. Los rangos ni se tocan —
+mayo es `MLC-19xx/37-39xx`, agosto `MLC-20-22xx/43-44xx`. Y la prueba estaba a la vista
+desde hace horas, en la salida de `cli comparables` que el usuario ya había pegado:
+
+    $335.000  31 m²  2026-05-03  MLC-3776279058-edificio-coquimbo-vista-oriente-piso-6
+    $335.000  31 m²  2026-08-31  MLC-2169758799-edificio-coquimbo-vista-oriente-piso-6
+
+Mismo título, misma superficie, mismo precio, código distinto. Lo tuve delante y no lo vi.
+
+**Lo que duele del caso** es que es exactamente la enfermedad que este proyecto lleva dos
+días cazando, y la introduje yo, una hora antes, en una herramienta nueva. Once casos, y los
+dos últimos son míos de hoy: primero `cli comparables` auditando otra población, ahora esto.
+La disciplina no se aprende una vez.
+
+**La llave que sí identifica:** `(microzona, título, m²)`. Medido sobre 2.807 avisos, el
+**97% de los títulos aparece una sola vez** y la firma choca en 1,6%. El precio queda fuera a
+propósito: un aviso que bajó de precio y sigue publicado es justo el que interesa.
+
+Los títulos genéricos se descartan —"departamento en arriendo de 1 dorm en ñuñoa" sale 12
+veces en una sola foto— con una regla dura: si una firma aparece más de una vez dentro de la
+misma foto, no puede seguir a nadie y se saca de las dos. El comando reporta cuántos quedaron
+fuera por eso, para que el denominador sea visible.
+
+**Verificado antes de creerlo:** sobre dos días de mayo en Ñuñoa, la firma da 38
+coincidencias y el `MLC-` da las mismas 38. En una ventana corta las dos llaves coinciden;
+en cuatro meses solo sobrevive la firma. Eso es lo que hace creíble el arreglo.
+
+gates: VERDE — 650 tests.

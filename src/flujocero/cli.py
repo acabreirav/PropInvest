@@ -2405,9 +2405,33 @@ def permanencia(
     La zona cruda las tiene: mayo y agosto. Un aviso que aparece en las dos estuvo en el
     mercado cuatro meses; uno que estaba en mayo y ya no esta, se arrendo (o se retiro).
 
+    ## Por que NO se compara por `MLC-`, que fue el primer intento
+
+    Daba **0% en 61 de 63 microzonas**: ni un solo aviso de mayo sobrevivia a agosto. Eso no
+    es un mercado que rota, es una medida rota — el portal **expira y republica con codigo
+    nuevo**. Los rangos ni se tocan: mayo es `MLC-19xx/37-39xx` y agosto `MLC-20-22xx/43-44xx`.
+
+    La prueba estaba a la vista en `cli comparables`, el mismo departamento dos veces:
+
+        $335.000  31 m2  2026-05-03  MLC-3776279058-edificio-coquimbo-vista-oriente-piso-6
+        $335.000  31 m2  2026-08-31  MLC-2169758799-edificio-coquimbo-vista-oriente-piso-6
+
+    Mismo titulo, misma superficie, mismo precio, codigo distinto.
+
+    ## La firma que si identifica
+
+    `(microzona, titulo, m2)`. Medido sobre 2.807 avisos: **el 97% de los titulos aparece una
+    sola vez** y la firma choca en 1,6%. El precio queda FUERA a proposito — un aviso que
+    bajo de precio y sigue publicado es justo el que interesa encontrar.
+
+    Los titulos genericos se descartan: *"departamento en arriendo de 1 dorm en nunoa"*
+    aparece 12 veces en una sola foto, asi que no identifica a nadie. La regla es dura: si
+    una firma aparece mas de una vez dentro de la MISMA foto, no sirve para seguir a nadie
+    y se saca de las dos.
+
     **Lo que este numero NO es**, y hay que decirlo antes de usarlo:
-      - Un operador multifamily republica con `MLC-` nuevo cada vez, asi que la permanencia
-        real es MAYOR que la medida. El sesgo va hacia abajo.
+      - Si el aviso cambia de titulo al republicarse, se cuenta como arrendado. El sesgo
+        sigue yendo hacia abajo.
       - Un aviso retirado se ve igual que uno arrendado.
       - No es una tasa de vacancia: es rotacion de la OFERTA publicada.
 
@@ -2417,7 +2441,7 @@ def permanencia(
     """
     import gzip
     import json
-    from collections import defaultdict
+    from collections import Counter, defaultdict
 
     from flujocero.sources.base import blobs_crudos
     from flujocero.sources.portal_busqueda import parse_busqueda
@@ -2430,7 +2454,15 @@ def permanencia(
     # `{fecha: {microzona: set(MLC-)}}`, leyendo del blob y no de la base: la tabla guarda
     # solo el ULTIMO `fetched_at`, asi que no distingue "visto en mayo y en agosto" de
     # "visto solo en agosto". La zona cruda si lo distingue, y para eso existe (§3.6).
-    por_fecha: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    def firma(t: Any) -> tuple[str, str, str]:
+        """Lo que identifica a un departamento entre publicaciones. Ver el docstring."""
+        titulo = (t.titulo or "").strip().lower()
+        m2 = f"{float(t.m2_utiles):.0f}" if t.m2_utiles else "?"
+        return (t.microzona_id, titulo, m2)
+
+    # `{fecha: {microzona: {firma: veces}}}` — las veces importan: una firma repetida dentro
+    # de la misma foto es un titulo generico y no identifica a nadie.
+    por_fecha: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
     for b in blobs:
         meta_ruta = b.with_name(b.name.replace(".json.gz", ".meta.json"))
         if not meta_ruta.is_file():
@@ -2439,8 +2471,8 @@ def permanencia(
         dia = f"{b.parts[-4]}-{b.parts[-3]}-{b.parts[-2]}"
         html = gzip.decompress(b.read_bytes()).decode("utf-8", errors="ignore")
         for t in parse_busqueda(html, url, "arriendo", datetime.now(UTC), str(b), "x"):
-            if t.microzona_id:
-                por_fecha[dia][t.microzona_id].add(t.portal_id)
+            if t.microzona_id and t.titulo:
+                por_fecha[dia][t.microzona_id][firma(t)] += 1
 
     fechas = sorted(por_fecha)
     if len(fechas) < 2:
@@ -2466,19 +2498,35 @@ def permanencia(
             "  Con esa separacion no se mide permanencia: casi nada alcanza a arrendarse."
         )
         raise typer.Exit(1)
-    vieja: dict[str, set[str]] = defaultdict(set)
-    nueva: dict[str, set[str]] = defaultdict(set)
+    v_cuenta: dict[str, Counter] = defaultdict(Counter)
+    n_cuenta: dict[str, Counter] = defaultdict(Counter)
     for f in fechas:
-        destino = vieja if f < corte else nueva
-        for mz, ids in por_fecha[f].items():
-            destino[mz] |= ids
+        destino = v_cuenta if f < corte else n_cuenta
+        for mz, cuenta in por_fecha[f].items():
+            destino[mz].update(cuenta)
+
+    # Se quedan solo las firmas que aparecen UNA vez en su foto. Una que se repite es un
+    # titulo generico —"departamento en arriendo de 1 dorm en nunoa", 12 veces— y seguirla
+    # entre fotos produciria coincidencias falsas en la direccion que infla el resultado.
+    ambiguas = 0
+    vieja: dict[str, set[Any]] = {}
+    nueva: dict[str, set[Any]] = {}
+    for destino, fuente in ((vieja, v_cuenta), (nueva, n_cuenta)):
+        for mz, cuenta in fuente.items():
+            destino[mz] = {f for f, n in cuenta.items() if n == 1}
+            ambiguas += sum(1 for n in cuenta.values() if n > 1)
 
     v_ini, v_fin = fechas[0], max(f for f in fechas if f < corte)
     n_ini, n_fin = corte, fechas[-1]
-    typer.echo(f"\n  foto vieja: {v_ini} a {v_fin}   ·   foto nueva: {n_ini} a {n_fin}\n")
+    typer.echo(f"\n  foto vieja: {v_ini} a {v_fin}   ·   foto nueva: {n_ini} a {n_fin}")
+    if ambiguas:
+        typer.echo(
+            f"  {ambiguas} avisos con titulo generico quedaron fuera: no identifican a nadie."
+        )
+    typer.echo("")
 
     filas = []
-    for mz, ids in vieja.items():
+    for mz, ids in vieja.items():  # noqa: PLC0206
         if microzona and mz != microzona:
             continue
         if len(ids) < minimo:
