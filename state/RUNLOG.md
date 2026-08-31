@@ -1795,3 +1795,33 @@ deja el ranking en **cero unidades**. Sobre la base del usuario quedan las que r
 estos días. El número honesto lo da su corrida.
 
 gates: VERDE — 615 tests.
+
+## 31-ago-2026 · fase 3 entró al ranking, y con ella el octavo check vacío
+
+La corrida de arriendo de fase 3 funcionó: **La Serena, Antofagasta y Coquimbo** tienen
+celdas propias, y `la-serena/avenida-del-mar 2D2B 50-70` con n=77 es hoy la más profunda del
+sistema — más que cualquiera de San Miguel. El podio dejó de ser 13/15 San Miguel.
+
+**De Gran Concepción no entró nada** (T-046). Es la única de las tres que el §10 declara
+"el único mercado donde el pie de equilibrio baja a ~32%", así que la parte verificable de
+la tesis sigue sin verificarse.
+
+**El octavo check vacío, y esta vez lo destapó el propio éxito.** Con el podio en Antofagasta
+y La Serena, el gate seguía imprimiendo `✓ medianas dentro de ±25% (4 comunas comparadas)`.
+Las cuatro: la-florida, ñuñoa, san-miguel, santiago. Ninguna en el podio. La tabla Colliers
+cubre la RM y nada más, y los dos checks hacían `continue` en silencio sobre lo que no podían
+comparar. **Cuanto más nuevo el mercado, más fuerte el falso verde.**
+
+No se inventa una referencia (§3.2): se nombra la ausencia. Los dos checks ahora devuelven
+ALERTA listando qué no pudieron verificar.
+
+Y como cuando el ancla externa no llega el único control que queda es mirar los avisos, se
+agregó `cli comparables <microzona>`: lista los avisos detrás de una mediana con su URL, su
+$/m² y su fecha. Las seis columnas de procedencia del §3.1 estaban guardadas desde el
+principio sin ninguna forma de leerlas.
+
+**El efecto de la frescura sobre San Miguel, medido:** `lo-vial 3D2B 50-70` pasó de n=30 a
+n=21 y su mediana bajó, así que MLC-2189066411 pasó de 44% a 47% de pie de equilibrio. El
+número honesto es peor que el que veníamos mostrando.
+
+gates: VERDE — 619 tests.

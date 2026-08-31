@@ -430,10 +430,18 @@ def ancla_externa_uf_m2(mediana_por_comuna: dict[str, Decimal]) -> Hallazgo:
     roto, una unidad mal convertida o un filtro que dejó entrar stock usado.
     """
     desviadas: list[str] = []
+    sin_referencia: list[str] = []
     comparadas = 0
     for comuna, nuestra in mediana_por_comuna.items():
         referencia = UF_M2_REFERENCIA.get(comuna)
         if referencia is None:
+            # **La ausencia de referencia no es un aprobado.** La tabla Colliers cubre la RM
+            # y nada mas, asi que al abrir fase 3 el ancla quedo ciega justo donde entraron
+            # los datos nuevos: el 31-ago-2026 las tres primeras del ranking eran de
+            # Antofagasta y La Serena, y el gate imprimia "4 comunas comparadas" — las
+            # cuatro de siempre. Saltarlas en silencio es leer la falta de control como
+            # control cumplido.
+            sin_referencia.append(comuna)
             continue
         comparadas += 1
         desviacion = abs(nuestra - referencia) / referencia
@@ -453,6 +461,16 @@ def ancla_externa_uf_m2(mediana_por_comuna: dict[str, Decimal]) -> Hallazgo:
     if comparadas == 0:
         return Hallazgo(
             "ancla_externa", Severidad.ALERTA, "ninguna comuna tiene referencia con qué comparar"
+        )
+    if sin_referencia:
+        return Hallazgo(
+            "ancla_externa",
+            Severidad.ALERTA,
+            f"{comparadas} comunas dentro de ±{DESVIACION_MAX_ANCLA:.0%}, pero "
+            f"{len(sin_referencia)} quedaron SIN VERIFICAR: no hay referencia publicada para "
+            f"ellas en docs/00-hallazgos.md. Sus cifras entran al ranking sin ancla externa",
+            len(sin_referencia),
+            sorted(sin_referencia),
         )
     return Hallazgo("ancla_externa", Severidad.OK, f"{comparadas} comunas dentro de ±20%")
 
@@ -482,9 +500,11 @@ def reconciliacion_arriendo(
 ) -> Hallazgo:
     """§7.3 · la mediana debe estar dentro de ±25% del benchmark. Alerta, no borrado."""
     fuera: list[str] = []
+    sin_referencia: list[str] = []
     for zona, nuestra in mediana_por_microzona.items():
         ref = benchmark.get(zona)
         if ref is None or ref == 0:
+            sin_referencia.append(zona)
             continue
         d = abs(nuestra - ref) / ref
         if d > DESVIACION_MAX_ARRIENDO:
@@ -497,6 +517,18 @@ def reconciliacion_arriendo(
             "se explica, no se borra",
             len(fuera),
             fuera,
+        )
+    if sin_referencia:
+        # Misma razon que en `ancla_externa_uf_m2`, y acá pesa más: el arriendo es el
+        # NUMERADOR del yield. Una mediana de arriendo sin ancla externa es la mitad de la
+        # cifra que ordena el ranking, sin nadie que la contraste.
+        return Hallazgo(
+            "reconciliacion_arriendo",
+            Severidad.ALERTA,
+            f"medianas dentro de ±{DESVIACION_MAX_ARRIENDO:.0%} donde hay con qué comparar, "
+            f"pero {len(sin_referencia)} zonas quedaron SIN VERIFICAR",
+            len(sin_referencia),
+            sorted(sin_referencia),
         )
     return Hallazgo("reconciliacion_arriendo", Severidad.OK, "medianas dentro de ±25%")
 

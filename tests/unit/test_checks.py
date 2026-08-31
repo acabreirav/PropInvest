@@ -369,3 +369,46 @@ def test_la_columna_de_referencia_es_la_del_arrendador_individual() -> None:
     es un arrendador individual: la columna correcta es la segunda."""
     assert q.ARRIENDO_UF_M2_REFERENCIA["providencia"] == D("0.31")  # retail, no 0,43 multifamily
     assert q.ARRIENDO_UF_M2_REFERENCIA["nunoa"] == D("0.30")
+
+
+# ------------------------------------------- el ancla ciega en mercados nuevos (T-045)
+
+
+def test_el_ancla_externa_nombra_las_comunas_que_no_pudo_verificar() -> None:
+    """La tabla Colliers cubre la RM y nada más. Al abrir fase 3 el ancla quedó ciega justo
+    donde entraron los datos nuevos: el 31-ago-2026 las tres primeras del ranking eran de
+    Antofagasta y La Serena, y el gate imprimía "4 comunas comparadas" — las cuatro de
+    siempre, ninguna de ellas en el podio."""
+    h = q.ancla_externa_uf_m2(
+        {
+            "san-miguel": D("71"),
+            "santiago": D("80"),
+            "antofagasta": D("45"),
+            "la-serena": D("50"),
+        }
+    )
+    assert h.severidad is q.Severidad.ALERTA, "sin ancla no es lo mismo que dentro del ancla"
+    assert h.detalle == ["antofagasta", "la-serena"]
+
+
+def test_el_ancla_sigue_en_verde_cuando_verifica_todo() -> None:
+    """La contraprueba: la alerta nueva no puede volverse ruido de fondo."""
+    h = q.ancla_externa_uf_m2({"san-miguel": D("71"), "santiago": D("80")})
+    assert h.severidad is q.Severidad.OK
+
+
+def test_una_desviacion_real_sigue_ganandole_a_la_falta_de_ancla() -> None:
+    """Orden de severidad: una comuna que se desvía 40% es FALLA aunque otras no tengan
+    referencia. La alerta por lo no verificado nunca puede tapar un desvío medido."""
+    h = q.ancla_externa_uf_m2({"san-miguel": D("120"), "antofagasta": D("45")})
+    assert h.severidad is q.Severidad.FALLA
+
+
+def test_la_reconciliacion_de_arriendo_tambien_nombra_lo_que_no_verifico() -> None:
+    """Y acá pesa más: el arriendo es el NUMERADOR del yield. Una mediana sin ancla externa
+    es la mitad de la cifra que ordena el ranking, sin nadie que la contraste."""
+    h = q.reconciliacion_arriendo(
+        {"san-miguel": D("0.222"), "antofagasta": D("0.394")}, q.ARRIENDO_UF_M2_REFERENCIA
+    )
+    assert h.severidad is q.Severidad.ALERTA
+    assert h.detalle == ["antofagasta"]

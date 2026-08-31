@@ -1771,5 +1771,72 @@ def probar_comunas(
     )
 
 
+@app.command()
+def comparables(
+    microzona: str = typer.Argument(..., help="ej. antofagasta/la-chimba"),
+    tipologia: str = typer.Option("", help="ej. 1D1B. Vacio = todas"),
+    rango: str = typer.Option("", help="ej. 35-50. Vacio = todos"),
+) -> None:
+    """Los avisos DETRAS de una mediana de arriendo, con su URL para ir a mirarlos.
+
+    Una mediana de arriendo es la mitad de todo yield del sistema y hasta ahora era una
+    caja cerrada: el ranking decia "mediana de 11 avisos" y no habia forma de ver cuales.
+    Las seis columnas de procedencia del §3.1 existen justamente para esto, pero guardadas
+    sin manera de leerlas no sirven de nada.
+
+    Lo destapo el ranking del 31-ago-2026: `antofagasta/la-chimba · 1D1B · 35-50 m²` da
+    **UF 16,15/mes con n=11** — mas que un 2D2B de La Serena (14,68) y que uno de San Miguel
+    (12,21). Puede ser real: el §10 predice cap rate 4,5% para Antofagasta, el mas alto del
+    pais, y una ciudad minera tiene arriendos altos de verdad. Pero la tabla de referencia
+    externa **no cubre Antofagasta**, asi que no hay con que contrastarlo. Cuando el ancla
+    externa no llega, el unico control que queda es mirar los avisos.
+    """
+    import duckdb
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        condiciones = ["microzona_id = ?", "activo", "arriendo_clp IS NOT NULL"]
+        args: list[object] = [microzona]
+        if tipologia:
+            condiciones.append("tipologia = ?")
+            args.append(tipologia)
+        filas = con.execute(
+            "SELECT comp_id, tipologia, m2_utiles, arriendo_clp, arriendo_uf, fetched_at, "
+            f"source_url FROM fact_arriendo_comp WHERE {' AND '.join(condiciones)} "
+            "ORDER BY arriendo_clp",
+            args,
+        ).fetchall()
+    finally:
+        con.close()
+
+    if rango:
+        lo, hi = (int(x) for x in rango.split("-"))
+        filas = [f for f in filas if f[2] is not None and lo <= f[2] < hi]
+
+    if not filas:
+        typer.echo(f"  Sin comparables activos en {microzona} con ese filtro.")
+        raise typer.Exit(1)
+
+    montos = sorted(f[3] for f in filas)
+    mediana = (
+        montos[len(montos) // 2]
+        if len(montos) % 2
+        else (montos[len(montos) // 2 - 1] + montos[len(montos) // 2]) // 2
+    )
+    typer.echo(f"  {len(filas)} avisos · mediana ${mediana:,.0f}/mes\n")
+    typer.echo(f"    {'arriendo':>12s} {'m2':>5s} {'$/m2':>7s} {'tipo':6s} {'visto':10s} aviso")
+    for _cid, tip, m2, clp, _uf, visto, url in filas:
+        # `arriendo_clp` es DECIMAL y `m2_utiles` FLOAT: dividirlos directo revienta.
+        por_m2 = f"{float(clp) / m2:>7,.0f}" if m2 else "      —"
+        typer.echo(
+            f"    ${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} {visto:%Y-%m-%d} {url}"
+        )
+    typer.echo(
+        "\n  La mediana es el valor del medio de esta lista. Si un aviso de arriba no es"
+        "\n  comparable con el resto —amoblado, corta estadia, otro barrio mal asignado—"
+        "\n  la mediana esta arrastrada y el yield de todas las unidades de esta celda con ella."
+    )
+
+
 if __name__ == "__main__":
     app()

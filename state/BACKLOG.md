@@ -1005,3 +1005,92 @@ criterio_de_aceptacion:
   - [x] El mensaje de "cero rankeables" nombra la causa que DOMINA, no una plausible
   - [x] Test que ata el gate con el ranking: si alguien saca el filtro, el gate sigue
         anunciando lo mismo y ese test es el que falla
+
+
+## T-045 · El ancla externa quedo ciega justo donde entraron los datos nuevos
+estado: hecha
+agente: auditor-datos
+fase: 3
+gate: make gates
+
+**Octavo caso de la familia.** Al abrir fase 3, las tres primeras del ranking del
+31-ago-2026 pasaron a ser de **Antofagasta y La Serena**. El gate imprimio:
+
+    ✓ reconciliacion_arriendo: medianas dentro de ±25%  (4 comunas comparadas)
+
+Las cuatro comparadas: la-florida, nunoa, san-miguel, santiago. **Ninguna de ellas esta en
+el podio.** `UF_M2_REFERENCIA` y `ARRIENDO_UF_M2_REFERENCIA` salen de la tabla Colliers de
+`docs/00-hallazgos.md`, que cubre la RM y nada mas. Los dos checks hacian `continue` en
+silencio sobre las comunas sin referencia, asi que la falta de control se leia como control
+cumplido — y se leia asi con mas fuerza cuanto mas nuevo era el mercado.
+
+**No se inventa una referencia** (§3.2). Lo que cambia es que la ausencia se nombra: los dos
+checks devuelven ALERTA listando las comunas que no pudieron verificar, en vez de OK contando
+solo las que si.
+
+Y como cuando el ancla externa no llega el unico control que queda es mirar los avisos, se
+agrego `cli comparables <microzona> --tipologia --rango`: lista los avisos detras de una
+mediana con su URL. Las seis columnas de procedencia del §3.1 existian para esto y estaban
+guardadas sin manera de leerlas.
+
+criterio_de_aceptacion:
+  - [x] `ancla_externa_uf_m2` nombra las comunas sin referencia, con ALERTA
+  - [x] `reconciliacion_arriendo` idem
+  - [x] Una desviacion medida sigue ganandole a la falta de ancla (FALLA > ALERTA)
+  - [x] Contraprueba: con todo verificado sigue en OK, para que la alerta no sea ruido
+  - [x] `cli comparables` abre la caja de una mediana
+
+
+## T-046 · Gran Concepcion trajo avisos y no produjo una sola celda
+estado: pendiente
+agente: analista-arriendo
+fase: 3
+depende_de: [T-045]
+gate: make gates
+
+La corrida de arriendo de fase 3 desbloqueo **La Serena, Antofagasta y Coquimbo** —
+`la-serena/avenida-del-mar 2D2B 50-70` con n=77 es hoy la celda MAS PROFUNDA del sistema.
+De **Gran Concepcion no entro nada**: cero celdas utiles, cero unidades en el top 15.
+
+Y Concepcion es la que importa: el §10 la declara *"el unico mercado del alcance donde el pie
+de equilibrio baja a ~32%"*. Las otras dos entraron y dan pies de 45-50%, o sea que la parte
+verificable de la tesis de fase 3 **todavia no se verifico**.
+
+Las cinco comunas respondieron 48 tarjetas cada una en `probar-comunas`, asi que el slug
+`bio-bio` esta bien y el portal tiene oferta. Las hipotesis, en orden de costo:
+  1. La conurbacion reparte los avisos entre cinco comunas y muchas microzonas, y ninguna
+     celda `(microzona, tipologia, rango)` junta 8. Se ve con `cli faltantes --comuna
+     concepcion` y se arregla con mas paginas.
+  2. Las microzonas de Concepcion no se estan asignando y los avisos caen en `sin_microzona`.
+  3. El colector recolecto arriendo solo en algunas de las ocho comunas.
+
+criterio_de_aceptacion:
+  - [ ] Saber CUAL de las tres es, con el conteo que lo demuestra
+  - [ ] Al menos una celda de Gran Concepcion con n>=8
+  - [ ] El pie de equilibrio real de Concepcion contrastado contra el ~32% del §10, con el
+        numero que salga — sea el que confirma la tesis o el que la desmiente
+
+
+## T-047 · Verificar la mediana de arriendo de Antofagasta
+estado: pendiente
+agente: analista-arriendo
+fase: 3
+depende_de: [T-045]
+
+`antofagasta/la-chimba · 1D1B · 35-50 m²` da **UF 16,15/mes con n=11**: mas que un 2D2B de
+La Serena (14,68) y que uno de San Miguel (12,21). En UF/m2 son **0,394 contra 0,222** de San
+Miguel — 77% mas — con precios de VENTA por m2 casi iguales (41,2 vs 38-42 UF/m2).
+
+Puede ser exactamente lo que dice la investigacion: el §10 predice cap rate neto 4,5% para
+Antofagasta, el mas alto del pais, y una ciudad minera tiene arriendos altos de verdad. La
+razon medida (1,77) esta cerca de la que predice el §10 (4,5/2,8 = 1,6). Pero **n=11, sin
+ancla externa** (T-045), y la unidad que encabeza el ranking con eso —MLC-4427322266— da
+yield 11,48% y flujo POSITIVO, que es la misma forma que tenia la cesion de promesa.
+
+criterio_de_aceptacion:
+  - [ ] Mirar los 11 avisos con `cli comparables antofagasta/la-chimba --tipologia 1D1B
+        --rango 35-50` y descartar amoblados, corta estadia y microzona mal asignada
+  - [ ] Un ancla externa para Antofagasta y La Serena en `docs/00-hallazgos.md`, con fuente
+        y fecha, o la constancia de que no existe una publicada
+  - [ ] Si la mediana sobrevive, el hallazgo del §10 queda CONFIRMADO con dato propio y se
+        registra; si no, la celda se marca y el ranking se rehace
