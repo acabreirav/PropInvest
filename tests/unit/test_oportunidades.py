@@ -152,28 +152,43 @@ def test_el_yield_sale_del_arriendo_de_su_celda(con) -> None:
 # ------------------------------------------------------- que parte del score esta viva
 
 
-def test_delata_los_componentes_del_score_que_no_diferencian_nada(con) -> None:
-    """`riesgo_microzona` y `catalizador` suman 25% del score y hoy no tienen fuente. Al
-    valer todos igual, la normalizacion los vuelve una constante: reparten el mismo puntaje
-    y no mueven una sola posicion. Un score que se presenta como completo cuando un cuarto de
-    su peso esta inerte miente por omision."""
+def test_los_componentes_sin_fuente_quedan_fuera_del_score_y_se_dicen(con) -> None:
+    """`riesgo_microzona` y `catalizador` suman 25% del score y hoy no tienen fuente. La
+    deteccion vive en `puntuar()` —sobre el conjunto vivo real, no una lista hardcodeada—
+    y su peso se redistribuye. Aca se verifica el cable completo: emparejar -> evaluar ->
+    score_inertes, y que `descuento_vs_microzona` ya NO este inerte, porque este mismo
+    emparejamiento lo calcula ahora (era el 5% del §12 que valia 0 en todas)."""
     celda(con)
     unidad(con, key="A")
     unidad(con, key="B", precio="2800")
     r = op.emparejar(con, RANGOS)
-    inertes = op.componentes_inertes(r.unidades)
-    assert set(inertes) == {"riesgo_microzona", "catalizador"}
-    assert op.peso_inerte(inertes, cargar("params")) == D("0.25")
+
+    from flujocero.finance.escenarios import escenario_base, evaluar_universo
+
+    p, inv = cargar("params"), cargar("inversionista")
+    evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv, pie_exacto=True)
+    inertes = next(ev.score_inertes for ev in evals if not ev.excluido)
+    assert "riesgo_microzona" in inertes
+    assert "catalizador" in inertes
+    assert "descuento_vs_microzona" not in inertes, (
+        "dos precios distintos en la misma microzona tienen descuentos distintos"
+    )
+    assert op.peso_inerte(("riesgo_microzona", "catalizador"), p) == D("0.25")
 
 
-def test_un_componente_con_datos_distintos_deja_de_estar_inerte(con) -> None:
+def test_emparejar_calcula_el_descuento_contra_la_mediana_de_su_microzona(con) -> None:
+    """El descuento es `D` puro: dos precios publicados y una division. La unidad mas barata
+    que la mediana de su zona tiene descuento positivo; la mas cara, negativo."""
     celda(con)
-    unidad(con, key="A")
+    unidad(con, key="BARATA", precio="2600")
+    unidad(con, key="MEDIA", precio="3000")
+    unidad(con, key="CARA", precio="3400")
     r = op.emparejar(con, RANGOS)
-    from dataclasses import replace
-
-    r.unidades.append(replace(r.unidades[0], unidad_key="B", riesgo_microzona=D("0.9")))
-    assert "riesgo_microzona" not in op.componentes_inertes(r.unidades)
+    d = {u.unidad_key: u.descuento_vs_microzona for u in r.unidades}
+    assert d["MEDIA"] == 0, "la mediana de la zona es ella misma"
+    assert d["BARATA"] > 0 > d["CARA"]
+    # (mediana - uf_m2) / mediana con mediana 3000/56 y barata 2600/56
+    assert abs(d["BARATA"] - (D(3000) - D(2600)) / D(3000)) < D("1e-12")
 
 
 def test_el_mismo_depto_publicado_dos_veces_ocupa_un_solo_lugar(con) -> None:

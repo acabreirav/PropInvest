@@ -312,7 +312,7 @@ def test_avisa_que_un_cuarto_del_score_esta_inerte(cliente: TestClient) -> None:
     nada miente por omisión."""
     d = cliente.get("/api/ranking?pie=0.3").json()
     assert set(d["componentes_inertes"]) == {"riesgo_microzona", "catalizador"}
-    assert any("inerte" in a for a in d["advertencias"])
+    assert any("no se pudo medir" in a for a in d["advertencias"])
 
 
 def test_no_avisa_de_micro_unidades_cuando_no_hay_ninguna(cliente: TestClient) -> None:

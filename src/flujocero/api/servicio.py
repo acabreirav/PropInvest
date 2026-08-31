@@ -282,13 +282,15 @@ class Servicio:
             if ev.excluido
         )
 
-        inertes = op.componentes_inertes(emp.unidades)
+        # Del motor, no de una lista hardcodeada: `puntuar()` detecta lo que no vario en el
+        # conjunto vivo real y ya redistribuyo su peso entre los componentes que si miden.
+        inertes = list(next((ev.score_inertes for ev in evals if not ev.excluido), ()))
         advertencias: list[str] = []
         if inertes:
             advertencias.append(
-                f"{op.peso_inerte(inertes, p):.0%} del score está inerte: "
-                f"{', '.join(inertes)} no tienen fuente todavía (T-014). Reparten el mismo "
-                "puntaje a cada unidad y no mueven una sola posición del ranking."
+                f"{op.peso_inerte(inertes, p):.0%} del score no se pudo medir: "
+                f"{', '.join(inertes)} valen lo mismo en todas las unidades (T-014). Su peso "
+                "se repartió entre los componentes que sí miden."
             )
         if not capacidades["mapa"]:
             advertencias.append(capacidades["mapa_razon"])

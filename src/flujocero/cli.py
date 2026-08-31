@@ -1144,15 +1144,18 @@ def oportunidades(
         e = replace(e, pie_pct=D(str(pie)), escenario_id=f"pie{int(pie * 100)}")
     evals = evaluar_universo(r.unidades, e, p, inv)
 
-    # Antes del ranking: qué parte del score está viva. Un score que se presenta como
-    # completo cuando un cuarto de su peso está inerte miente por omisión.
-    inertes = op.componentes_inertes(r.unidades)
+    # Antes del ranking: que parte del §12 quedo fuera del score por no variar. Los detecta
+    # `puntuar()` sobre el conjunto vivo real —no una lista hardcodeada— y redistribuye su
+    # peso entre los que si miden; aca solo se dice. Un score "sobre 100" que midio 75 y no
+    # lo dice es la casilla vacia de siempre.
+    inertes = next((ev.score_inertes for ev in evals if not ev.excluido), ())
     if inertes:
         muerto = op.peso_inerte(inertes, p)
         typer.echo(
-            f"\n  ⚠ {muerto:.0%} del score está INERTE: {', '.join(inertes)} no tienen fuente\n"
-            f"    todavía (falta el Censo 2024 y las distancias a Metro, T-014). Reparten el\n"
-            f"    mismo puntaje a cada unidad y no mueven una sola posición del ranking."
+            f"\n  ⚠ {muerto:.0%} del score no se pudo medir: {', '.join(inertes)} valen lo\n"
+            f"    mismo en todas las unidades (faltan el Censo 2024 y las distancias a\n"
+            f"    Metro, T-014). Su peso se repartio entre los componentes que si miden;\n"
+            f"    el ranking ordena por lo que hay, y dice que es lo que hay."
         )
 
     vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
@@ -1234,30 +1237,6 @@ def oportunidades(
             "    los retornos de dos dígitos del mercado chileno son stock usado chico, y el\n"
             "    ranking no mide rotación, vacancia real ni liquidez de salida. Verificá\n"
             "    estado y gastos comunes antes de emocionarte con las primeras filas."
-        )
-
-    # **30 de los 100 puntos del score no se estaban midiendo.** `riesgo_microzona` (15%),
-    # `catalizador` (10%) y `descuento_vs_microzona` (5%) salian con el mismo valor en TODAS
-    # las unidades porque nada los poblaba, y un componente constante no ordena nada: se
-    # sumaba identico a cada score, inflandolos, y aparecia en la ficha con un numero como si
-    # midiera. `puntuar()` ahora los detecta, reparte su peso entre los que si varian, y
-    # devuelve sus nombres. Decirlo aca es la mitad del arreglo: un score "sobre 100" que
-    # midio 70 y no lo dice es la misma casilla vacia de siempre.
-    inertes = vivos[0][1].score_inertes if vivos else ()
-    if inertes:
-        pesos_cfg = cargar("params").crudo("score.pesos")
-        perdido = sum(D(str(pesos_cfg.get(k, 0))) for k in inertes)
-        typer.echo(
-            f"\n  ⚠ El score se calculó sobre {1 - perdido:.0%} del §12, no sobre el 100%."
-            f"\n    Estos componentes valen lo mismo en todas las unidades, así que no ordenan"
-            f"\n    nada y su peso se repartió entre los que sí miden:"
-        )
-        for k in inertes:
-            typer.echo(f"      {k:<28} {D(str(pesos_cfg.get(k, 0))):>5.0%} del §12 — sin poblar")
-        typer.echo(
-            "\n    No es un empate real: es que la fuente no existe todavía. `catalizador`\n"
-            "    necesita distancia a Metro y `riesgo_microzona` necesita vacancia y stock\n"
-            "    entrando. Hasta entonces el ranking ordena por economía de la unidad sola."
         )
 
     typer.echo("\n  De dónde salió el arriendo de las tres primeras:")

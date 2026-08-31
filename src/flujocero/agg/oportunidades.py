@@ -21,7 +21,13 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango, serie_uf, uf_del_dia
+from flujocero.agg.arriendo import (
+    MIN_COMPARABLES,
+    etiqueta_rango,
+    percentil,
+    serie_uf,
+    uf_del_dia,
+)
 from flujocero.alcance import Alcance
 from flujocero.finance.modelo import Unidad
 from flujocero.quality.checks import FRESCURA_MAX_DIAS
@@ -134,6 +140,7 @@ def emparejar(
                 "sin_m2",
                 "sin_uf_del_dia",
                 "desactualizada",
+                "sin_fecha",
                 "precio_implausible",
                 "fuera_de_rango",
                 "sin_comparables",
@@ -152,7 +159,8 @@ def emparejar(
 
     filas = conexion.execute(
         "SELECT unidad_key, microzona_id, tipologia, m2_utiles, precio_uf, es_vivienda_nueva, "
-        "antiguedad_anios, evidence_level, fetched_at, precio_clp FROM fact_unidad_venta "
+        "antiguedad_anios, evidence_level, fetched_at, precio_clp, "
+        "coalesce(sospechoso, FALSE) FROM fact_unidad_venta "
         "WHERE valid_to IS NULL AND coalesce(precio_uf, precio_clp) IS NOT NULL "
         "AND evidence_level = 'V'"
     ).fetchall()
@@ -162,8 +170,29 @@ def emparejar(
     serie = serie_uf(conexion)
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
 
-    for key, mz, tip, m2, precio, nueva, antiguedad, _ev, visto, clp in filas:
+    # Primera pasada: filtros DE FILA. Lo que sobrevive es candidata, y sobre las candidatas
+    # se calcula la mediana de UF/m² de cada microzona — el denominador de
+    # `descuento_vs_microzona`, que hasta hoy era un peso del §12 que nadie calculaba nunca.
+    # La mediana sale de esta misma poblacion y no de una consulta aparte a proposito:
+    # dos criterios de filtrado distintos son dos verdades, y ya pagamos ese error.
+    candidatas: list[tuple[str, str, str, Decimal, Decimal, Any, Any, bool, bool]] = []
+    for key, mz, tip, m2, precio, nueva, antiguedad, _ev, visto, clp, sospechoso in filas:
         comuna = mz.split("/")[0] if mz else None
+        if limite is not None:
+            if visto is None:
+                # §3.1 declara `fetched_at` obligatorio; una fila sin fecha no puede probar
+                # que cumple los 21 dias del §7.3, y ANTES pasaba el gate para siempre: el
+                # `visto is not None` del filtro la saltaba en vez de retenerla.
+                r.descartes["sin_fecha"] += 1
+                _anotar(r, comuna, "sin_fecha")
+                continue
+            if visto < limite:
+                # §7.3, y se descarta ANTES que nada mas: una unidad cuyo precio es de hace
+                # cuatro meses no es una oportunidad peor, es una oportunidad que no sabemos
+                # si existe. Sigue en la base como linea base para medir que bajo de precio.
+                r.descartes["desactualizada"] += 1
+                _anotar(r, comuna, "desactualizada")
+                continue
         precio_en_pesos = precio is None
         if precio_en_pesos:
             uf = uf_del_dia(serie, visto) if visto else None
@@ -174,13 +203,6 @@ def emparejar(
                 _anotar(r, comuna, "sin_uf_del_dia")
                 continue
             precio = Decimal(str(clp)) / uf
-        if limite is not None and visto is not None and visto < limite:
-            # §7.3, y se descarta ANTES que nada mas: una unidad cuyo precio es de hace
-            # cuatro meses no es una oportunidad peor, es una oportunidad que no sabemos si
-            # existe. Sigue en la base como linea base para medir que bajo de precio.
-            r.descartes["desactualizada"] += 1
-            _anotar(r, comuna, "desactualizada")
-            continue
         if not mz:
             r.descartes["sin_microzona"] += 1
             _anotar(r, comuna, "sin_microzona")
@@ -203,6 +225,7 @@ def emparejar(
             continue
         if not m2:
             r.descartes["sin_m2"] += 1
+            _anotar(r, comuna, "sin_m2")
             continue
         razon_implausible = implausible(Decimal(str(precio)), Decimal(str(m2)))
         if razon_implausible is not None:
@@ -215,7 +238,34 @@ def emparejar(
             _anotar(r, comuna, "precio_implausible")
             r.implausibles.append((key, razon_implausible))
             continue
-        rango = etiqueta_rango(Decimal(str(m2)), rangos)
+        candidatas.append(
+            (
+                key,
+                mz,
+                tip,
+                Decimal(str(m2)),
+                Decimal(str(precio)),
+                nueva,
+                antiguedad,
+                precio_en_pesos,
+                bool(sospechoso),
+            )
+        )
+
+    # La mediana de UF/m² de cada microzona, SIN los sospechosos: el §7.3 los marca
+    # exactamente para esto — se conservan, compiten, pero no definen el punto de referencia
+    # contra el que se mide al resto. Con una sola candidata la mediana es ella misma y su
+    # descuento es 0, que no es imputacion: la unidad ES el mercado observable de su zona.
+    uf_m2_zona: dict[str, list[Decimal]] = {}
+    for _key, mz, _tip, m2, precio, _n, _a, _pep, sospechoso in candidatas:
+        if not sospechoso:
+            uf_m2_zona.setdefault(mz, []).append(precio / m2)
+    mediana_zona = {mz: percentil(v, D("0.5")) for mz, v in uf_m2_zona.items()}
+
+    # Segunda pasada: el cruce con la celda de arriendo y el colapso de duplicados.
+    for key, mz, tip, m2, precio, nueva, antiguedad, precio_en_pesos, sospechoso in candidatas:
+        comuna = mz.split("/")[0]
+        rango = etiqueta_rango(m2, rangos)
         if rango is None:
             # Sobre 140 m² se pierde el DFL2 y la unidad no compite (§12).
             r.descartes["fuera_de_rango"] += 1
@@ -228,7 +278,7 @@ def emparejar(
             _anotar(r, comuna, "sin_comparables")
             continue
 
-        firma = (mz, tip, Decimal(str(m2)), Decimal(str(precio)))
+        firma = (mz, tip, m2, precio)
         if firma in vistos:
             r.descartes["duplicado"] += 1
             _anotar(r, comuna, "duplicado")
@@ -237,11 +287,12 @@ def emparejar(
         _anotar(r, comuna, "rankea")
 
         arriendo, n, m2_celda = celda
+        med = mediana_zona.get(mz)
         r.unidades.append(
             Unidad(
                 unidad_key=key,
-                precio_uf=Decimal(str(precio)),
-                m2_utiles=Decimal(str(m2)),
+                precio_uf=precio,
+                m2_utiles=m2,
                 tipologia=tip,
                 comuna_id=mz.split("/")[0],
                 microzona_id=mz,
@@ -260,6 +311,10 @@ def emparejar(
                 # Se pobla aunque las saturadas ya se hayan descartado arriba: si algun dia
                 # el filtro de arriba cambia, el motor sigue teniendo con que aplicar el §12.
                 microzona_saturada=alcance.saturada(mz) if alcance else False,
+                # Positivo = mas barata por m² que la mediana de su microzona. Es `D` puro:
+                # dos precios publicados y una division. Era el 5% del §12 que valia 0 en
+                # todas las unidades — un peso del score que nadie calculaba nunca.
+                descuento_vs_microzona=(med - precio / m2) / med if med else D(0),
             )
         )
         r.procedencia_arriendo[key] = (f"{mz} · {tip} · {rango} m²", n, arriendo)
@@ -274,28 +329,13 @@ def emparejar(
 # --------------------------------------------------------- que parte del score esta viva
 
 
-COMPONENTES_SIN_DATO = ("riesgo_microzona", "catalizador")
+def peso_inerte(inertes: list[str] | tuple[str, ...], p: Any) -> Decimal:
+    """Cuanto peso del §12 quedo fuera del score por no variar.
 
-
-def componentes_inertes(unidades: list[Unidad]) -> list[str]:
-    """Qué componentes del score no diferencian nada porque todos valen igual.
-
-    Importa decirlo: `riesgo_microzona` y `catalizador` suman **25% del score** y hoy no
-    tienen fuente —faltan el Censo 2024 y las distancias a Metro (T-014)—. Al quedar todos
-    con el mismo valor, la normalización los vuelve una constante: reparten el mismo puntaje
-    a cada unidad y no mueven una sola posición del ranking.
-
-    No es un error, pero un score que se presenta como completo cuando un cuarto de su peso
-    está inerte es un score que miente por omisión.
+    La deteccion vive en `finance.escenarios.puntuar`, que ademas redistribuye ese peso y
+    deja los nombres en `Evaluacion.score_inertes`. Aqui hubo una segunda deteccion,
+    hardcodeada a `riesgo_microzona` y `catalizador`: dos mecanismos midiendo lo mismo con
+    listas distintas — dos verdades. Se elimino; este helper solo suma pesos.
     """
-    inertes = []
-    for nombre in COMPONENTES_SIN_DATO:
-        valores = {getattr(u, nombre) for u in unidades}
-        if len(valores) <= 1:
-            inertes.append(nombre)
-    return inertes
-
-
-def peso_inerte(inertes: list[str], p: Any) -> Decimal:
     pesos = p.crudo("score.pesos")
     return sum((Decimal(str(pesos.get(k, 0))) for k in inertes), D(0))
