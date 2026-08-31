@@ -323,3 +323,74 @@ def test_la_reconciliacion_no_se_declara_verde_sobre_cero_comunas() -> None:
     assert hallazgo.filas_afectadas == 0
     # Por eso la guarda vive en el comando, que es quien sabe si hubo comunas comparadas.
     assert set({}) & set(qc.ARRIENDO_UF_M2_REFERENCIA) == set()
+
+
+# --------------------------------------------------------------- fase 3, fuera de la RM
+
+
+def test_una_ciudad_de_fase_3_se_expande_en_sus_comunas() -> None:
+    """`ciudad` NO es una comuna. "Gran Concepción" es una conurbación y son cinco.
+
+    Tomar la ciudad como comuna —que es lo que hacía antes— dejaba **fase 3 inalcanzable**:
+    `gran-concepcion` no existe como comuna en ningún portal, así que el alcance la declaraba
+    dentro y ninguna unidad podía calzar con ella jamás.
+    """
+    a = desde_config(cargar("zonas"))
+    assert a.en_alcance("concepcion")
+    assert a.en_alcance("san-pedro-de-la-paz")
+    assert not a.en_alcance("gran-concepcion"), "la ciudad es etiqueta, no comuna"
+
+
+def test_cada_comuna_lleva_el_slug_de_region_que_usa_el_portal() -> None:
+    """Sin esto el colector arma `concepcion-metropolitana`, que no existe. Y el portal NO
+    da error: responde 200 con cero resultados y la corrida "funciona" sin traer nada."""
+    a = desde_config(cargar("zonas"))
+    assert a.region("san-miguel") == "metropolitana"
+    assert a.region("concepcion") != "metropolitana"
+    assert a.region("antofagasta") != "metropolitana"
+
+
+def test_las_comunas_de_fase_3_vienen_como_pares_para_el_colector() -> None:
+    a = desde_config(cargar("zonas"))
+    pares = a.comunas_de_fase(3)
+    assert pares, "fase 3 quedó vacía: el alcance no la expandió"
+    assert all(isinstance(x, tuple) and len(x) == 2 for x in pares)
+    assert ("concepcion", a.region("concepcion")) in pares
+    assert all(c in a.comunas for c, _r in pares)
+
+
+def test_los_slugs_de_region_declarados_son_los_que_el_colector_reconoce() -> None:
+    """El colector extrae la comuna de la URL anclando contra su lista de regiones. Un
+    `region_slug` que no esté en esa lista rompe el parseo de la ubicación en silencio:
+    las tarjetas llegan sin comuna y terminan en `sin_microzona`."""
+    from flujocero.sources.portal_busqueda import REGIONES
+
+    a = desde_config(cargar("zonas"))
+    for comuna in sorted(a.comunas):
+        slug = a.region(comuna)
+        assert slug in REGIONES, (
+            f"{comuna} declara la región {slug!r}, que el colector no reconoce. "
+            f"Agrégala a portal_busqueda.REGIONES o el parseo de ubicación se rompe."
+        )
+
+
+def test_la_url_de_una_comuna_de_regiones_no_dice_metropolitana() -> None:
+    from flujocero.sources.portal_busqueda import url_busqueda
+
+    url = url_busqueda("venta", "concepcion", 1, "usadas", region_slug="bio-bio")
+    assert "concepcion-bio-bio_Desde_1" in url
+    assert "metropolitana" not in url
+
+
+def test_la_comuna_se_extrae_bien_de_una_url_de_regiones() -> None:
+    """La comuna y la región llevan guiones las dos, así que partir por el último guion no
+    sirve: `san-pedro-de-la-paz-bio-bio` daría `san-pedro-de-la-paz-bio`."""
+    from flujocero.sources.portal_busqueda import comuna_de_la_url, url_busqueda
+
+    for comuna, region in (
+        ("concepcion", "bio-bio"),
+        ("san-pedro-de-la-paz", "bio-bio"),
+        ("san-miguel", "metropolitana"),
+    ):
+        url = url_busqueda("arriendo", comuna, 49, "usadas", region_slug=region)
+        assert comuna_de_la_url(url) == comuna, f"mal extraída de {url}"

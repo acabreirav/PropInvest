@@ -63,15 +63,35 @@ fase_2:
     saturadas: [santa-isabel]
     microzonas_prioritarias: [cinco-de-abril, alameda-poniente]
 
+# FASE 3 · el unico tramo del alcance donde el pie de equilibrio baja a ~32%.
+#
+# Ojo con la forma: `ciudad` NO es una comuna. "Gran Concepcion" es una conurbacion y el
+# portal busca por comuna, asi que cada entrada declara sus `comunas` y el `region_slug`
+# que va en la URL. Ese slug es el que usa el PORTAL, no el nombre oficial de la region, y
+# **esta sin verificar**: un slug equivocado no da error — el portal responde 200 con cero
+# resultados y la corrida "funciona" sin traer nada.
+#   -> se verifica con `cli probar-comunas --fase 3` ANTES de recolectar.
 fase_3:
   - ciudad: gran-concepcion
+    region: biobio
+    region_slug: bio-bio          # SIN VERIFICAR — ver `cli probar-comunas`
+    comunas: [concepcion, san-pedro-de-la-paz, talcahuano, chiguayante, hualpen]
     razon: "cap rate neto 4,0% vs 2,8% de Santiago (+120 pb con el mismo ticket). 82% de las ventas bajo UF 4.000. EL ÚNICO MERCADO DEL ALCANCE DONDE EL PIE DE EQUILIBRIO BAJA A ~32%"
     microzonas_prioritarias: [concepcion-centro, barrio-universitario]
     alerta: "ocupación 93%, 5 pp bajo la RM; mercado menos líquido para salir"
+    saturadas: []
   - ciudad: la-serena
+    region: coquimbo
+    region_slug: coquimbo         # SIN VERIFICAR
+    comunas: [la-serena, coquimbo]
     razon: "cap rate neto 1D1B 4,2%"
+    saturadas: []
   - ciudad: antofagasta
+    region: antofagasta
+    region_slug: antofagasta      # SIN VERIFICAR
+    comunas: [antofagasta]
     razon: "cap rate neto 1D1B 4,5%, el más alto del país"
+    saturadas: []
 
 excluidas:
   - {zona: vina-del-mar, razon: "absorción 24,6 meses (la peor del Gran Valparaíso); ventas -6,4% s/s; cap 2D2B 3,1%; mercado estacional"}

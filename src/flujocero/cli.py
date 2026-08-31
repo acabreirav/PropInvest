@@ -681,6 +681,9 @@ def ingerir_legado(
 @app.command()
 def recolectar_portal(
     comunas: str = typer.Option("", help="separadas por coma. Vacio = las de config/zonas.yml"),
+    fase: int = typer.Option(
+        0, help="recolecta todas las comunas de una fase del alcance (§10). 3 = fuera de la RM"
+    ),
     operaciones: str = typer.Option("venta,arriendo"),
     paginas: int = typer.Option(3, help="paginas por comuna y operacion (48 avisos c/u)"),
     tipo: str = typer.Option("usadas", help="usadas | nuevas | proyectos | '' para todo"),
@@ -741,12 +744,26 @@ def recolectar_portal(
             unidades, avisos = antes.por_comuna()[c]
             typer.echo(f"    {c:<24} {unidades:>5} unidades esperan · faltan {avisos:>4} avisos")
         typer.echo("")
+    elif fase:
+        # Fase 3 vive fuera de la Region Metropolitana, asi que cada comuna viaja con su
+        # slug de region: sin eso la URL apunta a `concepcion-metropolitana`, que no existe,
+        # y el portal responde 200 con cero resultados sin dar error.
+        alc = desde_config(cargar("zonas"))
+        lista = alc.comunas_de_fase(fase)
+        if not lista:
+            typer.echo(f"La fase {fase} no declara comunas en config/zonas.yml.")
+            raise typer.Exit(1)
+        ops = tuple(o.strip() for o in operaciones.split(",") if o.strip())
+        typer.echo(f"  FASE {fase}: {len(lista)} comunas fuera de la RM")
+        typer.echo("  Si nunca corriste `probar-comunas --fase %d`, hacelo primero: un slug" % fase)
+        typer.echo("  de region malo devuelve 200 con cero avisos y no da error.\n")
     else:
         lista = [c.strip() for c in comunas.split(",") if c.strip()] or [
             z["comuna"] for z in cargar("zonas").crudo("fase_1")
         ]
         ops = tuple(o.strip() for o in operaciones.split(",") if o.strip())
-    typer.echo(f"  comunas: {', '.join(lista)}\n  operaciones: {', '.join(ops)}")
+    etiquetas = [c if isinstance(c, str) else f"{c[0]} ({c[1]})" for c in lista]
+    typer.echo(f"  comunas: {', '.join(etiquetas)}\n  operaciones: {', '.join(ops)}")
 
     col = pb.PortalBusqueda(user_agent=ua)
     veredicto = col.robots_ok()
@@ -1636,6 +1653,86 @@ def _unidades_afectadas(ags_act, ags_new, actuales, nuevos) -> None:
         f"\n    dejan de rankear:                                    {pierden}"
         f"\n    empiezan a rankear:                                  {ganan}"
         f"\n    quedan comparadas contra un depto de su tamaño (±15%): {bien_emparejadas}"
+    )
+
+
+@app.command()
+def probar_comunas(
+    fase: int = typer.Option(3, help="que fase del alcance probar"),
+) -> None:
+    """Verifica que los slugs de comuna y region de una fase EXISTEN en el portal.
+
+    Existe porque un slug de region equivocado **no da error**. El portal responde 200 con
+    cero resultados y una corrida de veinte minutos "funciona" sin traer nada. `zonas.yml`
+    los declara marcados como SIN VERIFICAR justamente para que nadie recolecte antes de
+    pasar por aca.
+
+    Pide UNA pagina por comuna, respetando robots y la pausa entre peticiones. Reporta
+    cuantas tarjetas trajo cada una: cero tarjetas con HTTP 200 es la senal de slug malo.
+    """
+    import os
+
+    from dotenv import load_dotenv
+
+    from flujocero.sources import portal_busqueda as pb
+
+    load_dotenv(RAIZ / ".env")
+    ua = os.environ.get("USER_AGENT", "").strip()
+    if not ua:
+        typer.echo("✗ falta USER_AGENT en el .env. Es la identidad con la que nos presentamos.")
+        raise typer.Exit(2)
+
+    alc = desde_config(cargar("zonas"))
+    objetivos = alc.comunas_de_fase(fase)
+    if not objetivos:
+        typer.echo(f"La fase {fase} no declara comunas en config/zonas.yml.")
+        raise typer.Exit(1)
+
+    col = pb.PortalBusqueda(user_agent=ua)
+    veredicto = col.robots_ok()
+    typer.echo(f"{'✓' if veredicto.allowed else '✗'} robots.txt: {veredicto.motivo}")
+    if not veredicto.allowed:
+        raise typer.Exit(2)
+
+    typer.echo(f"\n  Probando {len(objetivos)} comunas de la fase {fase}:\n")
+    buenas, malas = [], []
+    try:
+        for i, (comuna, region) in enumerate(objetivos):
+            url = pb.url_busqueda("venta", comuna, 1, "usadas", region_slug=region)
+            if i:
+                col._dormir()
+            r = col._pedir(url)
+            if r.status_code != 200:
+                typer.echo(f"    ✗ {comuna:24s} {region:14s} HTTP {r.status_code}")
+                malas.append((comuna, region, f"HTTP {r.status_code}"))
+                continue
+            doc = pb.RawDoc(
+                source_id=col.id,
+                url=url,
+                fetched_at=datetime.now(UTC),
+                ruta=RAIZ / "sin-guardar",
+                contenido=r.content,
+                robots_snapshot_sha=veredicto.snapshot_sha,
+            )
+            n = len(col.parse(doc))
+            marca = "✓" if n else "✗"
+            typer.echo(f"    {marca} {comuna:24s} {region:14s} {n:3d} tarjetas")
+            (buenas if n else malas).append((comuna, region, f"{n} tarjetas"))
+    finally:
+        col.cerrar()
+
+    typer.echo(f"\n  {len(buenas)} comunas responden con avisos · {len(malas)} no")
+    if malas:
+        typer.echo(
+            "\n  Cero tarjetas con HTTP 200 casi siempre es el SLUG DE REGION mal puesto,"
+            "\n  no una comuna sin oferta. Los slugs viven en `config/zonas.yml` como"
+            "\n  `region_slug` y estan marcados SIN VERIFICAR hasta que este comando pase."
+            f"\n  Regiones que el colector reconoce hoy: {', '.join(pb.REGIONES)}"
+        )
+        raise typer.Exit(1)
+    typer.echo(
+        "\n  Todos los slugs son buenos. Saca el comentario `SIN VERIFICAR` de zonas.yml"
+        f"\n  y ya se puede recolectar:  cli recolectar-portal --fase {fase}"
     )
 
 

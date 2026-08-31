@@ -57,6 +57,10 @@ class Alcance:
     excluidas: dict[str, str] = field(default_factory=dict)
     saturadas: frozenset[str] = field(default_factory=frozenset)
     fase_de: dict[str, int] = field(default_factory=dict)
+    # `comuna -> slug de region que usa el PORTAL en su URL`. Sin esto el colector arma
+    # `concepcion-metropolitana`, que no existe: el portal responde 200 con cero resultados
+    # y la corrida "funciona" sin traer nada.
+    region_de: dict[str, str] = field(default_factory=dict)
 
     def en_alcance(self, comuna_id: str | None) -> bool:
         """Lista BLANCA: lo que no está declarado en una fase, está fuera.
@@ -77,6 +81,15 @@ class Alcance:
     def saturada(self, microzona_id: str | None) -> bool:
         return bool(microzona_id) and microzona_id in self.saturadas
 
+    def region(self, comuna_id: str) -> str:
+        """El slug de region que el portal usa para esta comuna. Default: metropolitana,
+        que es donde estaba todo el alcance hasta que entro fase 3."""
+        return self.region_de.get(comuna_id, "metropolitana")
+
+    def comunas_de_fase(self, fase: int) -> list[tuple[str, str]]:
+        """`[(comuna, region_slug)]` de una fase, que es lo que come el colector."""
+        return sorted((c, self.region(c)) for c, f in self.fase_de.items() if f == fase)
+
     def comuna_de(self, microzona_id: str | None) -> str | None:
         return microzona_id.split("/")[0] if microzona_id else None
 
@@ -89,9 +102,21 @@ class Alcance:
         return (razon is None), razon
 
 
-def _nombre(entrada: dict[str, Any]) -> str | None:
-    """Una entrada de fase se identifica con `comuna` o —en fase 3— con `ciudad`."""
-    return entrada.get("comuna") or entrada.get("ciudad")
+def _comunas_de(entrada: dict[str, Any]) -> list[str]:
+    """Las comunas que aporta una entrada de fase.
+
+    Fase 1 y 2 declaran una `comuna` cada una. **Fase 3 declara una `ciudad`**, que es una
+    conurbación y no una comuna: "Gran Concepción" son cinco. El portal busca por comuna, así
+    que esas entradas traen su lista en `comunas` y la `ciudad` queda como etiqueta.
+
+    Tomar la `ciudad` como si fuera comuna —que es lo que hacía antes— dejaba **fase 3
+    inalcanzable**: `gran-concepcion` no existe como comuna en ningún portal, así que el
+    alcance la declaraba dentro y ninguna unidad podía calzar con ella jamás.
+    """
+    if entrada.get("comunas"):
+        return [str(c) for c in entrada["comunas"]]
+    unica = entrada.get("comuna") or entrada.get("ciudad")
+    return [str(unica)] if unica else []
 
 
 def desde_config(zonas: Any) -> Alcance:
@@ -99,6 +124,7 @@ def desde_config(zonas: Any) -> Alcance:
     comunas: set[str] = set()
     saturadas: set[str] = set()
     fase_de: dict[str, int] = {}
+    region_de: dict[str, str] = {}
 
     for numero, clave in enumerate(FASES, start=1):
         try:
@@ -106,15 +132,21 @@ def desde_config(zonas: Any) -> Alcance:
         except Exception:  # noqa: BLE001 — una fase ausente es valida, no un error
             continue
         for entrada in entradas or []:
-            nombre = _nombre(entrada)
-            if not nombre:
+            propias = _comunas_de(entrada)
+            if not propias:
                 continue
-            comunas.add(nombre)
-            fase_de[nombre] = numero
+            slug = str(entrada.get("region_slug") or "metropolitana")
+            for nombre in propias:
+                comunas.add(nombre)
+                fase_de[nombre] = numero
+                region_de[nombre] = slug
             for corta in entrada.get("saturadas") or []:
                 # En el YAML van por nombre corto bajo su comuna; acá se arman con el
                 # `microzona_id` completo, que es la forma con que viajan por el sistema.
-                saturadas.add(f"{nombre}/{corta}")
+                # Con varias comunas la saturada se aplica a todas. Hoy fase 3 no declara
+                # ninguna; cuando declare habra que decir a que comuna pertenece.
+                for nombre in propias:
+                    saturadas.add(f"{nombre}/{corta}")
 
     excluidas: dict[str, str] = {}
     try:
@@ -133,6 +165,7 @@ def desde_config(zonas: Any) -> Alcance:
         excluidas=excluidas,
         saturadas=frozenset(saturadas),
         fase_de={k: v for k, v in fase_de.items() if k in comunas},
+        region_de={k: v for k, v in region_de.items() if k in comunas},
     )
 
 

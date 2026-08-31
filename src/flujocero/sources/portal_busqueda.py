@@ -105,7 +105,20 @@ class Bloqueado(ErrorDeFuente):
 # ------------------------------------------------------------------------------------ URL
 
 
-def url_busqueda(operacion: str, comuna_slug: str, offset: int = 1, tipo: str | None = None) -> str:
+# Las regiones que el alcance del §10 puede pedir. El slug es el que usa el PORTAL en su
+# URL, no el nombre oficial de la region, y **no se adivina**: cada uno se verifica con
+# `cli probar-comunas` contra el sitio antes de recolectar. Un slug mal puesto no da error
+# obvio — el portal responde 200 con cero resultados y la corrida "funciona" sin traer nada.
+REGIONES = ("metropolitana", "bio-bio", "biobio", "coquimbo", "antofagasta", "valparaiso")
+
+
+def url_busqueda(
+    operacion: str,
+    comuna_slug: str,
+    offset: int = 1,
+    tipo: str | None = None,
+    region_slug: str = "metropolitana",
+) -> str:
     """Construye la URL de listado. **Siempre con `_Desde_`**, incluso la primera página.
 
     El portal sirve la página 1 sin sufijo, pero esa forma no calza con el patrón `/*_Desde_`
@@ -120,7 +133,9 @@ def url_busqueda(operacion: str, comuna_slug: str, offset: int = 1, tipo: str | 
         if tipo not in TIPOS:
             raise ValueError(f"tipo invalido: {tipo!r}; usa uno de {sorted(TIPOS)}")
         partes.append(TIPOS[tipo])
-    partes.append(f"{comuna_slug}-metropolitana_Desde_{max(1, offset)}")
+    if not region_slug:
+        raise ValueError("falta el slug de region: sin el la URL apunta a otra parte del pais")
+    partes.append(f"{comuna_slug}-{region_slug}_Desde_{max(1, offset)}")
     return "/".join(partes)
 
 
@@ -202,7 +217,9 @@ def comuna_de_la_url(url: str) -> str | None:
 
     Es el filtro de busqueda: la comuna que el portal aplico, no una deduccion.
     """
-    m = re.search(r"/([a-z0-9-]+)-metropolitana_Desde_", url)
+    # La comuna y la region llevan guiones las dos (`san-miguel-metropolitana`), asi que
+    # partir por el ultimo guion no sirve: hay que anclar contra las regiones conocidas.
+    m = re.search(rf"/([a-z0-9-]+)-(?:{'|'.join(REGIONES)})_Desde_", url)
     return m.group(1) if m else None
 
 
@@ -424,13 +441,19 @@ class PortalBusqueda:
 
     def collect(
         self,
-        comunas: list[str],
+        comunas: list[str] | list[tuple[str, str]],
         operaciones: tuple[str, ...] = ("venta", "arriendo"),
         max_paginas: int = 10,
         tipo: str | None = None,
         ahora: datetime | None = None,
     ) -> list[RawDoc]:
         """Recorre los listados permitidos y escribe a la zona cruda, anonimizando primero.
+
+        `comunas` acepta slugs sueltos —que se asumen de la Region Metropolitana, que es lo
+        que habia antes— o pares `(comuna, region)`. La region importa desde que el alcance
+        del §10 incluye fase 3: Gran Concepcion, La Serena y Antofagasta no estan en la RM, y
+        con el slug de region equivocado el portal responde **200 con cero resultados**. No
+        da error: la corrida "funciona" y no trae nada.
 
         `ahora` entra por argumento para que los tests sean deterministas (§11).
         """
@@ -442,9 +465,14 @@ class PortalBusqueda:
         momento = ahora or datetime.now(UTC)
         docs: list[RawDoc] = []
         for operacion in operaciones:
-            for comuna in comunas:
+            for entrada in comunas:
+                comuna, region = (
+                    entrada if isinstance(entrada, tuple) else (entrada, "metropolitana")
+                )
                 for pagina in range(1, max_paginas + 1):
-                    url = url_busqueda(operacion, comuna, offset_de_pagina(pagina), tipo)
+                    url = url_busqueda(
+                        operacion, comuna, offset_de_pagina(pagina), tipo, region_slug=region
+                    )
                     if docs:
                         self._dormir()
                     r = self._pedir(url)

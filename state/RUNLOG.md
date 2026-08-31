@@ -1654,3 +1654,33 @@ Ahora dice "NO SE PUDO CORRER" y cuenta cuantas comunas comparo cuando si corre.
 
 Van tres del mismo tipo en un dia —el aviso de sesgo de m2, la reconciliacion, y este— y el
 patron es siempre el mismo: **la ausencia de hallazgos se lee como ausencia de problema**.
+
+---
+
+## 2026-08-30 · Fase 3 estaba en el alcance y era inalcanzable al mismo tiempo
+
+Decision con el usuario: dejar de pulir Santiago y ampliar a fase 3. Al abrirlo aparecieron
+**dos bloqueos que nadie habia visto porque nunca se habia intentado**.
+
+**1. `metropolitana` estaba clavado en la URL del colector**, en tres lugares. Cualquier
+recoleccion fuera de la RM habria pedido `concepcion-metropolitana`, que no existe.
+
+**2. Peor, y mas silencioso: una ciudad no es una comuna.** `zonas.yml` declaraba fase 3 con
+`ciudad: gran-concepcion`, y el alcance la tomaba como si fuera una comuna. O sea que fase 3
+estaba **declarada dentro del alcance y era inalcanzable al mismo tiempo**: ninguna unidad
+podia calzar con `gran-concepcion` porque no existe como comuna en ningun portal. Gran
+Concepcion son cinco comunas; La Serena, dos.
+
+Ahora cada entrada de fase 3 declara sus `comunas` y su `region_slug`, y el alcance las
+expande. La extraccion de la comuna desde la URL se ancla contra la lista de regiones
+conocidas: partir por el ultimo guion daria `san-pedro-de-la-paz-bio` para
+`san-pedro-de-la-paz-bio-bio`.
+
+**Lo que NO se adivino.** El slug de region que usa el portal. Estan en zonas.yml marcados
+SIN VERIFICAR, porque un slug malo **no da error**: el portal responde 200 con cero
+resultados y una corrida de veinte minutos "funciona" sin traer nada. Es el mismo patron que
+viene apareciendo todo el dia —la ausencia de resultados leida como ausencia de problema— asi
+que se le puso un comando encima: `probar-comunas` pide UNA pagina por comuna y cuenta
+tarjetas antes de gastar la corrida.
+
+**Gates:** VERDE.

@@ -859,3 +859,37 @@ decision_para_el_usuario: >
   Correr `cli bandas` sobre la base real. Si angostar `0-35` en `0-25` + `25-35` no cuesta
   celdas, es gratis y se hace. Si cuesta, el cambio es: menos sesgo a cambio de menos
   unidades rankeables, y se compensa recolectando dirigido.
+
+## T-040 · Gran Concepcion, La Serena, Antofagasta — DESBLOQUEADA
+estado: en_curso · agente: colector · fase: 3 · comando: `cli probar-comunas --fase 3`
+motivo: >
+  Decision estrategica del 30-ago-2026, con el usuario. Llevabamos la sesion perfeccionando
+  la medicion de Santiago, que segun la propia investigacion es el PEOR mercado del alcance:
+  cap rate neto 2,8%, cero unidades con subsidio (todas usadas), y pies de equilibrio de
+  42-51%. Fase 3 —donde el §10 dice cap rate 4,0-4,5% y **el unico mercado donde el pie de
+  equilibrio baja a ~32%**— tenia CERO datos.
+dos_bloqueos_que_habia_y_ya_no:
+  - >
+    El colector tenia `metropolitana` CLAVADO en la URL, en tres lugares. Ahora la region
+    viaja por comuna desde zonas.yml. Y la extraccion de la comuna desde la URL se ancla
+    contra la lista de regiones conocidas: partir por el ultimo guion daria
+    `san-pedro-de-la-paz-bio` para `san-pedro-de-la-paz-bio-bio`.
+  - >
+    `zonas.yml` declaraba fase 3 con `ciudad`, y **una ciudad no es una comuna**. "Gran
+    Concepcion" es una conurbacion de cinco. El alcance tomaba `gran-concepcion` como comuna,
+    asi que la declaraba dentro y ninguna unidad podia calzar con ella jamas: fase 3 estaba
+    en el alcance y era inalcanzable al mismo tiempo.
+lo_que_falta_y_NO_se_adivina: >
+  El `region_slug` que usa el PORTAL en su URL. `bio-bio`, `coquimbo` y `antofagasta` estan
+  en zonas.yml marcados **SIN VERIFICAR**. Un slug malo **no da error**: el portal responde
+  200 con cero resultados y una corrida de veinte minutos "funciona" sin traer nada.
+  `cli probar-comunas --fase 3` pide UNA pagina por comuna y cuenta tarjetas: cero tarjetas
+  con HTTP 200 es la senal.
+criterio_de_aceptacion:
+  - [x] La region viaja por comuna, desde zonas.yml
+  - [x] Fase 3 se expande de ciudad a comunas
+  - [x] `probar-comunas` verifica los slugs antes de gastar una corrida
+  - [x] `recolectar-portal --fase 3`
+  - [ ] Slugs verificados contra el portal (lo corre el usuario)
+  - [ ] Arriendo y venta de Gran Concepcion en la base
+  - [ ] Contrastar el pie de equilibrio real contra el ~32% que predice el §10
