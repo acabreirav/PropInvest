@@ -1849,3 +1849,44 @@ ninguna fila**, y eso se dice con todas las letras porque es el único diagnóst
 ninguna cantidad de recolección de arriendo arregla.
 
 gates: VERDE — 622 tests.
+
+## 31-ago-2026 · T-047 · seis de los once avisos del #1 declaran "amoblado"
+
+`cli comparables antofagasta/la-chimba --tipologia 1D1B --rango 35-50`, los 11 avisos que
+sostenían el yield de 11,48% del primer lugar. Seis dicen **amoblado** o **semi amoblado** en
+su propio título; uno además dice `gc incl`.
+
+**Y sacarlos no mueve la mediana:** sigue en $660.000. Vale la pena decirlo porque si el
+hallazgo se contara como "la mediana estaba inflada" sería falso y se caería a la primera
+revisión.
+
+**El problema es otro. La celda solo llega a los 8 comparables del §7.3 contando productos
+que no son el mismo producto.** Sin los amoblados quedan 5. El umbral existe para que la
+mediana no sea ruido, y once avisos de tres productos distintos son ruido con mejor
+presentación que tres avisos de uno.
+
+Medido sobre los 2.835 comparables de la copia local, la proporción de amoblados va de
+**1,5% en San Miguel a 21,6% en Las Condes** (ñuñoa 13,8%, la celda de Antofagasta 64%).
+**El sesgo no es parejo entre comunas**, así que un ranking cuya gracia es comparar comunas
+estaba comparando mezclas distintas de dos productos.
+
+**Por qué acá sí se filtra por palabra y en la cesión de promesa no.** En la promesa la
+palabra era un proxy: 8 de 9 avisos que decían "promesa" publicaban el precio del
+departamento, así que no identificaba el problema. Acá la palabra **es el hecho**: un aviso
+que dice "amoblado" está declarando qué producto vende. No se infiere; se le cree.
+
+La asimetría queda declarada en el módulo: que un aviso **no** diga amoblado no prueba que
+esté pelado, así que la corrección va en una sola dirección y la mediana puede seguir sesgada
+hacia arriba, solo que menos. No se compensa con un ajuste inventado (§3.2). `equipado` queda
+fuera de la lista dura porque "cocina equipada" es estándar en un arriendo pelado: se marca
+`?` para que un humano lo mire.
+
+No hizo falta recolectar nada: el título viaja en el slug de `source_url`, que es una de las
+seis columnas del §3.1 que toda fila ya tiene. Es el mismo dato que destapó la promesa.
+
+**Y `cli embudo --fase 3` contestó lo de Concepción (T-048):** chiguayante, concepción,
+hualpén y san-pedro-de-la-paz tienen **cero filas**. Nunca se recolectaron. De Gran
+Concepción solo entró talcahuano — y de sus 232 unidades, 103 salen por `fuera_de_rango`
+(más de 140 m² útiles), que en Talcahuano no es creíble.
+
+gates: VERDE — 637 tests.

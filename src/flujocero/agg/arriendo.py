@@ -29,6 +29,7 @@ from decimal import Decimal
 from typing import Any
 
 from flujocero.quality.checks import FRESCURA_MAX_DIAS
+from flujocero.quality.comparabilidad import no_comparable
 
 D = Decimal
 
@@ -210,9 +211,13 @@ def comparables_desde_duckdb(
     Con `ahora=None` no se filtra, igual que en `emparejar`.
     """
     serie = serie_uf(conexion)
+    # `source_url` viaja porque el portal arma el slug con el TITULO del aviso, y el titulo es
+    # donde el arrendador declara que arrienda amoblado. Es el mismo dato que destapo la
+    # cesion de promesa. No hace falta recolectar de nuevo: esta en las seis columnas del §3.1
+    # de cada fila que ya tenemos.
     filas = conexion.execute(
-        "SELECT microzona_id, tipologia, m2_utiles, arriendo_uf, arriendo_clp, fetched_at "
-        "FROM fact_arriendo_comp "
+        "SELECT microzona_id, tipologia, m2_utiles, arriendo_uf, arriendo_clp, fetched_at, "
+        "source_url FROM fact_arriendo_comp "
         "WHERE activo AND coalesce(sospechoso, FALSE) = FALSE"
     ).fetchall()
 
@@ -222,12 +227,19 @@ def comparables_desde_duckdb(
         "sin_tipologia": 0,
         "sin_m2": 0,
         "desactualizado": 0,
+        "amoblado": 0,
         "sin_uf_del_dia": 0,
     }
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
-    for mz, tip, m2, arr_uf, arr_clp, momento in filas:
+    for mz, tip, m2, arr_uf, arr_clp, momento, url in filas:
         if limite is not None and momento is not None and momento < limite:
             descartes["desactualizado"] += 1
+            continue
+        if no_comparable(url):
+            # Un amoblado es OTRO negocio: lo toma un trabajador de faena o un turista, dura
+            # meses en vez de anios, y el arrendador repone muebles. Este inversionista
+            # arrienda pelado a 30 anios. Ver `quality/comparabilidad.py`.
+            descartes["amoblado"] += 1
             continue
         if not mz:
             descartes["sin_microzona"] += 1

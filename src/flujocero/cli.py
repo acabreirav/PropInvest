@@ -1830,25 +1830,45 @@ def comparables(
         typer.echo(f"  Sin comparables activos en {microzona} con ese filtro.")
         raise typer.Exit(1)
 
-    montos = sorted(f[3] for f in filas)
+    from flujocero.quality.comparabilidad import dudoso, marca, no_comparable
+
+    montos = sorted(f[3] for f in filas if not no_comparable(f[6]))
     mediana = (
         montos[len(montos) // 2]
         if len(montos) % 2
         else (montos[len(montos) // 2 - 1] + montos[len(montos) // 2]) // 2
     )
-    typer.echo(f"  {len(filas)} avisos · mediana ${mediana:,.0f}/mes\n")
+    fuera = [f for f in filas if no_comparable(f[6])]
+    typer.echo(
+        f"  {len(filas)} avisos · {len(fuera)} amoblados o de estadia corta · "
+        f"{len(montos)} comparables · mediana ${mediana:,.0f}/mes\n"
+    )
     typer.echo(f"    {'arriendo':>12s} {'m2':>5s} {'$/m2':>7s} {'tipo':6s} {'visto':10s} aviso")
     for _cid, tip, m2, clp, _uf, visto, url in filas:
         # `arriendo_clp` es DECIMAL y `m2_utiles` FLOAT: dividirlos directo revienta.
         por_m2 = f"{float(clp) / m2:>7,.0f}" if m2 else "      —"
         typer.echo(
-            f"    ${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} {visto:%Y-%m-%d} {url}"
+            f"  {marca(url)}${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} "
+            f"{visto:%Y-%m-%d} {url}"
         )
     typer.echo(
-        "\n  La mediana es el valor del medio de esta lista. Si un aviso de arriba no es"
-        "\n  comparable con el resto —amoblado, corta estadia, otro barrio mal asignado—"
-        "\n  la mediana esta arrastrada y el yield de todas las unidades de esta celda con ella."
+        "\n  ✗ = el aviso DECLARA amoblado o estadia corta: otro producto, no entra a la"
+        "\n      mediana.  ? = merece una mirada (cocina equipada, gastos comunes incluidos)."
+        f"\n  La mediana sale de los {len(montos)} comparables, no de los {len(filas)} avisos."
     )
+    if len(montos) < 8:
+        # El umbral del §7.3 existe para que la mediana no sea ruido. Once avisos de tres
+        # productos distintos son ruido con mejor presentacion que tres avisos de uno.
+        typer.echo(
+            f"\n  ⚠ Con {len(montos)} comparables limpios esta celda NO alcanza los 8 del §7.3."
+            "\n    Llegaba a 8 contando productos que no son el mismo producto."
+        )
+    if any(dudoso(f[6]) for f in filas):
+        typer.echo(
+            '\n  Los marcados `?` SI entran a la mediana: en Chile "cocina equipada" es'
+            "\n  estandar en un arriendo pelado, y excluirlos por esa palabra perderia dato"
+            "\n  bueno. Se marcan para que los mires, no para decidir por ti."
+        )
 
 
 @app.command()

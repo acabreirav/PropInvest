@@ -1096,10 +1096,51 @@ razon medida (1,77) esta cerca de la que predice el §10 (4,5/2,8 = 1,6). Pero *
 ancla externa** (T-045), y la unidad que encabeza el ranking con eso —MLC-4427322266— da
 yield 11,48% y flujo POSITIVO, que es la misma forma que tenia la cesion de promesa.
 
+RESUELTO en parte, y el resultado NO fue el esperado. De los 11 avisos, **seis declaran
+"amoblado" o "semi amoblado" en su propio titulo** y uno dice `gc incl`. Pero sacarlos NO
+mueve la mediana: sigue en $660.000. Los amoblados de Antofagasta no cobran mucho mas.
+
+**El problema es otro y es peor:** la celda solo llega a los 8 comparables del §7.3 contando
+productos que no son el mismo producto. Sin los amoblados quedan **5**, y con 5 no rankea
+nada. El umbral estaba satisfecho en el papel y vacio en el fondo.
+
+Y no es local: medido sobre 2.835 comparables, la proporcion de amoblados va de **1,5% en
+San Miguel a 21,6% en Las Condes**, con nunoa en 13,8% y la celda de Antofagasta en 64%. O
+sea que el sesgo **no es parejo entre comunas**, y un ranking cuya gracia es comparar comunas
+entre si estaba comparando mezclas distintas de dos productos.
+
 criterio_de_aceptacion:
-  - [ ] Mirar los 11 avisos con `cli comparables antofagasta/la-chimba --tipologia 1D1B
-        --rango 35-50` y descartar amoblados, corta estadia y microzona mal asignada
+  - [x] Mirar los 11 avisos y descartar amoblados — `cli comparables` los marca
+  - [x] Los amoblados declarados salen de la mediana (`quality/comparabilidad.py`)
   - [ ] Un ancla externa para Antofagasta y La Serena en `docs/00-hallazgos.md`, con fuente
         y fecha, o la constancia de que no existe una publicada
-  - [ ] Si la mediana sobrevive, el hallazgo del §10 queda CONFIRMADO con dato propio y se
-        registra; si no, la celda se marca y el ranking se rehace
+  - [ ] Rehacer el ranking sin amoblados y ver que queda de Antofagasta y La Serena
+  - [ ] `la-serena/avenida-del-mar` (n=77, la celda mas profunda del sistema) es la avenida
+        de la PLAYA: revisarla con la misma lupa antes de creerle nada
+
+
+## T-048 · Cuatro de las cinco comunas de Gran Concepcion nunca se recolectaron
+estado: pendiente
+agente: colector
+fase: 3
+gate: make gates
+
+`cli embudo --fase 3` lo dijo sin ambiguedad: **chiguayante, concepcion, hualpen y
+san-pedro-de-la-paz tienen CERO filas** en `fact_unidad_venta`. No se cayeron en un filtro.
+Nunca llegaron. De Gran Concepcion solo entro **talcahuano**.
+
+Y talcahuano entro raro: de sus 232 unidades, **103 salen por `fuera_de_rango`** — o sea mas
+de 140 m2 utiles — y 129 por `sin_comparables`. **Cero rankean.** Una proporcion asi de
+departamentos sobre 140 m2 en Talcahuano no es creible; la URL del colector fija
+`/departamento/`, asi que no son casas. Sospecha principal: en regiones la tarjeta trae
+superficie TOTAL o de terreno donde en la RM trae la util, y el parser toma la que hay.
+
+Las dos cosas se investigan juntas porque las dos apuntan al colector, no al modelo.
+
+criterio_de_aceptacion:
+  - [ ] Saber por que `--fase 3` recolecto 4 de 8 comunas de venta (¿corte por paginas?,
+        ¿error silencioso?, ¿el slug de esas cuatro?) — con la evidencia, no con una teoria
+  - [ ] Las cinco comunas de Gran Concepcion con unidades en la base
+  - [ ] Explicar los 103 `fuera_de_rango` de talcahuano mirando avisos concretos
+  - [ ] Si el m2 de regiones es superficie total, el parser lo distingue o lo deja `ND`
+        (§3.2: no se imputa) — nunca lo mezcla con m2 utiles
