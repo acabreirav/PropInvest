@@ -1337,8 +1337,21 @@ def faltantes(
             f"{h.faltan:>7} {float(h.palanca):>8.1f}"
         )
 
+    # El desglose por comuna respeta `--comuna` igual que la tabla de arriba. Antes no, y
+    # eso confundia de la peor manera: `--comuna concepcion` devolvia "0 celdas" y ACTO
+    # SEGUIDO listaba nunoa, antofagasta y talcahuano, que se lee como si fueran de
+    # Concepcion. La respuesta correcta a esa consulta era "Concepcion no tiene ninguna
+    # unidad en la base", y quedaba tapada por un listado de otras comunas.
+    por_comuna = [(c, v) for c, v in dg.por_comuna().items() if not comuna or c == comuna]
+    if comuna and not por_comuna:
+        typer.echo(
+            f"\n  {comuna} no tiene ninguna unidad esperando comparables.\n"
+            "  Puede ser que ya rankeen todas, o que no haya ninguna en la base.\n"
+            f"    uv run python -m flujocero.cli embudo --comuna {comuna}"
+        )
+        return
     typer.echo("\n  Por comuna, para planear la corrida:\n")
-    for c, (unidades, avisos) in list(dg.por_comuna().items())[:10]:
+    for c, (unidades, avisos) in por_comuna[:10]:
         typer.echo(f"    {c:<28} {unidades:>5} unidades esperan  ·  faltan {avisos:>4} avisos")
 
     typer.echo(
@@ -1835,6 +1848,73 @@ def comparables(
         "\n  La mediana es el valor del medio de esta lista. Si un aviso de arriba no es"
         "\n  comparable con el resto —amoblado, corta estadia, otro barrio mal asignado—"
         "\n  la mediana esta arrastrada y el yield de todas las unidades de esta celda con ella."
+    )
+
+
+@app.command()
+def embudo(
+    comuna: str = typer.Option("", help="una comuna, o vacio para todas"),
+    fase: int = typer.Option(0, help="solo las comunas de una fase del alcance (§10)"),
+) -> None:
+    """Que le paso a las unidades de cada comuna, paso por paso hasta el ranking.
+
+    Nace de una pregunta concreta que no se podia contestar: **Gran Concepcion respondio 48
+    tarjetas por comuna en `probar-comunas`, se recolecto, y no aparecio ni una sola unidad
+    suya en el ranking.** ¿Se cayeron por viejas, por microzona, por falta de comparables, o
+    nunca llegaron a la base? Cada respuesta lleva a una accion distinta y adivinar cual es
+    sale caro: una corrida de recoleccion son veinte minutos apuntando al lugar equivocado.
+
+    Lo cuenta **el mismo recorrido que arma el ranking** (`emparejar`), no una consulta
+    paralela. Es deliberado: este proyecto ya pago varias veces el precio de tener dos
+    implementaciones del mismo criterio, una de las cuales se queda atras en silencio.
+    """
+    import duckdb
+
+    from flujocero.agg import oportunidades as op
+
+    alc = desde_config(cargar("zonas"))
+    con = duckdb.connect(str(db.crear()))
+    try:
+        r = op.emparejar(
+            con, cargar("params").crudo("ingresos.rangos_m2"), alcance=alc, ahora=datetime.now(UTC)
+        )
+    finally:
+        con.close()
+
+    quiere = {c for c, _ in alc.comunas_de_fase(fase)} if fase else None
+    if comuna:
+        quiere = {comuna}
+
+    filas = {c: m for c, m in r.por_comuna.items() if quiere is None or c in quiere}
+
+    # El silencio es una respuesta, y hay que decirla con todas las letras: una comuna que no
+    # aparece en el embudo NO tiene ninguna unidad en `fact_unidad_venta`. No es que se
+    # cayeron en algun filtro; nunca llegaron. Eso apunta al colector de VENTA, y es la unica
+    # rama que ninguna cantidad de recoleccion de ARRIENDO arregla. Se dice ANTES de la
+    # tabla porque una comuna ausente no tiene fila donde mirarse.
+    ausentes = sorted(quiere - set(filas)) if quiere else []
+    if ausentes:
+        typer.echo(
+            f"\n  ⚠ CERO unidades en la base: {', '.join(ausentes)}\n"
+            "    No se cayeron en un filtro: no hay ninguna fila. Es el colector de VENTA,\n"
+            "    no la falta de comparables de arriendo.\n"
+            "      uv run python -m flujocero.cli recolectar-portal --comunas "
+            f"{','.join(ausentes)} --operaciones venta --paginas 8"
+        )
+        if not filas:
+            raise typer.Exit(1)
+
+    motivos = ["rankea", *[m for m in r.descartes if m != "rankea"]]
+    presentes = [m for m in motivos if any(f.get(m) for f in filas.values())]
+    typer.echo(f"\n  {'comuna':24s}" + "".join(f"{m[:11]:>13s}" for m in presentes))
+    typer.echo("  " + "-" * (24 + 13 * len(presentes)))
+    for c, m in sorted(filas.items(), key=lambda kv: -sum(kv[1].values())):
+        typer.echo(f"  {c:24s}" + "".join(f"{m.get(k, 0) or '':>13}" for k in presentes))
+    typer.echo(
+        "\n  `rankea` es la unica columna que produce oportunidades. El resto son salidas,\n"
+        "  y cada una tiene su arreglo: `desactualizada` se arregla recolectando VENTA de\n"
+        "  nuevo; `sin_comparables`, recolectando ARRIENDO; `fuera_de_alcance` y\n"
+        "  `microzona_saturada` son decisiones de `config/zonas.yml`, no problemas de dato."
     )
 
 

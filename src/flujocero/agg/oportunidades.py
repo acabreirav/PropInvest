@@ -42,6 +42,11 @@ class Emparejamiento:
     # arriendo esta SOBREestimado.
     desvio_m2: dict[str, Decimal] = field(default_factory=dict)
     descartes: dict[str, int] = field(default_factory=dict)
+    # `comuna -> {motivo: n}` con `rankea` entre los motivos. El MISMO recorrido que arma el
+    # ranking, contado por comuna: preguntar "¿por que no veo ninguna unidad de X?" con una
+    # consulta aparte es como se producen las dos verdades que este proyecto ya pago varias
+    # veces. Si el criterio cambia, cambia en un solo lugar y el embudo se entera solo.
+    por_comuna: dict[str, dict[str, int]] = field(default_factory=dict)
     # `(unidad_key, razon)` de las filas que el §7.1 declara imposibles. Se listan y no solo
     # se cuentan: son pocas y cada una merece una mirada — la primera que aparecio era una
     # cesion de promesa encabezando el ranking.
@@ -50,6 +55,13 @@ class Emparejamiento:
     @property
     def total(self) -> int:
         return len(self.unidades) + sum(self.descartes.values())
+
+
+def _anotar(r: Emparejamiento, comuna: str | None, motivo: str) -> None:
+    """Suma uno al embudo de esa comuna. `None` cuando la fila ni siquiera dice donde esta."""
+    clave = comuna or "(sin microzona)"
+    r.por_comuna.setdefault(clave, {})
+    r.por_comuna[clave][motivo] = r.por_comuna[clave].get(motivo, 0) + 1
 
 
 def celdas_de_arriendo(
@@ -145,14 +157,17 @@ def emparejar(
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
 
     for key, mz, tip, m2, precio, nueva, antiguedad, _ev, visto in filas:
+        comuna = mz.split("/")[0] if mz else None
         if limite is not None and visto is not None and visto < limite:
             # §7.3, y se descarta ANTES que nada mas: una unidad cuyo precio es de hace
             # cuatro meses no es una oportunidad peor, es una oportunidad que no sabemos si
             # existe. Sigue en la base como linea base para medir que bajo de precio.
             r.descartes["desactualizada"] += 1
+            _anotar(r, comuna, "desactualizada")
             continue
         if not mz:
             r.descartes["sin_microzona"] += 1
+            _anotar(r, comuna, "sin_microzona")
             continue
         if alcance is not None:
             if alcance.saturada(mz):
@@ -160,12 +175,15 @@ def emparejar(
                 # que no puede rankear tampoco tiene que consumir una celda de arriendo ni
                 # aparecer como "desbloqueable" en el diagnostico de huecos.
                 r.descartes["microzona_saturada"] += 1
+                _anotar(r, comuna, "microzona_saturada")
                 continue
             if not alcance.en_alcance(mz.split("/")[0]):
                 r.descartes["fuera_de_alcance"] += 1
+                _anotar(r, comuna, "fuera_de_alcance")
                 continue
         if not tip:
             r.descartes["sin_tipologia"] += 1
+            _anotar(r, comuna, "sin_tipologia")
             continue
         if not m2:
             r.descartes["sin_m2"] += 1
@@ -178,24 +196,29 @@ def emparejar(
             # Un ranking por yield ordena por precio bajo, asi que esa fila no queda perdida
             # en el medio: flota sola hasta el primer lugar. Ver `quality/plausibilidad.py`.
             r.descartes["precio_implausible"] += 1
+            _anotar(r, comuna, "precio_implausible")
             r.implausibles.append((key, razon_implausible))
             continue
         rango = etiqueta_rango(Decimal(str(m2)), rangos)
         if rango is None:
             # Sobre 140 m² se pierde el DFL2 y la unidad no compite (§12).
             r.descartes["fuera_de_rango"] += 1
+            _anotar(r, comuna, "fuera_de_rango")
             continue
         celda = celdas.get((mz, tip, rango))
         if celda is None:
             # SIN caída a comuna, a proposito. Ver el docstring del módulo.
             r.descartes["sin_comparables"] += 1
+            _anotar(r, comuna, "sin_comparables")
             continue
 
         firma = (mz, tip, Decimal(str(m2)), Decimal(str(precio)))
         if firma in vistos:
             r.descartes["duplicado"] += 1
+            _anotar(r, comuna, "duplicado")
             continue
         vistos.add(firma)
+        _anotar(r, comuna, "rankea")
 
         arriendo, n, m2_celda = celda
         r.unidades.append(

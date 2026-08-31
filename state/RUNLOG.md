@@ -1825,3 +1825,27 @@ n=21 y su mediana bajó, así que MLC-2189066411 pasó de 44% a 47% de pie de eq
 número honesto es peor que el que veníamos mostrando.
 
 gates: VERDE — 619 tests.
+
+## 31-ago-2026 · `cli embudo` — la pregunta que no se podía contestar
+
+Gran Concepción respondió 48 tarjetas por comuna en `probar-comunas`, se recolectó, y no
+apareció ni una sola unidad suya en el ranking. Las hipótesis eran tres —se cayeron por
+viejas, se cayeron por microzona, o nunca llegaron a la base— y **cada una lleva a una
+acción distinta**: recolectar venta, arreglar el mapeo de microzonas, o mirar el colector.
+Adivinar cuál cuesta veinte minutos de corrida apuntando al lugar equivocado.
+
+`faltantes --comuna concepcion` empeoraba la confusión: devolvía "Las 0 celdas que más
+rinden" y **acto seguido listaba ñuñoa, antofagasta y talcahuano**, porque el desglose por
+comuna ignoraba el filtro. Se lee como si esas fueran de Concepción.
+
+`cli embudo` cuenta, por comuna, cuántas unidades salieron en cada paso hasta el ranking. Lo
+importante del diseño: **lo cuenta `emparejar`, el mismo recorrido que arma el ranking**, no
+una consulta paralela. Este proyecto ya pagó varias veces el precio de dos implementaciones
+del mismo criterio, una de las cuales se queda atrás en silencio; el test
+`test_el_embudo_cuenta_lo_mismo_que_los_descartes` exige que las dos mitades sumen igual.
+
+Y trata la ausencia como una respuesta: una comuna que no aparece en el embudo **no tiene
+ninguna fila**, y eso se dice con todas las letras porque es el único diagnóstico que
+ninguna cantidad de recolección de arriendo arregla.
+
+gates: VERDE — 622 tests.

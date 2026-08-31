@@ -1065,10 +1065,19 @@ Las cinco comunas respondieron 48 tarjetas cada una en `probar-comunas`, asi que
   3. El colector recolecto arriendo solo en algunas de las ocho comunas.
 
 criterio_de_aceptacion:
-  - [ ] Saber CUAL de las tres es, con el conteo que lo demuestra
+  - [x] Saber CUAL de las tres es, con el conteo que lo demuestra — `cli embudo` lo responde
+        con el mismo recorrido que arma el ranking, no con una consulta paralela
   - [ ] Al menos una celda de Gran Concepcion con n>=8
   - [ ] El pie de equilibrio real de Concepcion contrastado contra el ~32% del §10, con el
         numero que salga — sea el que confirma la tesis o el que la desmiente
+
+herramienta_construida: >
+  `cli embudo [--comuna X | --fase N]`. Muestra, por comuna, cuantas unidades salieron en
+  cada paso hasta el ranking, y **dice explicitamente cuando una comuna tiene CERO filas en
+  la base** — que es un diagnostico distinto de "se cayeron en un filtro" y lleva a una
+  accion distinta: recolectar VENTA, no arriendo. Antes esa pregunta no se podia contestar
+  sin escribir SQL a mano, y `faltantes --comuna concepcion` respondia "0 celdas" para
+  inmediatamente listar nunoa y antofagasta, que se lee como si fueran de Concepcion.
 
 
 ## T-047 · Verificar la mediana de arriendo de Antofagasta

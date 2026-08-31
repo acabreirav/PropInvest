@@ -323,3 +323,45 @@ def test_lo_que_el_gate_de_frescura_ANUNCIA_es_lo_que_el_ranking_HACE(con) -> No
     anunciadas = qc.frescura(filas, AHORA).filas_afectadas
     fuera = op.emparejar(con, RANGOS, ahora=AHORA).descartes["desactualizada"]
     assert anunciadas == fuera == 1, "el gate y el ranking tienen que contar lo mismo"
+
+
+# ------------------------------------------------- el embudo por comuna (T-046)
+
+
+def test_el_embudo_cuenta_lo_mismo_que_los_descartes(con) -> None:
+    """La razón de ser del diseño: el embudo NO es una consulta paralela, es el mismo
+    recorrido. Si algún día divergen, este test lo dice antes que un ranking equivocado."""
+    celda(con)
+    unidad(con, key="RANKEA")
+    unidad(con, key="SIN_TIP", tip=None)
+    unidad(con, key="OTRA_MZ", mz="sm/lo-vial")
+    r = op.emparejar(con, RANGOS)
+    total_embudo = sum(sum(m.values()) for m in r.por_comuna.values())
+    assert total_embudo == r.total
+    assert sum(m.get("rankea", 0) for m in r.por_comuna.values()) == len(r.unidades)
+    for motivo, n in r.descartes.items():
+        assert sum(m.get(motivo, 0) for m in r.por_comuna.values()) == n
+
+
+def test_una_comuna_sin_ninguna_fila_no_aparece_en_el_embudo(con) -> None:
+    """El silencio es la respuesta. Gran Concepción respondió 48 tarjetas por comuna en
+    `probar-comunas`, se recolectó, y no apareció una sola unidad suya en el ranking. La
+    pregunta era si se caían en un filtro o si nunca llegaron: ausencia del embudo = nunca
+    llegaron, y eso apunta al colector de venta, no a la falta de comparables."""
+    celda(con)
+    unidad(con, key="U1")
+    assert "concepcion" not in op.emparejar(con, RANGOS).por_comuna
+
+
+def test_la_unidad_sin_microzona_no_se_pierde_del_embudo(con) -> None:
+    """No tiene comuna que la reclame, y aun así tiene que estar contada en alguna parte:
+    un embudo que no suma el total es otra señal que se lee bien sin medir."""
+    con.execute(
+        "INSERT INTO fact_unidad_venta (unidad_key, tipologia, m2_utiles, precio_uf, "
+        "evidence_level, valid_from, fetched_at) VALUES ('HUERFANA', '2D2B', 56, 3000, 'V', "
+        "?, ?)",
+        (AHORA, AHORA),
+    )
+    r = op.emparejar(con, RANGOS)
+    assert r.por_comuna["(sin microzona)"]["sin_microzona"] == 1
+    assert sum(sum(m.values()) for m in r.por_comuna.values()) == r.total
