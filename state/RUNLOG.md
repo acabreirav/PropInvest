@@ -1618,3 +1618,39 @@ El nuevo tope es 7,97%, y el bloque que lo sigue son unidades de 51 a 70 m2 en
 -22%. Es la mitad del problema de antes y vive en otra banda. El aviso del ranking ahora dice
 en que banda esta el sesgo restante, en vez de repetir el consejo que ya tomamos.
 
+
+---
+
+## 2026-08-30 · La celda mas profunda del proyecto no le sirve a nadie
+
+Segunda corrida dirigida: 711 avisos, **+41 unidades** desbloqueadas, celdas utiles de 138 a
+154. Rendimiento decreciente contra la anterior (+111 con 710 avisos), y la salida mostraba
+por que sin que nadie lo hubiera notado:
+
+```
+  Las más profundas:
+    nunoa/estadio-nacional   2D2B   50-70 m²  n=124   ← SATURADA. Ninguna unidad rankea ahi.
+    nunoa/estadio-nacional   1D1B   35-50 m²  n=122   ← idem
+    nunoa/estadio-nacional   1D1B   25-35 m²  n= 88   ← idem
+```
+
+**Tres de las diez celdas mas profundas estan en una microzona saturada.** El comando las
+presentaba como "nuestro mejor dato" y la recoleccion dirigida —que apunta a NUNOA por
+volumen de unidades esperando— sigue trayendo avisos que caen ahi. Es esfuerzo en un callejon
+sin salida: por profunda que sea la celda, ninguna unidad de esa microzona va a rankear.
+
+Ahora `agregar-arriendo` separa las celdas que SIRVEN de las que no, con el conteo de
+comparables "perdidos" y la razon de cada una.
+
+**Y de paso, dos alertas que eran ruido.** La reconciliacion externa venia disparando por
+`las-condes (+49%)` y `providencia (+29%)` en cada corrida. Son justamente las dos comunas
+que el §10 excluye. Una alerta que salta por datos que no rankeamos entrena a ignorarla, que
+es lo peor que le puede pasar a una alerta. Ahora solo compara comunas en alcance.
+
+**Tercer chequeo vacio de la sesion.** Al filtrar por alcance, sobre la base de desarrollo
+quedaron cero comunas comparables y el gate imprimio "✓ medianas dentro de ±25%". Es la
+validacion externa mas fuerte del pipeline declarandose verde **sin haber comparado nada**.
+Ahora dice "NO SE PUDO CORRER" y cuenta cuantas comunas comparo cuando si corre.
+
+Van tres del mismo tipo en un dia —el aviso de sesgo de m2, la reconciliacion, y este— y el
+patron es siempre el mismo: **la ausencia de hallazgos se lee como ausencia de problema**.

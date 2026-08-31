@@ -913,7 +913,28 @@ def agregar_arriendo() -> None:
         n = agg.cargar_en_duckdb(con, agregados, datetime.now(UTC))
         buenos = [a for a in agregados if a.suficiente]
         typer.echo(f"✓ {n} celdas (microzona × tipología × rango)")
-        typer.echo(f"✓ {len(buenos)} con n ≥ {agg.MIN_COMPARABLES}: son las que pueden rankear")
+
+        # Una celda puede tener 124 comparables y no servirle a NADIE: si su microzona esta
+        # saturada o su comuna esta fuera del alcance del §10, ninguna unidad de ahi va a
+        # rankear nunca. `nunoa/estadio-nacional` es el caso: es la celda mas profunda que
+        # tenemos (n=124) y esta marcada saturada. Presentarla como "nuestro mejor dato"
+        # —y peor, seguir recolectando ahi— es gastar esfuerzo en un callejon sin salida.
+        alc = desde_config(cargar("zonas"))
+        utiles, inertes = [], []
+        for a in buenos:
+            (utiles if alc.unidad_rankeable(a.microzona_id)[0] else inertes).append(a)
+        typer.echo(f"✓ {len(buenos)} con n ≥ {agg.MIN_COMPARABLES}")
+        typer.echo(f"✓ {len(utiles)} de esas SIRVEN para rankear")
+        if inertes:
+            avisos_perdidos = sum(a.n for a in inertes)
+            typer.echo(
+                f"  ⚠ {len(inertes)} celdas con {avisos_perdidos} comparables NO le sirven a"
+                "\n    ninguna unidad: su microzona está saturada o su comuna está fuera del"
+                "\n    alcance (§10). El dato se conserva, pero recolectar ahí no rinde."
+            )
+            for a in sorted(inertes, key=lambda x: -x.n)[:3]:
+                razon = alc.unidad_rankeable(a.microzona_id)[1] or ""
+                typer.echo(f"      {a.microzona_id:34s} n={a.n:3d}  {razon[:52]}")
 
         # §7.3, la reconciliacion externa. Estaba escrita y nadie la llamaba: es la
         # validacion mas fuerte que tiene el pipeline, porque compara una mediana calculada
@@ -921,12 +942,27 @@ def agregar_arriendo() -> None:
         # coinciden, es muy improbable que esten mal de la misma forma.
         from flujocero.quality import checks as qc
 
+        # Solo comunas EN ALCANCE: la alerta venia disparando por las-condes (+49%) y
+        # providencia (+29%), que son justamente las dos que el §10 excluye. Una alerta que
+        # salta por datos que no rankeamos entrena a ignorarla, que es lo peor que le puede
+        # pasar a una alerta.
         por_comuna: dict[str, list] = {}
-        for a in buenos:
+        for a in utiles:
             por_comuna.setdefault(a.microzona_id.split("/")[0], []).append(a.uf_m2_mediana)
         medianas = {c: agg.percentil(v, D("0.5")) for c, v in por_comuna.items()}
-        hallazgo = qc.reconciliacion_arriendo(medianas, qc.ARRIENDO_UF_M2_REFERENCIA)
-        typer.echo(f"\n  {hallazgo}")
+        comparables_con_ref = set(medianas) & set(qc.ARRIENDO_UF_M2_REFERENCIA)
+        if not comparables_con_ref:
+            # Un chequeo sin datos NO es un chequeo aprobado. Sin esta guarda, con cero
+            # comunas en alcance el gate imprimia "✓ medianas dentro de ±25%", que se lee
+            # como validado cuando en realidad no se comparo nada. Es la validacion externa
+            # mas fuerte del pipeline: presentarla como verde en falso es peor que omitirla.
+            typer.echo(
+                "\n  ⚠ reconciliacion_arriendo NO SE PUDO CORRER: ninguna comuna en alcance"
+                "\n    tiene celdas suficientes para comparar contra la tabla de referencia."
+            )
+        else:
+            hallazgo = qc.reconciliacion_arriendo(medianas, qc.ARRIENDO_UF_M2_REFERENCIA)
+            typer.echo(f"\n  {hallazgo}  ({len(comparables_con_ref)} comunas comparadas)")
         for comuna, nuestra in sorted(medianas.items()):
             ref = qc.ARRIENDO_UF_M2_REFERENCIA.get(comuna)
             if ref:
@@ -935,8 +971,8 @@ def agregar_arriendo() -> None:
                     f"({(nuestra - ref) / ref:+.0%})"
                 )
 
-        typer.echo("\n  Las más profundas:")
-        for a in sorted(buenos, key=lambda x: -x.n)[:10]:
+        typer.echo("\n  Las más profundas de las que SIRVEN:")
+        for a in sorted(utiles, key=lambda x: -x.n)[:10]:
             typer.echo(
                 f"    {a.microzona_id:38s} {a.tipologia:6s} {a.rango_m2:>7s} m²  "
                 f"n={a.n:3d}  mediana UF {a.mediana:6.2f}  "

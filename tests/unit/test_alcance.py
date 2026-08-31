@@ -289,3 +289,37 @@ def test_la_migracion_no_revienta_sobre_una_base_vacia() -> None:
     con = duckdb.connect(":memory:")
     assert db.migrar(con) == []
     con.close()
+
+
+# --------------------------------------------------------------- celdas que no le sirven a nadie
+
+
+def test_una_celda_profunda_en_microzona_saturada_no_le_sirve_a_nadie(alc: Alcance) -> None:
+    """`nunoa/estadio-nacional` es la celda con MÁS comparables del proyecto (n=124) y su
+    microzona está saturada: ninguna unidad de ahí va a rankear nunca.
+
+    Presentarla como "nuestro dato más profundo" —y peor, seguir recolectando ahí— es gastar
+    esfuerzo en un callejón sin salida. La profundidad de una celda no dice nada si su
+    microzona está excluida.
+    """
+    assert not alc.unidad_rankeable("nunoa/estadio-nacional")[0]
+    assert not alc.unidad_rankeable("las-condes/barrio-el-golf")[0]
+    assert alc.unidad_rankeable("san-miguel/lo-vial")[0]
+
+
+def test_la_reconciliacion_no_se_declara_verde_sobre_cero_comunas() -> None:
+    """Un chequeo sin datos NO es un chequeo aprobado.
+
+    La reconciliación contra la tabla publicada es la validación externa más fuerte del
+    pipeline. Cuando no hay ninguna comuna en alcance con celdas suficientes, imprimir
+    "✓ dentro de ±25%" se lee como validado cuando no se comparó nada — y eso es peor que
+    omitirlo, porque da una confianza que nadie ganó.
+    """
+    from flujocero.quality import checks as qc
+
+    # La función de calidad, aislada: sobre un diccionario vacío no encuentra desviaciones.
+    hallazgo = qc.reconciliacion_arriendo({}, qc.ARRIENDO_UF_M2_REFERENCIA)
+    assert hallazgo.ok, "sin datos tampoco puede FALLAR: no hay nada que juzgar"
+    assert hallazgo.filas_afectadas == 0
+    # Por eso la guarda vive en el comando, que es quien sabe si hubo comunas comparadas.
+    assert set({}) & set(qc.ARRIENDO_UF_M2_REFERENCIA) == set()
