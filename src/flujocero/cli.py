@@ -2108,10 +2108,10 @@ def embudo(
 
 @app.command()
 def sensibilidad(
-    parametro: str = typer.Argument(
-        ..., help="ruta en params.yml, ej. 'financiamiento.seguro_desgravamen_pct_mensual_saldo'"
+    cambios: list[str] = typer.Argument(  # noqa: B008
+        ...,
+        help="uno o mas 'ruta=valor'. Tambien acepta la forma vieja: 'ruta valor'",
     ),
-    valor: str = typer.Argument(..., help="el valor propuesto"),
 ) -> None:
     """Que le pasa al ranking COMPLETO si un supuesto cambia. Corre el universo dos veces.
 
@@ -2126,7 +2126,13 @@ def sensibilidad(
     las unidades a la vez, asi que el efecto grande no es el orden: es cuantas dejan de caer
     por el tope de deficit.
 
-    No escribe nada. Lee `params.yml`, cambia un valor en memoria, y compara.
+    **Acepta varios parametros a la vez, y esa no es una comodidad: es el requisito.**
+    Los dos seguros valen lo mismo por construccion (saldo UF 880 x 0,00035 = tasacion
+    UF 1.100 x 0,00028 = 0,3080 UF/mes) y el factor de correccion es el mismo para ambos,
+    asi que medirlos por separado da el mismo numero dos veces — que es medir UNA mitad
+    dos veces, no el cambio. Un supuesto puede pasar solo el §8.4 y el par no.
+
+    No escribe nada. Lee `params.yml`, cambia los valores en memoria, y compara.
     """
     import copy
 
@@ -2136,13 +2142,20 @@ def sensibilidad(
     from flujocero.finance.escenarios import escenario_base, evaluar_universo
 
     base_cfg, inv = cargar("params"), cargar("inversionista")
-    try:
-        actual = base_cfg.crudo(parametro)
-    except Exception as exc:  # noqa: BLE001
-        typer.echo(f"  {parametro!r} no existe en params.yml")
-        raise typer.Exit(2) from exc
-    if isinstance(actual, dict):
-        actual = actual.get("v")
+
+    # Dos formas de invocacion. La vieja —`sensibilidad ruta valor`— se mantiene porque ya
+    # esta escrita en el RUNLOG y en el backlog, y romperla obligaria a reinterpretar
+    # mediciones pasadas.
+    if len(cambios) == 2 and "=" not in cambios[0]:
+        pares = [(cambios[0], cambios[1])]
+    else:
+        pares = []
+        for token in cambios:
+            if "=" not in token:
+                typer.echo(f"  {token!r} no tiene la forma 'ruta=valor'.")
+                raise typer.Exit(2)
+            ruta, _, valor = token.partition("=")
+            pares.append((ruta.strip(), valor.strip()))
 
     # Se cambia una COPIA: nada toca el archivo. Una medicion que modifica lo que mide no
     # sirve para decidir, y ademas dejaria el repo distinto segun quien corrio que.
@@ -2150,17 +2163,36 @@ def sensibilidad(
     # alternativa —reescribir el archivo, medir y restaurarlo— deja el repo distinto si el
     # comando muere a la mitad, y una medicion no debe poder ensuciar lo que mide.
     crudo_nuevo = copy.deepcopy(base_cfg._datos)  # noqa: SLF001
-    nodo = crudo_nuevo
-    partes = parametro.split(".")
-    for k in partes[:-1]:
-        nodo = nodo[k]
-    if isinstance(nodo[partes[-1]], dict):
-        nodo[partes[-1]] = {**nodo[partes[-1]], "v": float(valor)}
-    else:
-        nodo[partes[-1]] = float(valor)
+    aplicados: list[tuple[str, object, str]] = []
+    for parametro, valor in pares:
+        try:
+            actual = base_cfg.crudo(parametro)
+        except Exception as exc:  # noqa: BLE001
+            typer.echo(f"  {parametro!r} no existe en params.yml")
+            raise typer.Exit(2) from exc
+        if isinstance(actual, dict):
+            actual = actual.get("v")
+        nodo = crudo_nuevo
+        partes = parametro.split(".")
+        for k in partes[:-1]:
+            nodo = nodo[k]
+        if isinstance(nodo[partes[-1]], dict):
+            nodo[partes[-1]] = {**nodo[partes[-1]], "v": float(valor)}
+        else:
+            nodo[partes[-1]] = float(valor)
+        aplicados.append((parametro, actual, valor))
     from flujocero.config import Config
 
     prop_cfg = Config(crudo_nuevo, "params(propuesta)")
+
+    typer.echo("")
+    for parametro, actual, valor in aplicados:
+        typer.echo(f"  {parametro}")
+        typer.echo(f"    hoy       {actual}")
+        typer.echo(f"    propuesto {valor}")
+    if len(aplicados) > 1:
+        typer.echo(f"\n  {len(aplicados)} supuestos cambian A LA VEZ. El efecto es del conjunto.")
+    typer.echo("")
 
     con = duckdb.connect(str(db.crear()))
     try:
@@ -2175,10 +2207,6 @@ def sensibilidad(
     if not r.unidades:
         typer.echo("  No hay unidades rankeables: no hay nada que medir.")
         raise typer.Exit(1)
-
-    typer.echo(f"\n  {parametro}")
-    typer.echo(f"    hoy      {actual}")
-    typer.echo(f"    propuesto {valor}\n")
 
     salidas = {}
     for etiqueta, cfg in (("hoy", base_cfg), ("propuesto", prop_cfg)):
