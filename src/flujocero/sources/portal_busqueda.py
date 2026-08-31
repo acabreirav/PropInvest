@@ -300,6 +300,22 @@ def tipo_de_la_ruta(url: str) -> bool | None:
     return None
 
 
+def contar_tarjetas_en_html(html: str) -> int:
+    """Cuantas tarjetas hay en la pagina, ANTES de exigirles nada.
+
+    Existe para que la cobertura del §7.1 se mida contra el denominador correcto. El parser
+    descarta en silencio la tarjeta sin enlace `MLC-`, sin texto de precio, o con un precio
+    que no se puede leer — y despues `selftest` reportaba `precio 100%` **porque medía sobre
+    las que sobrevivieron**. Toda tarjeta que llega al final tiene precio por construccion,
+    asi que ese 100% era una tautologia con cara de metrica: no podia bajar nunca, ni cuando
+    el portal cambiara el selector de precio y se perdiera la mitad del lote.
+
+    Es el mismo selector que usa `parse_busqueda`; si uno cambia, el otro tiene que cambiar.
+    """
+    tree = HTMLParser(html)
+    return len(tree.css(".poly-card") or tree.css("li.ui-search-layout__item"))
+
+
 def parse_busqueda(
     html: str,
     url_pagina: str,
@@ -530,8 +546,14 @@ class PortalBusqueda:
         unidades = [t for t in tarjetas if not t.es_proyecto]
         u = len(unidades) or 1
         n = len(tarjetas) or 1
+        # El denominador son las tarjetas que hay en el HTML, no las que sobrevivieron al
+        # parseo. Con `1.0 if tarjetas` esto reportaba 100% siempre — ver
+        # `contar_tarjetas_en_html`.
+        en_html = sum(
+            contar_tarjetas_en_html(d.contenido.decode("utf-8", errors="ignore")) for d in docs
+        )
         cobertura = {
-            "precio": 1.0 if tarjetas else 0.0,
+            "precio": len(tarjetas) / en_html if en_html else 0.0,
             "m2_utiles": sum(1 for t in unidades if t.m2_utiles is not None) / u,
             "dormitorios": sum(1 for t in unidades if t.dormitorios is not None) / u,
             "comuna": sum(1 for t in tarjetas if t.comuna_id) / n,

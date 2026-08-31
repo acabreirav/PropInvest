@@ -780,16 +780,59 @@ def recolectar_portal(
         tarjetas = [t for d in docs for t in col.parse(d)]
         typer.echo(f"✓ {len(docs)} paginas, {len(tarjetas)} avisos")
 
-        corrida.filas_insertadas = pb.cargar_en_duckdb(con, tarjetas)
+        # **El selftest corre ANTES de cargar.** Estaba al reves: se insertaba y despues se
+        # verificaba, asi que el detector de parser roto del §7.1 —"el conteo no cayo >30%
+        # vs la ultima corrida exitosa"— se enteraba con los datos ya adentro. El §7.1 pone
+        # el selftest para que un colector roto NO contamine; verificar despues de escribir
+        # convierte el gate en un informe de danos.
+        # Antes que nada: ¿el portal aplico el filtro de comuna? Si dos comunas devolvieron
+        # los mismos avisos, esto no recolecto N comunas — recolecto una N veces, y al
+        # cargarla la primera se lleva las filas mientras el resto queda en cero. Paso con
+        # las cinco del Gran Concepcion (T-049) y ninguna senal lo delataba: paginas
+        # completas, HTTP 200, 48 tarjetas cada una.
+        from flujocero.quality.comparabilidad import busquedas_que_devuelven_lo_mismo
+
+        por_busqueda: dict[str, set[str]] = {}
+        for d in docs:
+            if "/arriendo/" in d.url:
+                continue
+            clave = pb.comuna_de_la_url(d.url) or d.url
+            por_busqueda.setdefault(clave, set()).update(t.portal_id for t in col.parse(d))
+        repetidas = busquedas_que_devuelven_lo_mismo(
+            {k: frozenset(v) for k, v in por_busqueda.items()}
+        )
+        if repetidas:
+            corrida.notas = "el portal no aplico el filtro de comuna"
+            typer.echo("\n✗ Comunas distintas devolvieron LOS MISMOS avisos:")
+            for a_, b_, comunes, menor in repetidas[:10]:
+                typer.echo(f"    {a_} y {b_}: {comunes} en comun de {menor}")
+            typer.echo(
+                "\n  Un departamento esta en una sola comuna, asi que el portal ignoro el"
+                "\n  filtro. No se cargo nada: al cargar, la primera comuna se lleva las"
+                "\n  filas y el resto queda en cero sin que nada avise."
+                "\n  El `region_slug` de config/zonas.yml es el sospechoso; verificalo con"
+                "\n  `cli probar-comunas`. Los blobs QUEDAN en data/raw/."
+            )
+            raise typer.Exit(5)
+
         rep = col.selftest(docs, filas_corrida_anterior=anterior)
         corrida.selftest_ok = rep.ok
         corrida.notas = rep.detalle.get("cobertura", "")
-        typer.echo(f"✓ {corrida.filas_insertadas} filas nuevas o versionadas")
         typer.echo(f"{'✓' if rep.ok else '✗'} selftest: {rep.detalle.get('cobertura')}")
         if not rep.ok:
             for k, v in rep.detalle.items():
                 if k not in ("cobertura", "proyectos"):
                     typer.echo(f"    {k}: {v}")
+            typer.echo(
+                "\n✗ No se cargo nada. El selftest del §7.1 esta en rojo, y cargar igual"
+                "\n  mete al ranking dato de un parser que ya sabemos que fallo."
+                "\n  Los blobs crudos QUEDAN en data/raw/: si el arreglo es del parser, se"
+                "\n  recuperan con `rebuild --from-raw` sin volver a pedirle nada al portal."
+            )
+            raise typer.Exit(4)
+
+        corrida.filas_insertadas = pb.cargar_en_duckdb(con, tarjetas)
+        typer.echo(f"✓ {corrida.filas_insertadas} filas nuevas o versionadas")
     except pb.Bloqueado as exc:
         corrida.notas = str(exc)
         typer.echo(f"✗ {exc}")

@@ -2050,3 +2050,31 @@ Ahora compara los `MLC-` entre comunas. Y `cli crudo` detecta blobs con el mismo
 primer día** y nadie lo miraba.
 
 gates: VERDE — 645 tests.
+
+## 31-ago-2026 · T-050 · auditoría de código
+
+Recorrido buscando el patrón de la semana: el check que no mide. Tres hallazgos.
+
+**El selftest corría después de cargar.** `recolectar-portal` insertaba y *después*
+verificaba, así que el detector de parser roto del §7.1 se enteraba con los datos ya adentro.
+El §7.1 pone el selftest para que un colector roto no contamine; verificar después de
+escribir lo convierte en un informe de daños. Ahora corre antes y en rojo no carga nada — los
+blobs quedan en `data/raw/`, recuperables con `rebuild --from-raw`.
+
+**`cobertura["precio"]` era `1.0 if tarjetas else 0.0`.** Toda `Tarjeta` tiene precio por
+construcción, así que ese 100% no podía bajar nunca, ni con el selector de precio roto. Ahora
+mide contra las tarjetas que hay en el HTML: **98,7%** sobre el corpus de mayo.
+
+**El colector no detectaba lo de T-049 por sí mismo.** `probar-comunas` compara avisos entre
+comunas, pero es un comando aparte que hay que acordarse de correr. `recolectar-portal` ahora
+hace la comparación sobre lo que acaba de bajar, y se detiene antes de cargar.
+
+**Un error mío dentro de la propia auditoría, que vale registrar.** Midiendo el punto 2 me
+dio "cobertura real 49,4%" y estuve a un paso de reportar que el parser perdía la mitad de
+los avisos. Estaba forzando `operacion="venta"` sobre blobs de arriendo, así que `plausible()`
+descartaba los arriendos por caer fuera del rango de precio de venta. Con la operación sacada
+de la URL real: 98,7%. **Una medición mal hecha se parece muchísimo a un hallazgo**, y es la
+misma trampa del otro lado: antes creía checks que no medían, ahora casi creo una medición
+que medía otra cosa.
+
+gates: VERDE — 645 tests.

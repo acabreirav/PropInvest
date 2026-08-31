@@ -1201,3 +1201,41 @@ criterio_de_aceptacion:
   - [x] Contraprueba: un aviso mal geolocalizado no dispara el check
   - [ ] Encontrar el `region_slug` que el portal SI respeta para Bio-Bio, o registrar que no
         existe y sacar Gran Concepcion del alcance hasta tener otra fuente
+
+
+## T-050 · Auditoria de codigo: tres cosas que el orden o el denominador arruinaban
+estado: hecha
+agente: auditor-datos
+fase: 2
+gate: make gates
+
+Recorrido buscando el patron que este proyecto ya pago nueve veces: **el check que no mide**.
+Tres hallazgos, y uno mio propio durante la misma auditoria.
+
+**1. El selftest corria DESPUES de cargar.** En `recolectar-portal`:
+
+    corrida.filas_insertadas = pb.cargar_en_duckdb(con, tarjetas)   # carga
+    rep = col.selftest(docs, filas_corrida_anterior=anterior)       # despues verifica
+
+El §7.1 pone el selftest para que un colector roto **no contamine**. Su detector de parser
+roto —"el conteo no cayo >30% vs la ultima corrida exitosa"— se enteraba con los datos ya
+adentro: el gate era un informe de danos. Ahora corre antes y, en rojo, no se carga nada.
+Los blobs quedan en `data/raw/`, asi que si el arreglo es del parser se recuperan con
+`rebuild --from-raw` sin volver a pedirle nada al portal.
+
+**2. `cobertura["precio"]` era una tautologia.** Valia `1.0 if tarjetas else 0.0`. Toda
+`Tarjeta` que llega al final tiene precio **por construccion** —el parser descarta antes la
+que no lo tiene—, asi que ese 100% no podia bajar nunca, ni cuando el portal cambiara el
+selector de precio y se perdiera la mitad del lote. Ahora el denominador son las tarjetas
+que hay en el HTML (`contar_tarjetas_en_html`). Medido sobre el corpus de mayo: **98,7%**.
+
+**3. El colector no detectaba por si mismo lo de T-049.** `probar-comunas` ya compara los
+avisos entre comunas, pero eso es un comando aparte que hay que acordarse de correr.
+`recolectar-portal` ahora hace la misma comparacion sobre lo que acaba de bajar y se detiene
+antes de cargar.
+
+**Y un error mio, corregido dentro de la auditoria.** Midiendo el punto 2 obtuve "cobertura
+real 49,4%" y estuve a punto de reportar que el parser perdia la mitad de los avisos. Estaba
+forzando `operacion="venta"` sobre blobs de arriendo, asi que `plausible()` descartaba los
+arriendos por caer fuera del rango de precio de venta. Con la operacion sacada de la URL real
+da 98,7%. La medicion mal hecha se parecia mucho a un hallazgo.
