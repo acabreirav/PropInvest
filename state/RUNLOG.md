@@ -1764,3 +1764,34 @@ numerador de todo yield del sistema**— y `marcar_outliers` ni siquiera corre s
 comparables. Sexto caso de la familia.
 
 gates: VERDE — 610 tests.
+
+## 31-ago-2026 · T-044 · el ranking estaba hecho con precios de mayo
+
+Buscando por qué la nueva primera del ranking (`MLC-1933353711`, UF 1.350, "recién remod.
+depto 2 dorm sector Avda Matta sur" — un departamento de verdad esta vez) daba tan buen
+número, salió que su `fetched_at` es **2026-05-04**. Cuatro meses.
+
+El gate de frescura la contaba y anunciaba, en cada corrida, que las filas viejas *"quedan
+FUERA del ranking"*. `emparejar` no miraba `fetched_at`. El mensaje describía una
+consecuencia que no existía.
+
+Los dos lados del yield estaban igual: `comparables_desde_duckdb` leía `fetched_at` solo
+para convertir CLP a UF del día. Precio de mayo dividido por arriendo de mayo, presentado
+como la oportunidad de hoy.
+
+Séptimo caso de la misma familia en dos días. El patrón ya tiene forma reconocible: **el
+check mide bien y el consumidor del check no aplica nada.** Los siete: la advertencia de
+sesgo de m² que no se disparaba por `m2_mediana` NULL · el "ancho relativo máx 35.0x" que
+dividía por `a or 1` · la reconciliación externa que imprimía ✓ sobre cero comunas · el
+contador de arriendo que contaba confirmaciones · `microzona_saturada` que nunca se poblaba ·
+`sospechoso` que se muta en un dict que nadie persiste (T-043) · y este.
+
+Lo que hice distinto acá: el test `test_lo_que_el_gate_de_frescura_ANUNCIA_es_lo_que_el
+_ranking_HACE` corre las dos mitades y exige que cuenten lo mismo. Es la única forma de que
+la próxima vez el desacople falle en vez de imprimirse.
+
+**Costo, y hay que decirlo:** sobre la copia local, que es el corpus de mayo entero, esto
+deja el ranking en **cero unidades**. Sobre la base del usuario quedan las que recolectó
+estos días. El número honesto lo da su corrida.
+
+gates: VERDE — 615 tests.

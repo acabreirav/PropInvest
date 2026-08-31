@@ -965,3 +965,43 @@ criterio_de_aceptacion:
         verificar que la mediana NO lo incluye
   - [ ] Medir el antes/despues de las medianas de arriendo: cambia el yield de todo el
         universo, asi que va con numero, no con "quedo mejor"
+
+
+## T-044 · El gate de frescura anunciaba una consecuencia que no ocurria
+estado: hecha
+agente: auditor-datos
+fase: 2
+gate: make gates
+
+**El septimo caso de la familia, y el mas caro.** En cada corrida el gate imprimia:
+
+    ! frescura: 2696 filas con mas de 21 dias: quedan FUERA del ranking y sirven de linea
+      base historica
+
+Y `oportunidades.emparejar` **no miraba `fetched_at`**. Su consulta filtraba por `valid_to`,
+`precio_uf` y `evidence_level`, nada mas. Las 2.696 filas del corpus de mayo entraban al
+ranking igual que las de hoy. La segunda del ranking del 31-ago-2026 —`MLC-1933353711`,
+UF 1.350, la mejor oportunidad real de la corrida— tenia precio del **4 de mayo**.
+
+El §7.3 lo pedia textual desde el principio: *"ninguna fila usada en el ranking puede tener
+`fetched_at` > 21 dias"*. El check contaba las filas correctamente; lo que no existia era la
+consecuencia que el mensaje afirmaba.
+
+**Los dos lados del yield estaban igual.** `agg/arriendo.comparables_desde_duckdb` leia
+`fetched_at` — pero solo para convertir CLP a UF del dia, nunca para filtrar. Una mediana de
+arriendo armada con avisos de mayo le pone arriendo de mayo a una compra de hoy, y el
+arriendo es el numerador. Cuatro meses viejo en las dos puntas.
+
+**Y `faltantes` tambien**, por la misma razon por la que ya comparte `unidad_rankeable` con
+el emparejamiento: una unidad que el ranking no va a tomar tampoco se "desbloquea"
+recolectando arriendo. Contarla infla el objetivo y manda la recoleccion a la comuna
+equivocada. Es el mismo agujero #3 de `alcance.py`, en otra columna.
+
+criterio_de_aceptacion:
+  - [x] `emparejar` filtra por frescura, con descarte propio `desactualizada`
+  - [x] `comparables_desde_duckdb` tambien, con descarte `desactualizado`
+  - [x] `faltantes.diagnosticar` usa el MISMO criterio
+  - [x] `ahora` entra por argumento en los tres (§11: nada de reloj del sistema en la logica)
+  - [x] El mensaje de "cero rankeables" nombra la causa que DOMINA, no una plausible
+  - [x] Test que ata el gate con el ranking: si alguien saca el filtro, el gate sigue
+        anunciando lo mismo y ese test es el que falla

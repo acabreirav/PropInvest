@@ -17,12 +17,14 @@ es indistinguible de un filtro roto.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango
 from flujocero.alcance import Alcance
 from flujocero.finance.modelo import Unidad
+from flujocero.quality.checks import FRESCURA_MAX_DIAS
 from flujocero.quality.plausibilidad import implausible
 
 D = Decimal
@@ -76,7 +78,10 @@ def celdas_de_arriendo(
 
 
 def emparejar(
-    conexion: Any, rangos: list[list[int]], alcance: Alcance | None = None
+    conexion: Any,
+    rangos: list[list[int]],
+    alcance: Alcance | None = None,
+    ahora: datetime | None = None,
 ) -> Emparejamiento:
     """Cruza `fact_unidad_venta` vigente contra `agg_arriendo_microzona`.
 
@@ -95,6 +100,16 @@ def emparejar(
 
     Con `alcance=None` se conserva el comportamiento anterior. Se pasa `None` solo donde no
     hay configuracion a mano; el camino normal SIEMPRE lo pasa.
+
+    `ahora` aplica el gate de frescura del §7.3 —*"ninguna fila usada en el ranking puede
+    tener `fetched_at` > 21 dias"*—. **Antes no lo aplicaba nadie.** El check de calidad
+    contaba las filas viejas y anunciaba que "quedan FUERA del ranking", pero esta consulta
+    no miraba `fetched_at`: las 2.696 filas del corpus de mayo entraban igual. La segunda del
+    ranking del 31-ago-2026 tenia precio del **4 de mayo**, cuatro meses viejo, en un mercado
+    donde eso significa llamar y que ya se vendio.
+
+    Entra por argumento y no del reloj del sistema (§11). Con `ahora=None` no se filtra:
+    es lo que necesitan los tests para hablar de otra cosa sin tener que inventar fechas.
     """
     celdas = celdas_de_arriendo(conexion)
     r = Emparejamiento(
@@ -105,6 +120,7 @@ def emparejar(
                 "microzona_saturada",
                 "sin_tipologia",
                 "sin_m2",
+                "desactualizada",
                 "precio_implausible",
                 "fuera_de_rango",
                 "sin_comparables",
@@ -123,11 +139,18 @@ def emparejar(
 
     filas = conexion.execute(
         "SELECT unidad_key, microzona_id, tipologia, m2_utiles, precio_uf, es_vivienda_nueva, "
-        "antiguedad_anios, evidence_level FROM fact_unidad_venta "
+        "antiguedad_anios, evidence_level, fetched_at FROM fact_unidad_venta "
         "WHERE valid_to IS NULL AND precio_uf IS NOT NULL AND evidence_level = 'V'"
     ).fetchall()
+    limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
 
-    for key, mz, tip, m2, precio, nueva, antiguedad, _ev in filas:
+    for key, mz, tip, m2, precio, nueva, antiguedad, _ev, visto in filas:
+        if limite is not None and visto is not None and visto < limite:
+            # §7.3, y se descarta ANTES que nada mas: una unidad cuyo precio es de hace
+            # cuatro meses no es una oportunidad peor, es una oportunidad que no sabemos si
+            # existe. Sigue en la base como linea base para medir que bajo de precio.
+            r.descartes["desactualizada"] += 1
+            continue
         if not mz:
             r.descartes["sin_microzona"] += 1
             continue

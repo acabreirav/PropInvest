@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
 
 import duckdb
@@ -246,3 +246,80 @@ def test_no_descarta_la_unidad_mas_barata_de_su_microzona(con) -> None:
     r = op.emparejar(con, RANGOS)
     assert r.descartes["precio_implausible"] == 0
     assert "U0" in [u.unidad_key for u in r.unidades], "21,4 UF/m² es barato, no imposible"
+
+
+# ------------------------------------------------- frescura del §7.3 (T-044)
+
+
+def _con_fecha(con, key, visto, precio="3000"):
+    con.execute(
+        "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, m2_utiles, "
+        "precio_uf, es_vivienda_nueva, evidence_level, valid_from, fetched_at) "
+        "VALUES (?, 'sm/el-llano', '2D2B', 56, ?, FALSE, 'V', ?, ?)",
+        (key, D(precio), visto, visto),
+    )
+
+
+def test_el_precio_de_hace_cuatro_meses_no_entra_al_ranking(con) -> None:
+    """El §7.3 lo pedía desde siempre —*"ninguna fila usada en el ranking puede tener
+    `fetched_at` > 21 días"*— y el emparejamiento no miraba la fecha. La segunda del ranking
+    del 31-ago-2026 tenía precio del 4 de mayo."""
+    celda(con)
+    _con_fecha(con, "MAYO", datetime(2026, 5, 4, tzinfo=UTC))
+    _con_fecha(con, "HOY", AHORA, precio="3100")
+    r = op.emparejar(con, RANGOS, ahora=AHORA)
+    assert r.descartes["desactualizada"] == 1
+    assert [u.unidad_key for u in r.unidades] == ["HOY"]
+
+
+def test_la_vieja_se_conserva_en_la_base(con) -> None:
+    """No es un borrado: es la línea base contra la que se mide qué bajó de precio."""
+    celda(con)
+    _con_fecha(con, "MAYO", datetime(2026, 5, 4, tzinfo=UTC))
+    op.emparejar(con, RANGOS, ahora=AHORA)
+    assert con.execute("SELECT count(*) FROM fact_unidad_venta").fetchone()[0] == 1
+
+
+def test_sin_ahora_no_se_filtra(con) -> None:
+    """`ahora=None` conserva el comportamiento anterior: los tests que hablan de otra cosa
+    no tienen que inventar fechas para seguir funcionando."""
+    celda(con)
+    _con_fecha(con, "MAYO", datetime(2026, 5, 4, tzinfo=UTC))
+    assert len(op.emparejar(con, RANGOS).unidades) == 1
+
+
+def test_el_borde_son_exactamente_21_dias(con) -> None:
+    from flujocero.quality.checks import FRESCURA_MAX_DIAS
+
+    celda(con)
+    _con_fecha(con, "JUSTO", AHORA - timedelta(days=FRESCURA_MAX_DIAS))
+    _con_fecha(con, "UN_DIA_MAS", AHORA - timedelta(days=FRESCURA_MAX_DIAS, seconds=1), "3100")
+    r = op.emparejar(con, RANGOS, ahora=AHORA)
+    assert [u.unidad_key for u in r.unidades] == ["JUSTO"]
+    assert r.descartes["desactualizada"] == 1
+
+
+def test_lo_que_el_gate_de_frescura_ANUNCIA_es_lo_que_el_ranking_HACE(con) -> None:
+    """La contraprueba que faltaba, y la razón de fondo de esta tarea.
+
+    `checks.frescura` imprimía *"2.696 filas con más de 21 días: quedan FUERA del ranking"*
+    en cada corrida, y el emparejamiento no miraba `fetched_at`. El mensaje describía una
+    consecuencia que no ocurría: séptimo caso de la familia "señal que se lee bien porque no
+    está midiendo nada".
+
+    Este test ata las dos mitades. Si alguien saca el filtro del emparejamiento, el gate
+    sigue anunciando lo mismo y **este test es el que falla**.
+    """
+    from flujocero.quality import checks as qc
+
+    celda(con)
+    _con_fecha(con, "MAYO", datetime(2026, 5, 4, tzinfo=UTC))
+    _con_fecha(con, "HOY", AHORA, precio="3100")
+
+    filas = [
+        dict(zip([d[0] for d in con.description], f, strict=True))
+        for f in con.execute("SELECT * FROM fact_unidad_venta").fetchall()
+    ]
+    anunciadas = qc.frescura(filas, AHORA).filas_afectadas
+    fuera = op.emparejar(con, RANGOS, ahora=AHORA).descartes["desactualizada"]
+    assert anunciadas == fuera == 1, "el gate y el ranking tienen que contar lo mismo"

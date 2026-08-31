@@ -35,11 +35,13 @@ Módulo puro salvo la consulta: entra una conexión, sale una lista ordenada.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango
 from flujocero.alcance import Alcance
+from flujocero.quality.checks import FRESCURA_MAX_DIAS
 
 D = Decimal
 
@@ -108,7 +110,7 @@ class Diagnostico:
 
 
 CONSULTA = """
-SELECT v.microzona_id, v.tipologia, v.m2_utiles
+SELECT v.microzona_id, v.tipologia, v.m2_utiles, v.fetched_at
 FROM fact_unidad_venta v
 WHERE v.valid_to IS NULL AND v.precio_uf IS NOT NULL AND v.evidence_level = 'V'
   AND v.microzona_id IS NOT NULL AND v.tipologia IS NOT NULL AND v.m2_utiles IS NOT NULL
@@ -120,6 +122,7 @@ def diagnosticar(
     rangos: list[list[int]],
     minimo: int = MIN_COMPARABLES,
     alcance: Alcance | None = None,
+    ahora: datetime | None = None,
 ) -> Diagnostico:
     """Qué celdas bloquean cuántas unidades, ordenadas por palanca.
 
@@ -144,7 +147,14 @@ def diagnosticar(
     bloqueadas: dict[tuple[str, str, str], int] = {}
     rankeables = 0
     total = 0
-    for mz, tip, m2 in conexion.execute(CONSULTA).fetchall():
+    # El MISMO criterio de frescura que `emparejar`, y por la misma razon por la que este
+    # modulo ya comparte `unidad_rankeable` con el: una unidad que el ranking no va a tomar
+    # tampoco se "desbloquea" recolectando arriendo. Contarla infla el objetivo y manda el
+    # esfuerzo a la comuna equivocada.
+    limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
+    for mz, tip, m2, visto in conexion.execute(CONSULTA).fetchall():
+        if limite is not None and visto is not None and visto < limite:
+            continue
         if alcance is not None and not alcance.unidad_rankeable(mz)[0]:
             continue
         rango = etiqueta_rango(D(str(m2)), rangos)

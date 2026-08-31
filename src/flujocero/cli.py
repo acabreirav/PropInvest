@@ -815,6 +815,7 @@ def _diagnostico():
             con,
             cargar("params").crudo("ingresos.rangos_m2"),
             alcance=desde_config(cargar("zonas")),
+            ahora=datetime.now(UTC),
         )
     finally:
         con.close()
@@ -910,7 +911,7 @@ def agregar_arriendo() -> None:
         # obliga a adivinar si falta el insumo o si el codigo esta roto.
         estado = agg.estado_serie(con)
         typer.echo(f"  {estado}")
-        comparables, descartes = agg.comparables_desde_duckdb(con)
+        comparables, descartes = agg.comparables_desde_duckdb(con, datetime.now(UTC))
         total = sum(descartes.values()) + len(comparables)
         typer.echo(f"  {total} comparables activos · {len(comparables)} utilizables")
         for motivo, n in descartes.items():
@@ -1016,11 +1017,17 @@ def oportunidades(
 
     from flujocero.agg import oportunidades as op
     from flujocero.finance.escenarios import escenario_base, evaluar_universo
+    from flujocero.quality.checks import FRESCURA_MAX_DIAS
 
     p, inv = cargar("params"), cargar("inversionista")
     con = duckdb.connect(str(db.crear()))
     try:
-        r = op.emparejar(con, p.crudo("ingresos.rangos_m2"), alcance=desde_config(cargar("zonas")))
+        r = op.emparejar(
+            con,
+            p.crudo("ingresos.rangos_m2"),
+            alcance=desde_config(cargar("zonas")),
+            ahora=datetime.now(UTC),
+        )
     finally:
         con.close()
 
@@ -1041,11 +1048,25 @@ def oportunidades(
         for key, razon in r.implausibles[:10]:
             typer.echo(f"      {key:18} {razon}")
     if not r.unidades:
-        typer.echo(
-            "\n✗ Ninguna unidad tiene su celda de arriendo con 8 comparables.\n"
-            "  Corré `agregar-arriendo` primero, y si ya lo hiciste, recolectá más páginas\n"
-            "  de arriendo en esas comunas."
-        )
+        # El mensaje nombra la causa que DOMINA, no una causa plausible. Cuando el corpus
+        # entero era de mayo, "corré agregar-arriendo" mandaba a arreglar lo que no estaba
+        # roto: faltaba recolectar precios de hoy, no agregar arriendos viejos.
+        peor = max(r.descartes.items(), key=lambda kv: kv[1], default=("", 0))
+        if peor[0] == "desactualizada":
+            typer.echo(
+                f"\n✗ Las {peor[1]} unidades tienen precio de hace más de "
+                f"{FRESCURA_MAX_DIAS} días.\n"
+                "  El §7.3 las deja fuera del ranking: un precio de hace meses no es una\n"
+                "  oportunidad peor, es una que no sabemos si existe. Siguen en la base como\n"
+                "  línea base para medir qué bajó de precio.\n"
+                "    uv run python -m flujocero.cli recolectar-portal --paginas 8"
+            )
+        else:
+            typer.echo(
+                "\n✗ Ninguna unidad tiene su celda de arriendo con 8 comparables.\n"
+                "  Corré `agregar-arriendo` primero, y si ya lo hiciste, recolectá más páginas\n"
+                "  de arriendo en esas comunas."
+            )
         raise typer.Exit(1)
 
     e = escenario_base(p, inv)
@@ -1285,7 +1306,9 @@ def faltantes(
     alc = desde_config(cargar("zonas"))
     con = duckdb.connect(str(db.crear()))
     try:
-        dg = fa.diagnosticar(con, p.crudo("ingresos.rangos_m2"), alcance=alc)
+        dg = fa.diagnosticar(
+            con, p.crudo("ingresos.rangos_m2"), alcance=alc, ahora=datetime.now(UTC)
+        )
     finally:
         con.close()
 
@@ -1571,7 +1594,7 @@ def bandas(
     con = duckdb.connect(str(db.crear()))
     try:
         # Devuelve `(comparables, descartes)`; aca solo interesan los comparables.
-        comps, _descartes = ag.comparables_desde_duckdb(con)
+        comps, _descartes = ag.comparables_desde_duckdb(con, datetime.now(UTC))
     finally:
         con.close()
     if not comps:

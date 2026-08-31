@@ -24,9 +24,11 @@ Tres decisiones que gobiernan el módulo:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+
+from flujocero.quality.checks import FRESCURA_MAX_DIAS
 
 D = Decimal
 
@@ -192,11 +194,20 @@ def uf_del_dia(serie: dict[date, Decimal], momento: datetime) -> Decimal | None:
     return None
 
 
-def comparables_desde_duckdb(conexion: Any) -> tuple[list[Comparable], dict[str, int]]:
+def comparables_desde_duckdb(
+    conexion: Any, ahora: datetime | None = None
+) -> tuple[list[Comparable], dict[str, int]]:
     """Lee `fact_arriendo_comp` y normaliza a UF. Devuelve `(comparables, descartes)`.
 
     Los descartes se cuentan por motivo y se devuelven: una fila que no entra a la mediana
     tiene que poder explicarse, no desaparecer.
+
+    `ahora` aplica el gate de frescura del §7.3, que **nadie aplicaba de este lado tampoco**.
+    Es el que mas costaba: el arriendo es el NUMERADOR del yield, asi que una mediana armada
+    con avisos de mayo le pone precio de mayo a una compra de hoy, en las dos puntas.
+    `fetched_at` ya se leia en esta consulta — pero solo para convertir CLP a UF del dia.
+
+    Con `ahora=None` no se filtra, igual que en `emparejar`.
     """
     serie = serie_uf(conexion)
     filas = conexion.execute(
@@ -206,8 +217,18 @@ def comparables_desde_duckdb(conexion: Any) -> tuple[list[Comparable], dict[str,
     ).fetchall()
 
     comparables: list[Comparable] = []
-    descartes = {"sin_microzona": 0, "sin_tipologia": 0, "sin_m2": 0, "sin_uf_del_dia": 0}
+    descartes = {
+        "sin_microzona": 0,
+        "sin_tipologia": 0,
+        "sin_m2": 0,
+        "desactualizado": 0,
+        "sin_uf_del_dia": 0,
+    }
+    limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
     for mz, tip, m2, arr_uf, arr_clp, momento in filas:
+        if limite is not None and momento is not None and momento < limite:
+            descartes["desactualizado"] += 1
+            continue
         if not mz:
             descartes["sin_microzona"] += 1
             continue
