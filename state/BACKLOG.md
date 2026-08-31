@@ -1309,3 +1309,54 @@ criterio_de_aceptacion:
   - [ ] Contrastado por comuna contra `params.yml`, con n por comuna
   - [ ] Si se cambia el supuesto, la sensibilidad va en el mismo commit — un `E` que se
         mueve sin medir cuanto mueve el ranking viola el §8.4
+
+
+## T-054 · Los dos supuestos de seguro estan altos, y este si mueve la aguja
+estado: pendiente
+agente: motor-financiero
+fase: 2
+
+El usuario simulo en Santander la unidad real (UF 880 sobre UF 1.100, 30 anios, tasa fija
+4,65%, CAE 5,28%). El simulador da **UF 4,8776** de dividendo. Descompuesto:
+
+    anualidad francesa pura, UF 880 a 4,65%      UF 4,5376   $185.457
+    seguros implicitos de Santander              UF 0,3400   $ 13.896
+    seguros de nuestros supuestos E              UF 0,6160   $ 25.177
+
+**Nuestros dos `E` juntos cobran 81% mas que la cotizacion real**, y son $11.281 al mes —
+cerca de la mitad del deficit mensual de esta unidad. El efecto sobre la metrica insignia:
+
+    seguros                                   dividendo   pie 0
+    params.yml hoy (0,00035 + 0,00028)         $210.634   32,5%
+    piso del rango declarado (0,0002+0,0002)   $201.642   29,2%
+    lo que cotiza Santander                    $199.353      —
+
+**Ni siquiera el PISO del rango declarado llega a la cotizacion real.** O sea que el rango
+del §3.2 esta mal calibrado, no solo el valor central. Y el error va contra el usuario: el
+modelo muestra cada oportunidad PEOR de lo que es.
+
+**No se cambia sobre una cotizacion.** Es un banco, un perfil y una propiedad, y no sabemos
+como se reparte entre desgravamen e incendio — que dependen de cosas distintas (edad del
+deudor y saldo insoluto el primero, tasacion el segundo).
+
+criterio_de_aceptacion:
+  - [ ] El desglose de "Ver seguros asociados y gastos operacionales" del simulador, que da
+        la separacion desgravamen / incendio con cifras
+  - [ ] Al menos una segunda cotizacion (BancoEstado, que es el par que usa el modelo)
+  - [ ] Si se cambian, la sensibilidad sobre el ranking completo va en el mismo commit (§8.4):
+        baja el dividendo de TODAS las unidades, asi que mueve todo el ranking a la vez
+  - [ ] Revisar tambien el rango, no solo el valor: un rango que no contiene el dato real es
+        un rango mal declarado
+
+## T-055 · El primer dividendo no esta en el modelo
+estado: pendiente
+agente: motor-financiero
+fase: 3
+
+Santander cotiza dividendo $199.365 y **primer dividendo $310.743** — un 56% mas. Es normal
+(intereses devengados desde el desembolso hasta el primer vencimiento, mas seguros del
+periodo), pero el modelo no lo tiene: asume 360 cuotas iguales.
+
+Impacto real: son ~$111.000 una sola vez. No mueve la TIR de forma apreciable, pero **si
+mueve la plata sobre la mesa el primer mes**, que es justo cuando el comprador esta mas
+apretado. Va en la ficha de la unidad, no en el score.
