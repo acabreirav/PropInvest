@@ -1875,6 +1875,7 @@ def comparables(
 def embudo(
     comuna: str = typer.Option("", help="una comuna, o vacio para todas"),
     fase: int = typer.Option(0, help="solo las comunas de una fase del alcance (§10)"),
+    detalle: bool = typer.Option(False, help="muestra un aviso de ejemplo por comuna"),
 ) -> None:
     """Que le paso a las unidades de cada comuna, paso por paso hasta el ranking.
 
@@ -1930,6 +1931,38 @@ def embudo(
     typer.echo("  " + "-" * (24 + 13 * len(presentes)))
     for c, m in sorted(filas.items(), key=lambda kv: -sum(kv[1].values())):
         typer.echo(f"  {c:24s}" + "".join(f"{m.get(k, 0) or '':>13}" for k in presentes))
+    if detalle:
+        # La etiqueta de comuna sale de la URL de BUSQUEDA, no del texto del aviso. Cuando
+        # una comuna aparece con unidades que uno no esperaba —o desaparece una que si—, lo
+        # que hay que ver es la URL: dice que filtro aplico el portal cuando se recolecto.
+        # Sin esto, "chiguayante tiene 103 unidades" es una afirmacion que no se puede
+        # auditar, y una etiqueta equivocada manda la recoleccion a la comuna equivocada.
+        from pathlib import Path
+
+        con = duckdb.connect(str(db.crear()))
+        try:
+            typer.echo("\n  De donde salio cada comuna, para poder auditar la etiqueta:\n")
+            for c in sorted(filas):
+                fila = con.execute(
+                    "SELECT count(*), min(raw_blob_path), max(raw_blob_path), "
+                    "count(precio_clp), min(m2_utiles), median(m2_utiles), max(m2_utiles) "
+                    "FROM fact_unidad_venta WHERE valid_to IS NULL AND microzona_id LIKE ?",
+                    (f"{c}/%",),
+                ).fetchone()
+                if not fila or not fila[0]:
+                    continue
+                n, blob_min, blob_max, en_pesos, m2_min, m2_med, m2_max = fila
+                typer.echo(
+                    f"    {c:22} {n:>5} unidades · {en_pesos} con precio en pesos · "
+                    f"m² min {m2_min or 0:.0f} / mediana {m2_med or 0:.0f} / max {m2_max or 0:.0f}"
+                )
+                # El nombre del blob es `{operacion}_{comuna}_p{NN}`: dice con QUE FILTRO se
+                # pidio la pagina. Si no coincide con la comuna de la fila, la etiqueta esta
+                # mal puesta y toda la recoleccion dirigida apunta al lugar equivocado.
+                typer.echo(f"      blobs: {Path(blob_min).name} … {Path(blob_max).name}")
+        finally:
+            con.close()
+
     typer.echo(
         "\n  `rankea` es la unica columna que produce oportunidades. El resto son salidas,\n"
         "  y cada una tiene su arreglo: `desactualizada` se arregla recolectando VENTA de\n"

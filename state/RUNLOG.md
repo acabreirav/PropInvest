@@ -1922,3 +1922,36 @@ medio de `campos`, cada índice se corrió uno y los m² habrían entrado en la 
 dormitorios **sin que nada fallara**: no revienta, ordena mal. Lo reescribí por nombre.
 
 gates: VERDE — 641 tests.
+
+## 31-ago-2026 · una anomalía que NO se explicó, y no se va a explicar adivinando
+
+Comparando los dos `embudo --fase 3` del usuario, antes y después del cambio de `precio_clp`:
+
+    antes:   talcahuano   103 fuera_de_rango · 129 sin_comparables · 0 rankea
+             CERO: chiguayante, concepcion, hualpen, san-pedro-de-la-paz
+
+    después: chiguayante  103 fuera_de_rango · 124 sin_comparables · 0 rankea
+             CERO: concepcion, hualpen, san-pedro-de-la-paz, talcahuano
+
+**Talcahuano y Chiguayante se intercambiaron, con el mismo 103.** Los cambios de las otras
+tres comunas (la-serena 145→138, antofagasta 29→16, coquimbo 42→26) los explica el filtro de
+amoblados, que sacó celdas de arriendo. Un intercambio de etiquetas entre dos comunas no.
+
+Y al mismo tiempo `talcahuano/santiago` aparece con n=42 entre las celdas de ARRIENDO más
+profundas. O sea que talcahuano existe en arriendo y no en venta.
+
+**No lo voy a explicar por deducción.** Las hipótesis que se me ocurren —que `rebuild
+--from-raw` corriera o no, que la etiqueta de comuna salga mal, que falte un `.meta.json` y
+un comuna entera se caiga por `MetadatoAusente`— predicen cosas distintas y no tengo la base
+del usuario para distinguirlas. Escribir la explicación más plausible en el RUNLOG y seguir
+sería exactamente el error que este proyecto viene cazando toda la semana: una afirmación
+que se lee bien y no se midió.
+
+Lo que sí se hizo: `cli embudo --detalle` muestra, por comuna, los blobs crudos de los que
+salieron sus unidades. El nombre del blob es `{operacion}_{comuna}_p{NN}`, o sea el filtro
+con el que se pidió la página. Si la comuna de la fila no coincide con la del blob, la
+etiqueta está mal puesta — y una etiqueta mal puesta manda toda la recolección dirigida a la
+comuna equivocada. Con eso la afirmación "chiguayante tiene 103 unidades" pasa a ser
+auditable en vez de creíble.
+
+gates: VERDE — 641 tests.
