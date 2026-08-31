@@ -1313,7 +1313,34 @@ def gates() -> None:
         historicas = frozenset(
             f["id"] for f in cargar("fuentes").crudo("fuentes") if f.get("historica")
         )
-        rep = qc.correr(unidades, comps, datetime.now(UTC), fuentes_historicas=historicas)
+        # **El ancla externa del §7.3 nunca habia corrido.** `correr()` la acepta desde
+        # siempre y `cli gates` no le pasaba el argumento, asi que el gate que el contrato
+        # declara como FALLA —"desviacion >20% contra la tabla Colliers"— no se evaluo jamas.
+        #
+        # Y se conecta comparando lo comparable: la tabla es de departamento **NUEVO** y hoy
+        # el 100% de la base es usado. Medirlos con la misma vara es el error del amoblado
+        # del lado de la venta. El ancla mira el stock nuevo; el usado va aparte, como
+        # medicion informativa que no aprueba ni reprueba.
+        por_comuna_nuevo: dict[str, list[D]] = {}
+        por_comuna_usado: dict[str, list[D]] = {}
+        for u in unidades:
+            mz, precio, m2 = u.get("microzona_id"), u.get("precio_uf"), u.get("m2_utiles")
+            if not mz or not precio or not m2:
+                continue
+            destino = por_comuna_nuevo if u.get("es_vivienda_nueva") else por_comuna_usado
+            destino.setdefault(str(mz).split("/")[0], []).append(D(str(precio)) / D(str(m2)))
+
+        def _medianas(d: dict[str, list[D]]) -> dict[str, D]:
+            return {c: sorted(v)[len(v) // 2] for c, v in d.items() if v}
+
+        rep = qc.correr(
+            unidades,
+            comps,
+            datetime.now(UTC),
+            mediana_uf_m2_por_comuna=_medianas(por_comuna_nuevo),
+            mediana_usado_por_comuna=_medianas(por_comuna_usado),
+            fuentes_historicas=historicas,
+        )
         typer.echo(str(rep))
         if rep.falla:
             fallos.append("los gates de calidad de datos del §7.3 estan en rojo")

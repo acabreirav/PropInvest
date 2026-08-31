@@ -2078,3 +2078,34 @@ misma trampa del otro lado: antes creía checks que no medían, ahora casi creo 
 que medía otra cosa.
 
 gates: VERDE — 645 tests.
+
+## 31-ago-2026 · T-051 · el ancla externa de venta nunca corrió
+
+Buscando por qué la nueva primera del ranking marca 36,7 UF/m² en Santiago —contra una
+referencia publicada de 80,9— salió que **ese gate no existía en la práctica**.
+
+El §7.3 lo declara como FALLA: *"el UF/m² mediano de cada comuna se compara contra la tabla
+Colliers; desviación >20% ⇒ falla el gate"*. `checks.correr()` acepta el argumento desde
+siempre y `cli gates` nunca se lo pasó. **El gate más fuerte del lado de la venta, el único
+que contrasta el pipeline contra un tercero, no se evaluó jamás.** Décimo caso.
+
+**Y conectarlo tal cual habría sido peor que no tenerlo.** La tabla es explícitamente de
+departamento **nuevo** y el 100% de la base es usado. El spread medido:
+
+    ñuñoa −1% · macul −13% · las-condes −16% · san-miguel −17% · santiago −28%
+
+Santiago habría fallado el gate por una razón real —su stock es más antiguo—, no por un error
+del pipeline. Un gate que falla por algo estructural entrena a ignorarlo.
+
+Es exactamente el error del amoblado del lado de la venta: **dos productos distintos bajo un
+solo número.** Allá era arriendo pelado contra amoblado; acá, departamento nuevo contra usado.
+
+Se conecta comparando lo comparable —el ancla mira stock nuevo— y el descuento del usado va
+aparte como medición `MARCA`, que informa sin aprobar ni reprobar. El resultado inmediato es
+"ninguna comuna tiene referencia con qué comparar", porque no hay una sola unidad nueva: es la
+respuesta correcta, y vuelve a poner T-925 al frente de la fila.
+
+Ese spread, además, no es ruido: ordena las comunas por cuánto pesa su stock antiguo, y el día
+que entre la Capa 5 se cruza con transacciones reales.
+
+gates: VERDE — 649 tests.

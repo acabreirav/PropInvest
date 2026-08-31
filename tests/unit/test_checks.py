@@ -412,3 +412,32 @@ def test_la_reconciliacion_de_arriendo_tambien_nombra_lo_que_no_verifico() -> No
     )
     assert h.severidad is q.Severidad.ALERTA
     assert h.detalle == ["antofagasta"]
+
+
+# ------------------------------------- el ancla que nunca corrio (T-051)
+
+
+def test_el_ancla_compara_stock_nuevo_contra_referencia_de_stock_nuevo() -> None:
+    """`UF_M2_REFERENCIA` es explícitamente *"UF/m² de venta de departamento nuevo"*, y hoy
+    el 100% de la base es usado. Medirlos con la misma vara es el error del amoblado del lado
+    de la venta: dos productos distintos bajo un solo número."""
+    assert q.ancla_externa_uf_m2({}).severidad is q.Severidad.ALERTA
+
+
+def test_el_descuento_del_usado_informa_pero_no_aprueba() -> None:
+    """Un número que no puede fallar no debe presentarse como un gate que pasó."""
+    h = q.descuento_stock_usado({"santiago": D("58.5"), "nunoa": D("87.2")})
+    assert h.severidad is q.Severidad.MARCA
+    assert h.ok, "MARCA no detiene nada: es una medición"
+    assert any("-28%" in linea for linea in h.detalle)
+    assert any("-1%" in linea for linea in h.detalle)
+
+
+def test_el_descuento_ignora_las_comunas_sin_referencia_publicada() -> None:
+    h = q.descuento_stock_usado({"providencia": D("93"), "santiago": D("58.5")})
+    assert h.filas_afectadas == 1, "providencia no está en la tabla Colliers"
+
+
+def test_sin_stock_usado_con_referencia_no_inventa_un_hallazgo() -> None:
+    assert q.descuento_stock_usado({}).severidad is q.Severidad.OK
+    assert q.descuento_stock_usado({"antofagasta": D("45")}).severidad is q.Severidad.OK

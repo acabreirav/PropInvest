@@ -475,6 +475,46 @@ def ancla_externa_uf_m2(mediana_por_comuna: dict[str, Decimal]) -> Hallazgo:
     return Hallazgo("ancla_externa", Severidad.OK, f"{comparadas} comunas dentro de ±20%")
 
 
+def descuento_stock_usado(
+    mediana_usado_por_comuna: dict[str, Decimal],
+) -> Hallazgo:
+    """Cuanto mas barato es nuestro stock USADO que la referencia de stock NUEVO.
+
+    No es un gate: es una **medicion**, y la unica validacion externa que el universo actual
+    admite. `UF_M2_REFERENCIA` es explicitamente *"UF/m2 de venta de departamento nuevo"*, y
+    hoy el 100% de lo que tenemos es usado. Compararlos como si fueran lo mismo es el error
+    del amoblado del lado de la venta: dos productos distintos bajo un solo numero.
+
+    El spread que sale tiene sentido economico y por eso vale reportarlo: va de **-1% en
+    Ñuñoa a -28% en Santiago**, y ordena las comunas por cuanto pesa su stock antiguo. Un
+    dia, con `factor_gap_lista_cierre` de la Capa 5, esto se cruza con transacciones reales.
+
+    Se marca `MARCA` a proposito: informa, no aprueba ni reprueba. Un numero que no puede
+    fallar no debe presentarse como un gate que paso.
+    """
+    lineas: list[str] = []
+    for comuna, nuestra in sorted(mediana_usado_por_comuna.items()):
+        referencia = UF_M2_REFERENCIA.get(comuna)
+        if referencia is None or referencia == 0:
+            continue
+        lineas.append(
+            f"{comuna}: usado {nuestra:.1f} vs nuevo {referencia:.1f} UF/m² "
+            f"({(nuestra - referencia) / referencia:+.0%})"
+        )
+    if not lineas:
+        return Hallazgo(
+            "descuento_stock_usado", Severidad.OK, "sin stock usado con referencia publicada"
+        )
+    return Hallazgo(
+        "descuento_stock_usado",
+        Severidad.MARCA,
+        f"{len(lineas)} comunas: descuento del stock usado contra la referencia de stock "
+        f"NUEVO. Es una medición, no un gate — son dos productos distintos",
+        len(lineas),
+        lineas,
+    )
+
+
 def comparables_suficientes(
     conteo_por_microzona_tipologia: dict[tuple[str, str], int],
 ) -> Hallazgo:
@@ -565,6 +605,7 @@ def correr(
     comparables: list[dict[str, Any]],
     ahora: datetime,
     mediana_uf_m2_por_comuna: dict[str, Decimal] | None = None,
+    mediana_usado_por_comuna: dict[str, Decimal] | None = None,
     conteo_comparables: dict[tuple[str, str], int] | None = None,
     fuentes_historicas: frozenset[str] = frozenset(),
 ) -> ReporteCalidad:
@@ -580,6 +621,8 @@ def correr(
     rep.hallazgos.append(duplicados_de_arriendo(comparables))
     if mediana_uf_m2_por_comuna is not None:
         rep.hallazgos.append(ancla_externa_uf_m2(mediana_uf_m2_por_comuna))
+    if mediana_usado_por_comuna is not None:
+        rep.hallazgos.append(descuento_stock_usado(mediana_usado_por_comuna))
     if conteo_comparables is not None:
         rep.hallazgos.append(comparables_suficientes(conteo_comparables))
     return rep

@@ -1239,3 +1239,47 @@ real 49,4%" y estuve a punto de reportar que el parser perdia la mitad de los av
 forzando `operacion="venta"` sobre blobs de arriendo, asi que `plausible()` descartaba los
 arriendos por caer fuera del rango de precio de venta. Con la operacion sacada de la URL real
 da 98,7%. La medicion mal hecha se parecia mucho a un hallazgo.
+
+
+## T-051 · El ancla externa de VENTA nunca corrio, y comparaba dos productos
+estado: hecha
+agente: auditor-datos
+fase: 2
+gate: make gates
+
+**El decimo caso de la familia**, y este ni siquiera se ejecutaba. El §7.3 declara:
+
+> **Ancla externa**: el UF/m2 mediano de cada comuna se compara contra la tabla de referencia
+> Colliers. Desviacion >20% ⇒ **falla el gate**.
+
+`checks.correr()` acepta `mediana_uf_m2_por_comuna` desde siempre y **`cli gates` nunca se lo
+pasaba**. El gate mas fuerte del contrato del lado de la venta —el unico que contrasta nuestro
+pipeline contra un tercero— no se evaluo jamas. Lo mismo con `comparables_suficientes`.
+
+**Y conectarlo tal cual habria sido peor que no tenerlo.** `UF_M2_REFERENCIA` es explicitamente
+*"UF/m2 de venta de departamento NUEVO"* y hoy el **100%** de `fact_unidad_venta` es usado.
+Medido sobre el corpus, el usado esta sistematicamente por debajo:
+
+    nunoa       -1%        macul       -13%       las-condes  -16%
+    san-miguel -17%        santiago    -28%
+
+Santiago habria fallado el gate por una razon **real y explicable** —su stock es mas antiguo—,
+no por un error del pipeline. Un gate que falla por algo estructural entrena a ignorarlo, que
+es lo peor que le puede pasar a un gate.
+
+Es el error del amoblado (T-047) del lado de la venta: **dos productos distintos bajo un solo
+numero.** Alla eran arriendo pelado y amoblado; aca, departamento nuevo y usado.
+
+Asi que se conecta comparando lo comparable: el ancla mira el stock **nuevo**, y el descuento
+del usado va aparte como **medicion informativa** (`MARCA`), que informa sin aprobar ni
+reprobar. Un numero que no puede fallar no debe presentarse como un gate que paso.
+
+Efecto inmediato: el ancla dice *"ninguna comuna tiene referencia con que comparar"*, porque
+no hay una sola unidad nueva. **Es la respuesta correcta y vuelve a poner T-925 al frente.**
+
+criterio_de_aceptacion:
+  - [x] `cli gates` pasa las medianas por comuna; el ancla del §7.3 se evalua
+  - [x] Compara stock nuevo contra referencia de stock nuevo
+  - [x] `descuento_stock_usado`: medicion aparte, MARCA, no aprueba ni reprueba
+  - [ ] Cerrar el ancla de verdad requiere stock nuevo en la base (T-925)
+  - [ ] `comparables_suficientes` sigue sin conectarse a `cli gates`
