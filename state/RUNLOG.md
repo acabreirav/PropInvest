@@ -2132,3 +2132,20 @@ El test que lo fija corre los dos filtros sobre los avisos reales de esa celda. 
 cambia un lado, falla.
 
 gates: VERDE — 650 tests.
+
+## 31-ago-2026 · `cli buscar-en-crudo` — preguntarle al archivo en vez de moverlo
+
+El ADR 008 quedó abierto en un punto concreto: si la ficha de Assetplan **renderizada con
+navegador** trae `units_by_size` con m² y precio por unidad. Si los trae, Assetplan pasa de
+"no sirve para lo que queríamos" a la mejor fuente de comparables del catálogo, y eso
+justifica Playwright según el §5. Si no, queda como fuente de contexto.
+
+El blob ya está en la máquina del usuario, en `data/raw/_explorar/`. Yo venía pidiéndole que
+lo subiera al repo — 1,6 MB — cuando la pregunta no necesita el archivo, necesita saber qué
+hay adentro.
+
+`cli buscar-en-crudo <patron>` busca dentro de los blobs guardados y muestra el contexto de
+cada hallazgo. Sin parser, sin red, sin mover nada. Y cuando no encuentra, dice **en cuántos
+blobs miró**: "no está" sobre cero archivos no significa nada.
+
+gates: VERDE — 650 tests.

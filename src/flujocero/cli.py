@@ -2277,5 +2277,69 @@ def autopsia(
     )
 
 
+@app.command()
+def buscar_en_crudo(
+    patron: str = typer.Argument(..., help="texto o regex a buscar, ej. 'units_by_size'"),
+    contiene: str = typer.Option("", help="filtra los blobs por nombre, ej. 'assetplan'"),
+    fuente: str = typer.Option("", help="un source_id, ej. '_explorar'"),
+    contexto: int = typer.Option(120, help="caracteres alrededor de cada hallazgo"),
+    max_hallazgos: int = typer.Option(6, help="cuantos mostrar por blob"),
+) -> None:
+    """Busca un texto DENTRO de los blobs guardados, sin escribir un parser.
+
+    Nace de una pregunta que costaba una subida de 1,6 MB: el ADR 008 quedo abierto en si la
+    ficha de Assetplan, renderizada con navegador, trae `units_by_size` **con m2 y precio por
+    unidad**. Si los trae, Assetplan pasa de "no sirve para lo que queriamos" a la mejor
+    fuente de comparables del catalogo. Si no, queda como fuente de contexto.
+
+    Esa pregunta no necesita el archivo: necesita saber que hay adentro. Este comando lo mira
+    donde esta y muestra el contexto de cada hallazgo, que es lo que decide.
+
+    No toca la base ni la red. Solo lee `data/raw/`.
+    """
+    import gzip
+    import re as _re
+
+    from flujocero.sources.base import blobs_crudos
+
+    blobs = [b for b in blobs_crudos(fuente or None) if not contiene or contiene in b.name]
+    if not blobs:
+        typer.echo(f"  Ningun blob con {contiene!r} en el nombre. `cli crudo` lista lo que hay.")
+        raise typer.Exit(1)
+
+    try:
+        rx = _re.compile(patron, _re.I)
+    except _re.error as exc:
+        typer.echo(f"  El patron no es una expresion regular valida: {exc}")
+        raise typer.Exit(2) from exc
+
+    typer.echo(f"\n  Buscando {patron!r} en {len(blobs)} blobs\n")
+    total = 0
+    for b in blobs:
+        try:
+            texto = gzip.decompress(b.read_bytes()).decode("utf-8", errors="ignore")
+        except OSError:
+            texto = b.read_text(encoding="utf-8", errors="ignore")
+        hallazgos = list(rx.finditer(texto))
+        if not hallazgos:
+            continue
+        total += len(hallazgos)
+        typer.echo(f"  {b.name}  —  {len(hallazgos)} veces  ({len(texto):,} caracteres)")
+        for m in hallazgos[:max_hallazgos]:
+            ini = max(0, m.start() - contexto // 2)
+            trozo = texto[ini : m.end() + contexto // 2].replace("\n", " ")
+            typer.echo(f"      …{' '.join(trozo.split())}…")
+        if len(hallazgos) > max_hallazgos:
+            typer.echo(f"      (+{len(hallazgos) - max_hallazgos} mas)")
+        typer.echo("")
+
+    if not total:
+        # Que no aparezca es una respuesta, no un fallo del comando. Lo importante es que
+        # diga en cuantos blobs miro: "no esta" sobre cero archivos no significa nada.
+        typer.echo(f"  No aparece en ninguno de los {len(blobs)} blobs.")
+        raise typer.Exit(1)
+    typer.echo(f"  {total} coincidencias en total.")
+
+
 if __name__ == "__main__":
     app()
