@@ -890,6 +890,78 @@ criterio_de_aceptacion:
   - [x] Fase 3 se expande de ciudad a comunas
   - [x] `probar-comunas` verifica los slugs antes de gastar una corrida
   - [x] `recolectar-portal --fase 3`
-  - [ ] Slugs verificados contra el portal (lo corre el usuario)
-  - [ ] Arriendo y venta de Gran Concepcion en la base
+  - [x] Slugs verificados contra el portal — 8/8, 48 tarjetas c/u, 31-ago-2026
+  - [x] Venta de fase 3 en la base — 3.812 avisos, ~1.200 unidades nuevas
+  - [ ] Arriendo de fase 3 con celdas n>=8: **hoy ninguna llega**. De las 130 celdas
+        utiles, cero son de fase 3, y del top 15 solo `coquimbo/sindempart` es de region.
   - [ ] Contrastar el pie de equilibrio real contra el ~32% que predice el §10
+
+
+## T-042 · El §7.1 aplicado a la tabla, no a una muestra de 5 documentos
+estado: hecha
+agente: auditor-datos
+fase: 2
+gate: make gates
+
+`MLC-1939505225` encabezaba el ranking del 31-ago-2026 con **yield 17,58%** contra 7,90% de
+la segunda, y `pie 0%` para flujo cero. Su titulo: `vendo-promesa-con-descuento-de-6-millones`.
+No vende un departamento: vende su **posicion en una promesa de compraventa**. Los UF 850 son
+lo que pide por la cesion; el comprador ademas hereda el saldo con la inmobiliaria.
+
+UF 850 sobre 60 m2 = **14,2 UF/m2**, con la microzona en 59. El §7.1 declara `UF/m2 entre 20
+y 200` desde el principio, pero ese rango es un **cociente** y solo se aplicaba dentro del
+`selftest()` de cada fuente, o sea contra <=5 documentos vivos. El parser aplica precio y
+superficie por separado y los dos pasan: UF 850 > 500, y 60 m2 esta entre 15 y 400.
+
+**Por que importa mas de lo que su conteo sugiere (1 fila de 2.696):** un ranking por yield
+ordena por precio bajo, asi que toda fila cuyo precio signifique otra cosa **flota sola hasta
+el primer lugar**. No queda perdida en el medio: es el numero que el usuario mira primero.
+Es el §13.3 en ropa nueva.
+
+criterio_de_aceptacion:
+  - [x] Modulo puro `quality/plausibilidad.py` con los rangos del §7.1
+  - [x] Descarte propio `precio_implausible` en el emparejamiento, con la razon por unidad
+  - [x] Check del §7.3 que lo reporta en `make gates`
+  - [x] Contraprueba: no bota la unidad mas barata de su microzona ni las 8 promesas que SI
+        publican el precio del departamento
+
+
+## T-043 · `marcar_outliers` calcula y tira el resultado a la basura
+estado: pendiente
+agente: auditor-datos
+fase: 2
+depende_de: [T-042]
+gate: make gates
+
+**El sexto caso de la familia "senal que se lee bien porque no mide nada".** Y este es peor
+que los otros cinco, porque imprime un numero que lo hace parecer vivo:
+
+    • outliers: 161 unidades marcadas `sospechoso`; se conservan, no entran a medianas
+
+`checks.marcar_outliers` lee las filas a diccionarios, muta `sospechoso` **en el diccionario**
+y nadie lo escribe de vuelta. La columna `fact_unidad_venta.sospechoso` sigue en `false` para
+las 161, en cada corrida, desde siempre. Un `grep sospechoso src/` da dos resultados: el que
+lo escribe en memoria y el que lo lee en SQL. Ninguno lo persiste.
+
+Y hay un segundo filo: `agg/arriendo.py:205` filtra los comparables con
+`coalesce(sospechoso, FALSE) = FALSE` — pero `marcar_outliers` corre sobre **unidades de
+venta**, no sobre comparables. O sea que ese WHERE es un no-op sobre una columna que nadie
+llena nunca, **en la consulta que calcula la mediana de arriendo: el numerador de todo yield
+del sistema**.
+
+**Cuidado al arreglarlo, y es el punto dificil de la tarea.** Con `[p1, p99]` y n chico el
+percentil cae casi sobre el extremo, asi que el minimo y el maximo de cada microzona quedan
+marcados **siempre**, sean anomalos o no. Para sacarlos del calculo de una mediana eso es una
+winsorizacion suave y es exactamente lo que el §7.3 pide. Para excluir del ranking seria un
+desastre: descartaria automaticamente la unidad mas barata de cada barrio, que es justo la
+candidata a mejor oportunidad. **`sospechoso` no debe excluir del ranking** — el §7.3 dice
+"se excluye del calculo de medianas", y hay que leerlo literal.
+
+criterio_de_aceptacion:
+  - [ ] `sospechoso` se persiste a la base despues de `marcar_outliers`
+  - [ ] Los comparables de ARRIENDO se marcan por su propia metrica (arriendo_uf/m2 por celda),
+        que es lo que el WHERE de `agg/arriendo.py` presupone y hoy no existe
+  - [ ] Test que falla si el filtro vuelve a ser un no-op: sembrar un comparable absurdo y
+        verificar que la mediana NO lo incluye
+  - [ ] Medir el antes/despues de las medianas de arriendo: cambia el yield de todo el
+        universo, asi que va con numero, no con "quedo mejor"

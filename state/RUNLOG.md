@@ -1715,3 +1715,52 @@ regresión en `tests/unit/test_portal_carga.py`, incluido el que fija que no con
 
 gates: VERDE — 595 tests, calidad PARCIAL (frescura: 2.696 filas de mayo, línea base
 histórica que ya está fuera del ranking por diseño).
+
+## 31-ago-2026 · T-042 · la primera del ranking no era un departamento
+
+El ranking del usuario tenía en el primer lugar a `MLC-1939505225`: **yield 17,58%** contra
+7,90% de la segunda, `pie 0%` para flujo cero, tenencia **+$136.405 al mes a favor**. El
+único caso de flujo positivo de toda la corrida.
+
+Su URL guarda el título del aviso: `vendo-promesa-con-descuento-de-6-millones`.
+
+No es la venta de un departamento. Es la **cesión de una promesa de compraventa**: alguien
+compró en verde, pagó el pie, y vende su posición en el contrato. Los UF 850 son lo que pide
+por la cesión — el comprador además hereda el saldo con la inmobiliaria. UF 850 / 0,20 =
+UF 4.250, que es un precio normal para un 2D2B de 60 m² en Santiago centro.
+
+**Por qué ninguno de los tres controles que ya existían lo agarró:**
+
+1. `portal_busqueda.plausible` aplica el rango de precio (UF 850 > 500 ✓) y el de superficie
+   (60 entre 15 y 400 ✓) **por separado**. El §7.1 declara un tercer rango, `UF/m² entre 20
+   y 200`, que es un **cociente** y no un campo: es el único que agarra la fila en la que
+   los dos números son plausibles y **no hablan de la misma cosa**.
+2. Ese tercer rango sí se verificaba — dentro del `selftest()` de cada fuente, contra ≤5
+   documentos vivos. Nunca contra la tabla cargada.
+3. `marcar_outliers` debería haberlo marcado (14,2 está bajo el p1=20,5 de su microzona),
+   pero **no persiste nada**. Ver T-043.
+
+**Por qué importa mucho más de lo que su conteo sugiere.** Es 1 fila de 2.696. Pero un
+ranking por yield ordena por precio bajo, así que **toda fila cuyo precio signifique otra
+cosa flota sola hasta el primer lugar**. No queda perdida en el medio del listado: es el
+número que el usuario mira primero, y era el único con flujo positivo. Es el §13.3 en ropa
+nueva.
+
+**Lo que NO se hizo, a propósito.** No se filtra por la palabra `promesa` en el título: de
+9 avisos de cesión de promesa en la base, **8 publican el precio del departamento** (69 a
+172 UF/m², de mercado) y solo uno publica el de la cesión. Ese filtro botaría 8 unidades
+legítimas para agarrar 1, y sería una heurística de texto disfrazada de regla. El cociente
+distingue lo que la palabra no distingue.
+
+Tampoco se descarta al parsear: la fila se conserva en `fact_unidad_venta` con su
+procedencia y se excluye en el emparejamiento, con su razón. Una fila descartada al parsear
+no se puede mirar después.
+
+**Hallazgo secundario, registrado como T-043:** `marcar_outliers` muta `sospechoso` en un
+diccionario que nadie escribe de vuelta. El gate anuncia "161 unidades marcadas" en cada
+corrida y la columna sigue en `false` para las 161. Peor: `agg/arriendo.py:205` filtra los
+comparables por esa columna —en la consulta que calcula la mediana de arriendo, **el
+numerador de todo yield del sistema**— y `marcar_outliers` ni siquiera corre sobre
+comparables. Sexto caso de la familia.
+
+gates: VERDE — 610 tests.

@@ -196,3 +196,53 @@ def test_dos_deptos_distintos_del_mismo_barrio_no_se_colapsan(con) -> None:
     unidad(con, key="B", m2=56, precio="1250")
     unidad(con, key="C", m2=58, precio="1200")
     assert len(op.emparejar(con, RANGOS).unidades) == 3
+
+
+# ------------------------------------------------- §7.1 sobre la tabla (T-042)
+
+
+def test_la_cesion_de_promesa_no_llega_al_ranking(con) -> None:
+    """El caso real: UF 850 por un 2D2B de 60 m² = 14,2 UF/m². Encabezó el ranking del
+    31-ago-2026 con yield 17,58% contra 7,90% de la segunda, porque un ranking por yield
+    ordena por precio bajo y una fila cuyo precio significa otra cosa flota hasta arriba."""
+    celda(con)
+    unidad(con, key="MLC-1939505225", m2=60, precio="850")
+    unidad(con, key="LEGITIMA", m2=56, precio="3000")
+    r = op.emparejar(con, RANGOS)
+    assert r.descartes["precio_implausible"] == 1
+    assert [u.unidad_key for u in r.unidades] == ["LEGITIMA"]
+
+
+def test_el_descarte_dice_por_que_y_cual(con) -> None:
+    """Contarlas no basta: son pocas y cada una es un aviso que dice una cosa y significa
+    otra. La razón tiene que viajar con el descarte para poder ir a mirar el aviso."""
+    celda(con)
+    unidad(con, key="MLC-1939505225", m2=60, precio="850")
+    (key, razon), *resto = op.emparejar(con, RANGOS).implausibles
+    assert key == "MLC-1939505225" and not resto
+    assert "14.2 UF/m²" in razon and "promesa" in razon
+
+
+def test_la_fila_implausible_se_conserva_en_la_base(con) -> None:
+    """§3.2: se marca y se excluye, **no se borra**. Si se descartara al parsear no habría
+    forma de saber después cuántas hay ni de mirar el aviso."""
+    celda(con)
+    unidad(con, key="MLC-1939505225", m2=60, precio="850")
+    op.emparejar(con, RANGOS)
+    fila = con.execute(
+        "SELECT precio_uf, m2_utiles FROM fact_unidad_venta WHERE unidad_key = 'MLC-1939505225'"
+    ).fetchone()
+    assert fila == (D(850), 60.0)
+
+
+def test_no_descarta_la_unidad_mas_barata_de_su_microzona(con) -> None:
+    """La diferencia con el detector de outliers del §7.3, y es la que importa. Con
+    `[p1, p99]` y n chico el percentil cae casi sobre el extremo, así que el mínimo de cada
+    microzona queda marcado siempre. Un rango absoluto no depende de los vecinos: la unidad
+    barata pero posible sigue compitiendo, que es justo la candidata a mejor oportunidad."""
+    celda(con)
+    for i, precio in enumerate(["1200", "3000", "3500", "4000"]):
+        unidad(con, key=f"U{i}", m2=56, precio=precio)
+    r = op.emparejar(con, RANGOS)
+    assert r.descartes["precio_implausible"] == 0
+    assert "U0" in [u.unidad_key for u in r.unidades], "21,4 UF/m² es barato, no imposible"

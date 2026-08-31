@@ -23,6 +23,7 @@ from typing import Any
 from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango
 from flujocero.alcance import Alcance
 from flujocero.finance.modelo import Unidad
+from flujocero.quality.plausibilidad import implausible
 
 D = Decimal
 
@@ -39,6 +40,10 @@ class Emparejamiento:
     # arriendo esta SOBREestimado.
     desvio_m2: dict[str, Decimal] = field(default_factory=dict)
     descartes: dict[str, int] = field(default_factory=dict)
+    # `(unidad_key, razon)` de las filas que el §7.1 declara imposibles. Se listan y no solo
+    # se cuentan: son pocas y cada una merece una mirada — la primera que aparecio era una
+    # cesion de promesa encabezando el ranking.
+    implausibles: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -100,6 +105,7 @@ def emparejar(
                 "microzona_saturada",
                 "sin_tipologia",
                 "sin_m2",
+                "precio_implausible",
                 "fuera_de_rango",
                 "sin_comparables",
                 "duplicado",
@@ -140,6 +146,16 @@ def emparejar(
             continue
         if not m2:
             r.descartes["sin_m2"] += 1
+            continue
+        razon_implausible = implausible(Decimal(str(precio)), Decimal(str(m2)))
+        if razon_implausible is not None:
+            # §7.1 aplicado a la tabla, no a una muestra de 5 documentos. Agarra la fila cuyo
+            # precio y superficie son cada uno plausibles pero no hablan de la misma cosa: la
+            # cesion de promesa que encabezo el ranking del 31-ago con yield 17,58%.
+            # Un ranking por yield ordena por precio bajo, asi que esa fila no queda perdida
+            # en el medio: flota sola hasta el primer lugar. Ver `quality/plausibilidad.py`.
+            r.descartes["precio_implausible"] += 1
+            r.implausibles.append((key, razon_implausible))
             continue
         rango = etiqueta_rango(Decimal(str(m2)), rangos)
         if rango is None:

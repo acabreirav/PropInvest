@@ -1028,6 +1028,18 @@ def oportunidades(
     for motivo, n in r.descartes.items():
         if n:
             typer.echo(f"    fuera por {motivo}: {n}")
+    if r.implausibles:
+        # Se listan una por una, no se cuentan nomas. Son pocas y cada una es un aviso que
+        # dice una cosa y significa otra: la primera que aparecio pedia UF 850 por un 2D2B
+        # de 60 m2 —14,2 UF/m2— porque vendia una PROMESA, no el departamento, y con eso
+        # encabezaba el ranking con 17,58% de yield contra 7,90% de la segunda.
+        typer.echo(
+            "\n  ⚠ El §7.1 declara UF/m² entre 20 y 200. Estas filas caen fuera: bajo el\n"
+            "    mínimo, el precio publicado no es el del departamento. Se conservan en la\n"
+            "    base con su procedencia; quedan fuera del ranking:"
+        )
+        for key, razon in r.implausibles[:10]:
+            typer.echo(f"      {key:18} {razon}")
     if not r.unidades:
         typer.echo(
             "\n✗ Ninguna unidad tiene su celda de arriendo con 8 comparables.\n"

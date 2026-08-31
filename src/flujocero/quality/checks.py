@@ -19,6 +19,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from flujocero.quality.plausibilidad import implausible
+
 # --------------------------------------------------------------------------- ancla externa
 
 # UF/m² de venta de departamento nuevo, de `docs/00-hallazgos.md §3`.
@@ -276,6 +278,40 @@ def _percentil(valores: list[Decimal], p: Decimal) -> Decimal:
     return orden[bajo] + (orden[alto] - orden[bajo]) * resto
 
 
+def precio_implausible(filas: list[dict[str, Any]]) -> Hallazgo:
+    """§7.1 sobre la tabla entera, no sobre la muestra de 5 documentos del `selftest`.
+
+    El `selftest()` de cada fuente verifica los rangos contra ≤5 documentos vivos, así que
+    una fila imposible entra sin que nadie la mire. Y el rango que la agarra —`UF/m²` entre
+    20 y 200— es un **cociente**, no un campo: el parser aplica precio y superficie por
+    separado y los dos pueden ser plausibles sin que se refieran a la misma cosa.
+
+    `ALERTA`, no `FALLA`: son poquísimas filas y no invalidan el resto de la base. Pero
+    tampoco son `MARCA`, porque cada una es un aviso que dice una cosa y significa otra, y
+    hay que ir a mirarlo. Ver `quality/plausibilidad.py` para el caso que lo destapó.
+    """
+    malas: list[str] = []
+    for f in filas:
+        precio, m2 = f.get("precio_uf"), f.get("m2_utiles")
+        razon = implausible(
+            Decimal(str(precio)) if precio is not None else None,
+            Decimal(str(m2)) if m2 is not None else None,
+        )
+        if razon is not None:
+            malas.append(f"{f.get('unidad_key', '?')}: {razon}")
+    if not malas:
+        return Hallazgo("precio_implausible", Severidad.OK, "todas las filas dentro del §7.1")
+    return Hallazgo(
+        "precio_implausible",
+        Severidad.ALERTA,
+        f"{len(malas)} filas fuera de los rangos del §7.1. Bajo el mínimo el precio "
+        f"publicado no es el del departamento; sobre el máximo puede ser un precio real de "
+        f"barrio caro. Quedan fuera del ranking; el dato se conserva",
+        len(malas),
+        malas,
+    )
+
+
 def marcar_outliers(filas: list[dict[str, Any]]) -> Hallazgo:
     """§7.3 · `precio_uf/m²` fuera de [p1, p99] de su microzona.
 
@@ -506,6 +542,7 @@ def correr(
     rep.hallazgos.append(procedencia_completa(unidades))
     rep.hallazgos.append(cobertura_precio_y_microzona(unidades))
     rep.hallazgos.append(frescura(unidades, ahora, fuentes_historicas))
+    rep.hallazgos.append(precio_implausible(unidades))
     rep.hallazgos.append(marcar_outliers(unidades))
     rep.hallazgos.append(duplicados_de_venta(unidades))
     rep.hallazgos.append(duplicados_de_arriendo(comparables))
