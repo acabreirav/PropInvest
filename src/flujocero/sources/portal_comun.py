@@ -14,7 +14,6 @@ sigue. Lo común vive acá.
 
 from __future__ import annotations
 
-import logging
 import re
 import unicodedata
 from decimal import Decimal
@@ -179,23 +178,19 @@ def cargar_avisos(conexion: Any, avisos: list[Any], source_id: str, parser_versi
             (mid, cid, nombre),
         )
 
-    n, omitidas = 0, []
+    n = 0
     for a in avisos:
-        if a.operacion == "venta" and a.precio_uf is not None:
+        if a.operacion == "venta":
+            # Antes, una venta publicada EN PESOS se tiraba con un `logging.info`: no habia
+            # columna donde ponerla y el §11 prohibe que esta capa convierta, porque la UF
+            # del dia vive en otra tabla. El costo real de eso no era el 6,1% de las ventas
+            # de la RM que se perdian: era que **una comuna entera podia esfumarse sin que
+            # nadie se enterara**, que es lo que paso con cuatro de las cinco del Gran
+            # Concepcion. Ahora el peso se guarda como viene y la conversion pasa al
+            # emparejamiento, con la UF del dia del aviso — igual que el arriendo.
             n += _cargar_venta(conexion, a, source_id, parser_version)
-        elif a.operacion == "venta":
-            # Venta publicada en pesos. `fact_unidad_venta.precio_uf` es DECIMAL en UF y el
-            # §11 prohibe que esta capa convierta: la UF del dia vive en otra tabla. Se omite
-            # la fila y se cuenta aparte, en vez de meter un numero en la columna equivocada.
-            omitidas.append(a.portal_id)
         elif a.operacion == "arriendo":
             n += _cargar_arriendo(conexion, a, source_id, parser_version)
-    if omitidas:
-        logging.getLogger(__name__).info(
-            "%d ventas publicadas en pesos omitidas (falta columna precio_clp): %s...",
-            len(omitidas),
-            omitidas[:3],
-        )
     return n
 
 
@@ -214,7 +209,7 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
          tabla de ruido y taparia los cambios reales.
     """
     vigente = conexion.execute(
-        "SELECT valid_from, precio_uf, parser_version FROM fact_unidad_venta "
+        "SELECT valid_from, precio_uf, parser_version, precio_clp FROM fact_unidad_venta "
         "WHERE unidad_key = ? AND valid_to IS NULL",
         (a.portal_id,),
     ).fetchone()
@@ -235,12 +230,14 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
     ES_TARJETA = "portal_busqueda"
     if vigente is not None and vigente[2] != parser_version and ES_TARJETA in parser_version:
         conexion.execute(
-            "UPDATE fact_unidad_venta SET precio_uf = ?, parser_version = ?, valid_from = ?, "
+            "UPDATE fact_unidad_venta SET precio_uf = ?, precio_clp = ?, parser_version = ?, "
+            "valid_from = ?, "
             "fetched_at = ?, source_id = ?, source_url = ?, raw_blob_path = ?, "
             "robots_snapshot_sha = ?, microzona_id = coalesce(?, microzona_id) "
             "WHERE unidad_key = ? AND valid_to IS NULL",
             (
                 a.precio_uf,
+                getattr(a, "precio_clp", None),
                 parser_version,
                 min(vigente[0], a.fetched_at),
                 a.fetched_at,
@@ -275,6 +272,7 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
 
     campos = (
         a.precio_uf,
+        getattr(a, "precio_clp", None),
         float(a.m2_utiles) if a.m2_utiles is not None else None,
         a.dormitorios,
         a.banos,
@@ -284,12 +282,12 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
     )
 
     if vigente is not None:
-        desde, precio_previo, _ = vigente
+        desde, precio_previo, _, clp_previo = vigente
         if desde == a.fetched_at:
             conexion.execute(
-                "UPDATE fact_unidad_venta SET precio_uf = ?, m2_utiles = ?, dormitorios = ?, "
-                "banos = ?, tipologia = ?, es_vivienda_nueva = ?, antiguedad_anios = ?, "
-                "microzona_id = ?, fetched_at = ?, raw_blob_path = ? "
+                "UPDATE fact_unidad_venta SET precio_uf = ?, precio_clp = ?, m2_utiles = ?, "
+                "dormitorios = ?, banos = ?, tipologia = ?, es_vivienda_nueva = ?, "
+                "antiguedad_anios = ?, microzona_id = ?, fetched_at = ?, raw_blob_path = ? "
                 "WHERE unidad_key = ? AND valid_to IS NULL",
                 (*campos, a.microzona_id, a.fetched_at, a.raw_blob_path, a.portal_id),
             )
@@ -305,7 +303,7 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
             # confirmadas. El resultado dependia del ORDEN en que se cargaron las fotos, que
             # es exactamente lo que un almacen versionado no puede permitirse.
             return _rellenar_pasado(conexion, a, desde, precio_previo, source_id, parser_version)
-        if precio_previo == a.precio_uf:
+        if (precio_previo, clp_previo) == (a.precio_uf, getattr(a, "precio_clp", None)):
             # Sigue publicada al mismo precio: no se abre version, pero SI se actualiza la
             # procedencia. Dejarla apuntando al documento viejo diria que la evidencia de
             # esta fila es un blob de mayo, cuando la evidencia es la captura de hoy.
@@ -339,22 +337,27 @@ def _cargar_venta(conexion: Any, a: Any, source_id: str, parser_version: str) ->
         """
         INSERT INTO fact_unidad_venta
           (unidad_key, numero_unidad, microzona_id, tipologia, dormitorios, banos, m2_utiles,
-           es_vivienda_nueva, antiguedad_anios, precio_uf, disponible, evidence_level,
-           valid_from, source_id, source_url, fetched_at, parser_version, raw_blob_path,
-           robots_snapshot_sha)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           es_vivienda_nueva, antiguedad_anios, precio_uf, precio_clp, disponible,
+           evidence_level, valid_from, source_id, source_url, fetched_at, parser_version,
+           raw_blob_path, robots_snapshot_sha)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             a.portal_id,
             a.portal_id,
             a.microzona_id,
-            campos[4],
-            campos[2],
-            campos[3],
-            campos[1],
-            campos[5],
-            campos[6],
-            campos[0],
+            # Por NOMBRE y no por `campos[N]`. Indexar una tupla posicional en un INSERT de
+            # veinte columnas es una trampa cargada: al agregar `precio_clp` al medio de
+            # `campos` cada indice se corrio uno, y los m2 habrian entrado en la columna de
+            # dormitorios sin que nada fallara. Un error asi no revienta: ordena mal.
+            a.tipologia,
+            a.dormitorios,
+            a.banos,
+            float(a.m2_utiles) if a.m2_utiles is not None else None,
+            getattr(a, "es_vivienda_nueva", None),
+            getattr(a, "antiguedad_anios", None),
+            a.precio_uf,
+            getattr(a, "precio_clp", None),
             True,
             # Un proyecto publica "desde UF X": ese numero no es el precio de esta unidad.
             # Marcarlo `E` no es cosmetico: el §12 excluye del ranking todo precio estimado,

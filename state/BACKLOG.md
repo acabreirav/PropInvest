@@ -1137,10 +1137,33 @@ superficie TOTAL o de terreno donde en la RM trae la util, y el parser toma la q
 
 Las dos cosas se investigan juntas porque las dos apuntan al colector, no al modelo.
 
+DIAGNOSTICO. El colector **si** recolecto las ocho: la segunda corrida reporto 3.812 avisos,
+que son 8 comunas x 5 paginas x 2 operaciones x 48. La perdida es en la CARGA.
+
+`cargar_avisos` tenia una rama que tiraba las ventas publicadas EN PESOS:
+
+    elif a.operacion == "venta":
+        omitidas.append(a.portal_id)   # y un logging.info que nadie ve
+
+No habia columna donde ponerlas —`precio_uf` es la unica de precio— y el §11 prohibe que la
+capa de carga convierta, porque la UF del dia vive en otra tabla. Medido sobre el corpus de
+mayo, en la RM eso son **143 unidades, el 6,1% de las ventas**, y muy desparejo entre comunas:
+0,2% en Las Condes contra 11,9% en Santiago. La proporcion sube donde el stock es mas barato,
+que es exactamente el stock que este inversionista puede comprar.
+
+**El costo real no era el 6,1%: era que una comuna entera podia esfumarse sin que nadie se
+enterara.** En regiones la publicacion en pesos es mucho mas comun que en la RM.
+
+ARREGLADO: se guarda `precio_clp` como viene y la conversion pasa al emparejamiento, con la
+UF del dia del aviso — que es exactamente como el arriendo ya funcionaba. El valor convertido
+es `D` (§3.2), no `V`; el §12 excluye los `E` del ranking, no los `D`, asi que compite.
+
 criterio_de_aceptacion:
-  - [ ] Saber por que `--fase 3` recolecto 4 de 8 comunas de venta (¿corte por paginas?,
-        ¿error silencioso?, ¿el slug de esas cuatro?) — con la evidencia, no con una teoria
-  - [ ] Las cinco comunas de Gran Concepcion con unidades en la base
+  - [x] Saber por que faltaban, con la evidencia: no era el colector, era la carga
+  - [x] Las ventas en pesos dejan de tirarse; `precio_clp` en el esquema y en `migrar()`
+  - [x] Conversion con la UF del dia del aviso, no con la de hoy; sin ella se descarta y se
+        cuenta (`sin_uf_del_dia`), no se convierte con la de otro dia
+  - [ ] Confirmar sobre la base del usuario que las cuatro comunas aparecen
   - [ ] Explicar los 103 `fuera_de_rango` de talcahuano mirando avisos concretos
   - [ ] Si el m2 de regiones es superficie total, el parser lo distingue o lo deja `ND`
         (§3.2: no se imputa) — nunca lo mezcla con m2 utiles

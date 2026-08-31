@@ -26,6 +26,7 @@ def ruta_esquema(raiz: Path | None = None) -> Path:
 # desarrollo. Cada entrada es `(tabla, columna, tipo)` y se aplica de forma idempotente.
 COLUMNAS_AGREGADAS: tuple[tuple[str, str, str], ...] = (
     ("agg_arriendo_microzona", "m2_mediana", "DECIMAL(10,2)"),
+    ("fact_unidad_venta", "precio_clp", "DECIMAL(14,0)"),
 )
 
 

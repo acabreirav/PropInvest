@@ -1890,3 +1890,35 @@ Concepción solo entró talcahuano — y de sus 232 unidades, 103 salen por `fue
 (más de 140 m² útiles), que en Talcahuano no es creíble.
 
 gates: VERDE — 637 tests.
+
+## 31-ago-2026 · T-048 · la venta publicada en pesos se tiraba a la basura
+
+El colector **sí** había recolectado las ocho comunas de fase 3: la corrida reportó 3.812
+avisos, que son 8 comunas × 5 páginas × 2 operaciones × 48. La pérdida estaba en la carga.
+
+`cargar_avisos` tenía una rama que descartaba toda venta publicada en pesos, con un
+`logging.info` como única huella. La razón era buena: `precio_uf` era la única columna de
+precio y el §11 prohíbe que la capa de carga convierta, porque la UF del día vive en otra
+tabla. Pero la consecuencia no se había medido.
+
+La medí sobre el corpus de mayo, parseando los blobs crudos: **143 unidades, el 6,1% de las
+ventas de la RM**. Y muy desparejo:
+
+    las-condes    0,2%      nunoa       3,5%      macul       10,7%
+    providencia   1,5%      san-miguel 11,8%      santiago    11,9%
+
+**La proporción sube donde el stock es más barato** — que es exactamente el stock que este
+inversionista puede comprar. En regiones, donde publicar en pesos es mucho más común que en
+la RM, se llevó cuatro comunas completas.
+
+El arreglo es el que el arriendo ya usaba: se guarda `precio_clp` como viene y la conversión
+pasa al emparejamiento, con la UF **del día del aviso**. Sin esa UF la fila se descarta y se
+cuenta (`sin_uf_del_dia`); no se convierte con la de hoy, que sería un precio de mayo
+expresado en UF de agosto. El valor convertido queda `D`, no `V`.
+
+**Un bug que casi meto yo, en el mismo cambio.** El INSERT de `_cargar_venta` indexaba una
+tupla posicional de veinte columnas (`campos[4]`, `campos[2]`…). Al agregar `precio_clp` al
+medio de `campos`, cada índice se corrió uno y los m² habrían entrado en la columna de
+dormitorios **sin que nada fallara**: no revienta, ordena mal. Lo reescribí por nombre.
+
+gates: VERDE — 641 tests.

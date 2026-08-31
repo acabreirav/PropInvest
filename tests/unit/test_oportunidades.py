@@ -365,3 +365,71 @@ def test_la_unidad_sin_microzona_no_se_pierde_del_embudo(con) -> None:
     r = op.emparejar(con, RANGOS)
     assert r.por_comuna["(sin microzona)"]["sin_microzona"] == 1
     assert sum(sum(m.values()) for m in r.por_comuna.values()) == r.total
+
+
+# ------------------------------------------- la venta publicada en pesos (T-048)
+
+
+def _en_pesos(con, key, clp, visto=AHORA, m2=56):
+    con.execute(
+        "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, m2_utiles, "
+        "precio_uf, precio_clp, es_vivienda_nueva, evidence_level, valid_from, fetched_at) "
+        "VALUES (?, 'sm/el-llano', '2D2B', ?, NULL, ?, FALSE, 'V', ?, ?)",
+        (key, m2, clp, visto, visto),
+    )
+
+
+def _uf(con, fecha, valor):
+    con.execute(
+        "INSERT INTO dim_tiempo_financiero (serie, fecha, valor) VALUES ('uf', ?, ?)",
+        (fecha.date(), D(valor)),
+    )
+
+
+def test_la_venta_en_pesos_ya_no_se_tira(con) -> None:
+    """Antes `cargar_avisos` la omitía con un `logging.info`: no había columna donde ponerla.
+    El costo no era el 6,1% de las ventas de la RM que se perdían, era que **una comuna
+    entera podía esfumarse sin que nadie se enterara** — cuatro de las cinco del Gran
+    Concepción."""
+    celda(con)
+    _uf(con, AHORA, "40871.14")
+    _en_pesos(con, "EN_PESOS", 122_613_420)  # UF 3.000 exactas al valor de ese día
+    r = op.emparejar(con, RANGOS, ahora=AHORA)
+    assert [u.unidad_key for u in r.unidades] == ["EN_PESOS"]
+    assert abs(r.unidades[0].precio_uf - D(3000)) < D("0.01")
+
+
+def test_el_precio_convertido_es_D_no_V(con) -> None:
+    """§3.2: sale de un cálculo determinístico sobre dos valores `V` —el peso publicado y la
+    UF de su día—. El §12 excluye los `E` del ranking, no los `D`: compite, pero la ficha
+    tiene que poder decir que ese número no se leyó, se calculó."""
+    celda(con)
+    _uf(con, AHORA, "40871.14")
+    _en_pesos(con, "EN_PESOS", 122_613_420)
+    # Precio distinto a proposito: con el mismo, la firma anti-duplicado del §7.3 —misma
+    # microzona, tipologia, m2 y precio— colapsa las dos en una sola y el test mediria otra cosa.
+    unidad(con, key="EN_UF", precio="3200")
+    r = op.emparejar(con, RANGOS, ahora=AHORA)
+    niveles = {u.unidad_key: u.evidence_precio for u in r.unidades}
+    assert niveles == {"EN_PESOS": "D", "EN_UF": "V"}
+
+
+def test_se_convierte_con_la_UF_DE_SU_DIA_no_con_la_de_hoy(con) -> None:
+    """Un aviso de mayo vale lo que valía la UF en mayo. Convertirlo con la de hoy sería un
+    precio de mayo expresado en UF de agosto — y la UF sube todos los días."""
+    celda(con)
+    mayo = datetime(2026, 5, 4, tzinfo=UTC)
+    _uf(con, mayo, "39000")
+    _uf(con, AHORA, "40871.14")
+    _en_pesos(con, "DE_MAYO", 117_000_000, visto=mayo)  # UF 3.000 a la UF de mayo
+    r = op.emparejar(con, RANGOS)  # sin `ahora`: el gate de frescura no estorba
+    assert abs(r.unidades[0].precio_uf - D(3000)) < D("0.01")
+
+
+def test_sin_la_UF_de_su_dia_se_descarta_y_se_cuenta(con) -> None:
+    """No se convierte con la UF de otro día ni se cae en silencio (§3.2)."""
+    celda(con)
+    _en_pesos(con, "SIN_UF", 122_613_420)
+    r = op.emparejar(con, RANGOS, ahora=AHORA)
+    assert r.unidades == [] and r.descartes["sin_uf_del_dia"] == 1
+    assert r.por_comuna["sm"]["sin_uf_del_dia"] == 1

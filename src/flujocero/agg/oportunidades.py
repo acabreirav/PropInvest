@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango
+from flujocero.agg.arriendo import MIN_COMPARABLES, etiqueta_rango, serie_uf, uf_del_dia
 from flujocero.alcance import Alcance
 from flujocero.finance.modelo import Unidad
 from flujocero.quality.checks import FRESCURA_MAX_DIAS
@@ -132,6 +132,7 @@ def emparejar(
                 "microzona_saturada",
                 "sin_tipologia",
                 "sin_m2",
+                "sin_uf_del_dia",
                 "desactualizada",
                 "precio_implausible",
                 "fuera_de_rango",
@@ -151,13 +152,28 @@ def emparejar(
 
     filas = conexion.execute(
         "SELECT unidad_key, microzona_id, tipologia, m2_utiles, precio_uf, es_vivienda_nueva, "
-        "antiguedad_anios, evidence_level, fetched_at FROM fact_unidad_venta "
-        "WHERE valid_to IS NULL AND precio_uf IS NOT NULL AND evidence_level = 'V'"
+        "antiguedad_anios, evidence_level, fetched_at, precio_clp FROM fact_unidad_venta "
+        "WHERE valid_to IS NULL AND coalesce(precio_uf, precio_clp) IS NOT NULL "
+        "AND evidence_level = 'V'"
     ).fetchall()
+    # La UF de CADA dia, no la de hoy: un aviso publicado en pesos el 4 de mayo vale lo que
+    # valia la UF ese dia. Es la misma conversion que el arriendo ya hacia; lo unico nuevo es
+    # que la venta en pesos dejo de tirarse a la basura.
+    serie = serie_uf(conexion)
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
 
-    for key, mz, tip, m2, precio, nueva, antiguedad, _ev, visto in filas:
+    for key, mz, tip, m2, precio, nueva, antiguedad, _ev, visto, clp in filas:
         comuna = mz.split("/")[0] if mz else None
+        precio_en_pesos = precio is None
+        if precio_en_pesos:
+            uf = uf_del_dia(serie, visto) if visto else None
+            if uf is None:
+                # Sin la UF de su dia la fila no se convierte con la de hoy: seria un precio
+                # de mayo expresado en UF de agosto. Se descarta y se cuenta (§3.2).
+                r.descartes["sin_uf_del_dia"] += 1
+                _anotar(r, comuna, "sin_uf_del_dia")
+                continue
+            precio = Decimal(str(clp)) / uf
         if limite is not None and visto is not None and visto < limite:
             # §7.3, y se descarta ANTES que nada mas: una unidad cuyo precio es de hace
             # cuatro meses no es una oportunidad peor, es una oportunidad que no sabemos si
@@ -234,6 +250,11 @@ def emparejar(
                 # El portal no declara DFL2 (16 de 5.870 avisos). `None` = por verificar en la
                 # escritura: compite, pero sin cobrar el beneficio (T-917).
                 acogida_dfl2=None,
+                # Un precio convertido de pesos es `D`, no `V`: sale de un calculo
+                # deterministico sobre dos valores `V` —el peso publicado y la UF de su dia—.
+                # El §12 excluye del ranking los `E`, no los `D`, asi que compite; pero la
+                # ficha tiene que poder decir que este numero no se leyo, se calculo.
+                evidence_precio="D" if precio_en_pesos else "V",
                 es_vivienda_nueva=bool(nueva) if nueva is not None else False,
                 antiguedad_anios=int(antiguedad) if antiguedad is not None else None,
                 # Se pobla aunque las saturadas ya se hayan descartado arriba: si algun dia

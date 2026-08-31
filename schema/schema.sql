@@ -62,6 +62,13 @@ CREATE TABLE IF NOT EXISTS fact_unidad_venta (
   es_vivienda_nueva BOOLEAN,
   antiguedad_anios  INTEGER,              -- desde la recepcion. Decide la ventana DFL2 (T-911)
   precio_uf       DECIMAL(12,2),
+  -- Una venta publicada EN PESOS antes se tiraba: `precio_uf` era la unica columna de precio
+  -- y el §11 prohibe que la capa de carga convierta (la UF del dia vive en otra tabla). El
+  -- resultado es que el 6,1% de las ventas de la RM desaparecia con un `logging.info`, y una
+  -- comuna entera podia esfumarse sin que nadie se enterara. Se guarda el peso como viene y
+  -- la conversion pasa al emparejamiento, con la UF del dia del aviso — que es exactamente
+  -- como ya funciona el arriendo. El valor convertido es `D` (§3.2), no `V`.
+  precio_clp      DECIMAL(14,0),
   precio_estacionamiento_uf DECIMAL(12,2),
   precio_bodega_uf DECIMAL(12,2),
   descuento_pct   DOUBLE,
