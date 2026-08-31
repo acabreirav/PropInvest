@@ -1339,10 +1339,32 @@ modelo muestra cada oportunidad PEOR de lo que es.
 como se reparte entre desgravamen e incendio — que dependen de cosas distintas (edad del
 deudor y saldo insoluto el primero, tasacion el segundo).
 
+### Ampliado con 13 cotizaciones (compara.cl, 31-ago-2026)
+
+El usuario trajo el mismo credito cotizado en 13 productos. Descompuesto contra la anualidad
+francesa pura, 10 de ellos incluyen seguros en el dividendo:
+
+    rango observado    0,2264 - 0,3666 UF/mes
+    mediana            0,3190 UF/mes  = $13.038
+    simulador Santander 0,3400 UF/mes
+
+    mi supuesto        0,6160 UF = $25.177   -> +93% sobre la mediana
+    piso de mi rango   0,3960 UF = $16.185   -> SIGUE arriba del maximo observado
+
+Once puntos independientes, todos por debajo del piso del rango declarado. **El rango esta mal
+calibrado, no solo el valor.** Valores que reproducen la mediana manteniendo la proporcion:
+
+    seguro_desgravamen_pct_mensual_saldo:       0,00035 -> 0,000181
+    seguro_incendio_sismo_pct_mensual_tasacion: 0,00028 -> 0,000145
+
+**Dos cotizaciones (BancoEstado y Scotiabank Universal) dan carga de seguro ~0.** No es que
+no cobren: es que ese dividendo los muestra aparte. Se excluyeron de la mediana por eso, y
+haberlas promediado habria bajado el supuesto de mas.
+
 criterio_de_aceptacion:
   - [ ] El desglose de "Ver seguros asociados y gastos operacionales" del simulador, que da
         la separacion desgravamen / incendio con cifras
-  - [ ] Al menos una segunda cotizacion (BancoEstado, que es el par que usa el modelo)
+  - [x] Al menos una segunda cotizacion — hay 13
   - [ ] Si se cambian, la sensibilidad sobre el ranking completo va en el mismo commit (§8.4):
         baja el dividendo de TODAS las unidades, asi que mueve todo el ranking a la vez
   - [ ] Revisar tambien el rango, no solo el valor: un rango que no contiene el dato real es
@@ -1360,3 +1382,28 @@ periodo), pero el modelo no lo tiene: asume 360 cuotas iguales.
 Impacto real: son ~$111.000 una sola vez. No mueve la TIR de forma apreciable, pero **si
 mueve la plata sobre la mesa el primer mes**, que es justo cuando el comprador esta mas
 apretado. Va en la ficha de la unidad, no en el score.
+
+
+## T-056 · compara.cl no coincide con el simulador del propio banco
+estado: pendiente
+agente: fuente-scout
+fase: 3
+
+Mismo credito, mismo dia, mismo banco, dos cifras:
+
+    Santander en compara.cl        4,10%
+    Santander en su propio simulador 4,65%     55 pb de diferencia
+    BancoEstado en compara.cl      4,54%
+    BancoEstado medido en agosto   4,29%       25 pb de diferencia
+
+**compara.cl es una herramienta de tamizaje, no una cotizacion.** Sirve para armar una lista
+corta; no para poner un numero en `params.yml`. El §13.1 ya dice lo mismo de los yields
+publicados: recalcular siempre desde el dato, nunca copiar la cifra que alguien publica.
+
+Y trae una inconsistencia aritmetica propia: Consorcio se lista a 25 anios con un dividendo
+que corresponde a 30. Descomponerlo da carga de seguro NEGATIVA, que no existe.
+
+criterio_de_aceptacion:
+  - [ ] `docs/01-fuentes.md` registra compara.cl como tamizaje, con la discrepancia medida
+  - [ ] Ninguna tasa de `params.yml` sale de compara: solo de simuladores del banco o de la
+        CMF, con fecha y captura

@@ -2179,3 +2179,32 @@ Es la segunda vez hoy que una aritmética de servilleta parecía un hallazgo y l
 desarmó. La primera fue el "49,4% de avisos perdidos" que resultó ser 98,7%.
 
 gates: VERDE.
+
+## 31-ago-2026 · 13 cotizaciones reales desmienten dos supuestos, y `cli sensibilidad`
+
+El usuario cotizó el crédito de la unidad real (UF 880, 30 años) en Santander y en
+compara.cl. Descomponiendo cada dividendo contra la anualidad francesa pura sale la carga de
+seguro implícita de cada banco. De 10 productos que la incluyen:
+
+    rango 0,2264 – 0,3666 UF/mes · mediana 0,3190 · Santander directo 0,3400
+    mi supuesto 0,6160 (+93%) · piso de mi rango 0,3960 (arriba del máximo observado)
+
+**Once puntos independientes por debajo del piso del rango que yo mismo declaré.** El §3.2
+pide que todo `E` venga con rango de sensibilidad; acá el rango era el problema.
+
+**Y encontré que la medición que venía haciendo estaba mal enfocada.** El §8.4 habla de
+mover *"el ranking en >10% de posiciones"* y yo venía midiendo el efecto sobre **una**
+unidad. No es lo mismo: un supuesto puede mover poco cada fila y mucho **cuántas cruzan una
+regla dura**. Hoy hay 567 unidades excluidas por el tope de déficit; abaratar el dividendo de
+todas a la vez las mueve en bloque.
+
+`cli sensibilidad <ruta> <valor>` corre el universo dos veces y reporta: cuántas entran,
+cuántas salen, cuántas se mueven más del 10% de posiciones, y si cambia el top 5. Cambia una
+copia en memoria — una medición que modifica lo que mide no sirve para decidir.
+
+**Segundo hallazgo:** compara.cl da Santander 4,10% y el simulador de Santander da 4,65%.
+Mismo banco, mismo día, 55 pb. Y BancoEstado 4,54% contra los 4,29% que el usuario midió
+directo. Es tamizaje, no cotización — queda como T-056, y ninguna tasa de `params.yml` puede
+salir de ahí.
+
+gates: VERDE — 650 tests.

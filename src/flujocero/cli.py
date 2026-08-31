@@ -2107,6 +2107,120 @@ def embudo(
 
 
 @app.command()
+def sensibilidad(
+    parametro: str = typer.Argument(
+        ..., help="ruta en params.yml, ej. 'financiamiento.seguro_desgravamen_pct_mensual_saldo'"
+    ),
+    valor: str = typer.Argument(..., help="el valor propuesto"),
+) -> None:
+    """Que le pasa al ranking COMPLETO si un supuesto cambia. Corre el universo dos veces.
+
+    El §8.4 lo pide textual: *"un supuesto `E` que mueve el ranking en >10% de posiciones"*
+    se decide con el humano. Hasta ahora esa medicion habia que hacerla a mano cada vez, y lo
+    que se medio en la practica fue el efecto sobre UNA unidad — que no es lo mismo: un
+    supuesto puede mover poco cada fila y mucho **cuantas cruzan una regla dura**.
+
+    El caso que lo pidio: 13 cotizaciones reales del mismo credito mostraron que los dos
+    supuestos de seguro estaban 93% por encima de la mediana del mercado, y con el rango
+    declarado entero por encima del maximo observado. Bajarlos abarata el dividendo de TODAS
+    las unidades a la vez, asi que el efecto grande no es el orden: es cuantas dejan de caer
+    por el tope de deficit.
+
+    No escribe nada. Lee `params.yml`, cambia un valor en memoria, y compara.
+    """
+    import copy
+
+    import duckdb
+
+    from flujocero.agg import oportunidades as op
+    from flujocero.finance.escenarios import escenario_base, evaluar_universo
+
+    base_cfg, inv = cargar("params"), cargar("inversionista")
+    try:
+        actual = base_cfg.crudo(parametro)
+    except Exception as exc:  # noqa: BLE001
+        typer.echo(f"  {parametro!r} no existe en params.yml")
+        raise typer.Exit(2) from exc
+    if isinstance(actual, dict):
+        actual = actual.get("v")
+
+    # Se cambia una COPIA: nada toca el archivo. Una medicion que modifica lo que mide no
+    # sirve para decidir, y ademas dejaria el repo distinto segun quien corrio que.
+    # `_datos` es el dict crudo del YAML. Se accede a proposito y con copia profunda: la
+    # alternativa —reescribir el archivo, medir y restaurarlo— deja el repo distinto si el
+    # comando muere a la mitad, y una medicion no debe poder ensuciar lo que mide.
+    crudo_nuevo = copy.deepcopy(base_cfg._datos)  # noqa: SLF001
+    nodo = crudo_nuevo
+    partes = parametro.split(".")
+    for k in partes[:-1]:
+        nodo = nodo[k]
+    if isinstance(nodo[partes[-1]], dict):
+        nodo[partes[-1]] = {**nodo[partes[-1]], "v": float(valor)}
+    else:
+        nodo[partes[-1]] = float(valor)
+    from flujocero.config import Config
+
+    prop_cfg = Config(crudo_nuevo, "params(propuesta)")
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        r = op.emparejar(
+            con,
+            base_cfg.crudo("ingresos.rangos_m2"),
+            alcance=desde_config(cargar("zonas")),
+            ahora=datetime.now(UTC),
+        )
+    finally:
+        con.close()
+    if not r.unidades:
+        typer.echo("  No hay unidades rankeables: no hay nada que medir.")
+        raise typer.Exit(1)
+
+    typer.echo(f"\n  {parametro}")
+    typer.echo(f"    hoy      {actual}")
+    typer.echo(f"    propuesto {valor}\n")
+
+    salidas = {}
+    for etiqueta, cfg in (("hoy", base_cfg), ("propuesto", prop_cfg)):
+        evals = evaluar_universo(r.unidades, escenario_base(cfg, inv), cfg, inv)
+        vivos = [ev for ev in evals if not ev.excluido]
+        orden = [ev.unidad_key for ev in sorted(vivos, key=lambda x: -x.score)]
+        salidas[etiqueta] = (evals, vivos, orden)
+
+    for etiqueta in ("hoy", "propuesto"):
+        evals, vivos, _ = salidas[etiqueta]
+        typer.echo(
+            f"  {etiqueta:>10}: {len(vivos)} en el ranking · {len(evals) - len(vivos)} excluidas"
+        )
+
+    _, vivos_a, orden_a = salidas["hoy"]
+    _, vivos_b, orden_b = salidas["propuesto"]
+    typer.echo(f"\n  entran al ranking que antes no estaban: {len(set(orden_b) - set(orden_a))}")
+    typer.echo(f"  salen del ranking:                       {len(set(orden_a) - set(orden_b))}")
+
+    # El §8.4 habla de POSICIONES, asi que se cuentan sobre las que estan en las dos listas.
+    comunes = set(orden_a) & set(orden_b)
+    pos_a = {k: i for i, k in enumerate(orden_a)}
+    pos_b = {k: i for i, k in enumerate(orden_b)}
+    movidas = [k for k in comunes if abs(pos_a[k] - pos_b[k]) > len(comunes) * 0.10]
+    pct = len(movidas) / len(comunes) if comunes else 0
+    typer.echo(
+        f"  se mueven mas del 10% del ranking:       {len(movidas)} de {len(comunes)} ({pct:.1%})"
+    )
+    typer.echo(
+        f"\n  {'✗' if pct > 0.10 else '✓'} El §8.4 pide decision humana cuando mueve >10% "
+        f"de las posiciones."
+    )
+    if orden_a[:5] != orden_b[:5]:
+        typer.echo(
+            f"\n  el top 5 CAMBIA:\n    hoy       {' '.join(orden_a[:5])}\n"
+            f"    propuesto {' '.join(orden_b[:5])}"
+        )
+    else:
+        typer.echo("\n  el top 5 no cambia de orden.")
+
+
+@app.command()
 def crudo(
     fuente: str = typer.Option("", help="un source_id, o vacio para todas"),
     contiene: str = typer.Option("", help="filtra por parte del nombre, ej. 'venta_conce'"),
