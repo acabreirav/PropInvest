@@ -67,14 +67,15 @@ fase_2:
 #
 # Ojo con la forma: `ciudad` NO es una comuna. "Gran Concepcion" es una conurbacion y el
 # portal busca por comuna, asi que cada entrada declara sus `comunas` y el `region_slug`
-# que va en la URL. Ese slug es el que usa el PORTAL, no el nombre oficial de la region, y
-# **esta sin verificar**: un slug equivocado no da error — el portal responde 200 con cero
-# resultados y la corrida "funciona" sin traer nada.
-#   -> se verifica con `cli probar-comunas --fase 3` ANTES de recolectar.
+# que va en la URL. Ese slug es el que usa el PORTAL, no el nombre oficial de la region.
+# Un slug equivocado no da error: el portal responde 200 con cero resultados y la corrida
+# "funciona" sin traer nada. Por eso se verifica con `cli probar-comunas --fase N` ANTES de
+# recolectar. Los ocho pares comuna/region de abajo se verificaron el 31-ago-2026 desde IP
+# chilena: 8/8 respondieron con 48 tarjetas cada uno.
 fase_3:
   - ciudad: gran-concepcion
     region: biobio
-    region_slug: bio-bio          # SIN VERIFICAR — ver `cli probar-comunas`
+    region_slug: bio-bio          # verificado 31-ago-2026
     comunas: [concepcion, san-pedro-de-la-paz, talcahuano, chiguayante, hualpen]
     razon: "cap rate neto 4,0% vs 2,8% de Santiago (+120 pb con el mismo ticket). 82% de las ventas bajo UF 4.000. EL ÚNICO MERCADO DEL ALCANCE DONDE EL PIE DE EQUILIBRIO BAJA A ~32%"
     microzonas_prioritarias: [concepcion-centro, barrio-universitario]
@@ -82,13 +83,13 @@ fase_3:
     saturadas: []
   - ciudad: la-serena
     region: coquimbo
-    region_slug: coquimbo         # SIN VERIFICAR
+    region_slug: coquimbo         # verificado 31-ago-2026
     comunas: [la-serena, coquimbo]
     razon: "cap rate neto 1D1B 4,2%"
     saturadas: []
   - ciudad: antofagasta
     region: antofagasta
-    region_slug: antofagasta      # SIN VERIFICAR
+    region_slug: antofagasta      # verificado 31-ago-2026
     comunas: [antofagasta]
     razon: "cap rate neto 1D1B 4,5%, el más alto del país"
     saturadas: []

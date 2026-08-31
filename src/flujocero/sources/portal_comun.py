@@ -446,6 +446,20 @@ def _rellenar_pasado(
 
 
 def _cargar_arriendo(conexion: Any, a: Any, source_id: str, parser_version: str) -> int:
+    """Inserta el comparable, o actualiza el que ya estaba. **Devuelve 1 solo si INSERTO.**
+
+    Antes devolvia 1 siempre. El `ON CONFLICT DO UPDATE` hace lo correcto con los datos
+    —`comp_id` es clave primaria, no se duplica nada— pero el contador reportaba cada aviso
+    confirmado como una fila nueva. Se vio corriendo la misma recoleccion dos veces seguidas:
+    la segunda anuncio **1.911 filas nuevas o versionadas** sobre exactamente los mismos
+    3.812 avisos.
+
+    El dato nunca estuvo mal; la METRICA que dice si una corrida sirvio de algo estaba
+    inflada, y es la que uno mira para decidir si vale la pena volver a recolectar.
+    """
+    ya_estaba = conexion.execute(
+        "SELECT 1 FROM fact_arriendo_comp WHERE comp_id = ?", (a.portal_id,)
+    ).fetchone()
     conexion.execute(
         """
         INSERT INTO fact_arriendo_comp
@@ -475,4 +489,4 @@ def _cargar_arriendo(conexion: Any, a: Any, source_id: str, parser_version: str)
             *_procedencia(a, source_id, parser_version),
         ),
     )
-    return 1
+    return 0 if ya_estaba else 1

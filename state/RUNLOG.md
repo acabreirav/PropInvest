@@ -1684,3 +1684,34 @@ que se le puso un comando encima: `probar-comunas` pide UNA pagina por comuna y 
 tarjetas antes de gastar la corrida.
 
 **Gates:** VERDE.
+
+## 31-ago-2026 · T-041 · el contador de `cargar_avisos` mentía en arriendo
+
+**Síntoma reportado por el usuario:** corrió `recolectar-portal --fase 3 --paginas 5` dos
+veces seguidas. La primera: 2.807 filas. La segunda, sobre los **mismos 3.812 avisos**:
+1.911 "filas nuevas o versionadas".
+
+**Causa:** `_cargar_arriendo` devolvía `1` incondicionalmente. Su `INSERT ... ON CONFLICT
+(comp_id) DO UPDATE` hace lo correcto con los datos —`comp_id` es clave primaria, no había
+un solo duplicado— pero el valor de retorno no distinguía inserción de confirmación.
+
+**Alcance:** solo el contador. Ni una fila mal. `_cargar_venta`, que hace SCD tipo 2, ya
+devolvía `0` en sus cuatro caminos de actualización; el bug era exclusivo de arriendo.
+
+**Por qué importa igual:** ese número es el que uno mira para decidir si vale la pena
+volver a recolectar una comuna. Inflado, una corrida que no aportó nada se ve productiva.
+
+Es el cuarto caso del mismo día de la misma familia —la m² bias que no se disparaba por
+`m2_mediana` NULL, el "ancho relativo máx 35.0x" que dividía por `a or 1`, la
+reconciliación externa que imprimía ✓ sobre cero comunas—: **una señal que se lee bien
+porque no está midiendo nada**.
+
+**Arreglo:** pre-consulta por `comp_id`, `return 0 if ya_estaba else 1`. Tres tests de
+regresión en `tests/unit/test_portal_carga.py`, incluido el que fija que no contar la fila
+**no** es dejar de actualizarla (el precio nuevo sí se guarda).
+
+`config/zonas.yml`: se sacaron los tres `SIN VERIFICAR` de los `region_slug` de fase 3.
+`probar-comunas --fase 3` dio 8/8 desde IP chilena, 48 tarjetas por comuna.
+
+gates: VERDE — 595 tests, calidad PARCIAL (frescura: 2.696 filas de mayo, línea base
+histórica que ya está fuera del ranking por diseño).
