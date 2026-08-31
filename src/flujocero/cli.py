@@ -1744,6 +1744,12 @@ def probar_comunas(
 
     typer.echo(f"\n  Probando {len(objetivos)} comunas de la fase {fase}:\n")
     buenas, malas = [], []
+    # Los `MLC-` que devolvio cada comuna. **Contar tarjetas no basta**, y esa fue la leccion
+    # cara de fase 3: este comando dijo "8/8, 48 tarjetas cada una" y las cinco comunas del
+    # Gran Concepcion habian devuelto EXACTAMENTE los mismos 48 avisos. El portal ignoro el
+    # filtro de comuna y sirvio la misma pagina; el conteo no podia notarlo porque contaba
+    # el numero correcto. Se recolecto una comuna cinco veces creyendo que eran cinco.
+    ids_por_comuna: dict[str, frozenset[str]] = {}
     try:
         for i, (comuna, region) in enumerate(objetivos):
             url = pb.url_busqueda("venta", comuna, 1, "usadas", region_slug=region)
@@ -1762,14 +1768,40 @@ def probar_comunas(
                 contenido=r.content,
                 robots_snapshot_sha=veredicto.snapshot_sha,
             )
-            n = len(col.parse(doc))
+            tarjetas = col.parse(doc)
+            n = len(tarjetas)
+            ids_por_comuna[comuna] = frozenset(t.portal_id for t in tarjetas)
             marca = "✓" if n else "✗"
             typer.echo(f"    {marca} {comuna:24s} {region:14s} {n:3d} tarjetas")
             (buenas if n else malas).append((comuna, region, f"{n} tarjetas"))
     finally:
         col.cerrar()
 
+    # Dos comunas distintas no pueden devolver el mismo aviso: un departamento esta en una
+    # sola. Si comparten avisos, el filtro no se aplico y la corrida recolectaria lo mismo
+    # varias veces. Se compara antes de dar los slugs por buenos.
+    from flujocero.quality.comparabilidad import busquedas_que_devuelven_lo_mismo
+
+    repetidas = [
+        f"{a} y {b}: {comunes} avisos en comun de {menor}"
+        for a, b, comunes, menor in busquedas_que_devuelven_lo_mismo(ids_por_comuna)
+    ]
+
     typer.echo(f"\n  {len(buenas)} comunas responden con avisos · {len(malas)} no")
+    if repetidas:
+        typer.echo(
+            "\n  ✗ Hay comunas que devuelven LOS MISMOS avisos. Un departamento esta en una"
+            "\n    sola comuna, asi que el portal no aplico el filtro: recolectar asi trae"
+            "\n    una comuna repetida N veces, y al cargar la primera se lleva las filas"
+            "\n    mientras el resto queda en cero.\n"
+        )
+        for linea in repetidas[:10]:
+            typer.echo(f"      {linea}")
+        typer.echo(
+            "\n    El `region_slug` es el sospechoso. Cambialo en `config/zonas.yml` y volve"
+            f"\n    a correr esto.  Regiones que el colector reconoce: {', '.join(pb.REGIONES)}"
+        )
+        raise typer.Exit(1)
     if malas:
         typer.echo(
             "\n  Cero tarjetas con HTTP 200 casi siempre es el SLUG DE REGION mal puesto,"
@@ -1986,6 +2018,7 @@ def crudo(
     Se agrega por dia porque una recoleccion es un dia: ver "30-ago: 40 blobs de venta, 4
     comunas" contra "8 comunas" contesta la pregunta de un vistazo.
     """
+    import json
     from collections import Counter
 
     from flujocero.sources.base import blobs_crudos
@@ -2013,6 +2046,39 @@ def crudo(
         typer.echo(f"  {dia}  {fte:<22} {n:>4} blobs · {len(distintos)} busquedas distintas")
         for d in distintos:
             typer.echo(f"      {d}")
+
+    # **Dos busquedas distintas que devuelven el MISMO documento.** El `.meta.json` guarda el
+    # sha del contenido desde siempre y nadie lo miraba. Si `venta_concepcion_p01` y
+    # `venta_talcahuano_p01` tienen el mismo sha, el portal ignoro el filtro de comuna y
+    # sirvio la misma pagina: la corrida "funciono" —200, 48 tarjetas por pagina— y no
+    # recolecto ocho comunas, recolecto una ocho veces.
+    #
+    # Al cargarlas, todas traen los mismos `MLC-`, asi que la primera se lleva las filas y
+    # las otras siete quedan en CERO. Eso es exactamente lo que se vio en fase 3, y por que
+    # cambiaba de comuna entre corridas: gana la que se carga primero.
+    por_sha: dict[str, list[str]] = {}
+    for b in blobs:
+        meta = b.with_name(b.name.replace(".json.gz", ".meta.json"))
+        if not meta.is_file():
+            continue
+        sha = json.loads(meta.read_text(encoding="utf-8")).get("sha_contenido")
+        if sha:
+            por_sha.setdefault(sha, []).append(b.name)
+    colisiones = [
+        ns
+        for ns in por_sha.values()
+        if len({"_".join(n.split("_")[:2]) for n in ns}) > 1  # busquedas DISTINTAS
+    ]
+    if colisiones:
+        typer.echo(
+            f"\n  ✗ {len(colisiones)} documentos identicos servidos a busquedas DISTINTAS."
+            "\n    El portal ignoro el filtro: no se recolectaron N comunas, se recolecto"
+            "\n    una N veces. Al cargar, la primera se lleva las filas y el resto queda en"
+            "\n    cero — no porque falten datos, sino porque son los mismos.\n"
+        )
+        for ns in colisiones[:8]:
+            typer.echo(f"      {' = '.join(sorted(ns))}")
+        raise typer.Exit(1)
 
 
 @app.command()

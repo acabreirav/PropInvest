@@ -98,3 +98,60 @@ def test_un_amoblado_con_gc_incluido_se_excluye_igual() -> None:
 def test_sin_titulo_no_se_excluye() -> None:
     """La ausencia de dato no es evidencia. §3.2: un `ND` no se rellena con una suposición."""
     assert not no_comparable(None) and not no_comparable("")
+
+
+# ------------------------- el filtro que el portal no aplico (T-049)
+
+from flujocero.quality.comparabilidad import busquedas_que_devuelven_lo_mismo  # noqa: E402
+
+
+def test_las_cinco_comunas_del_gran_concepcion() -> None:
+    """El caso real. `probar-comunas --fase 3` dijo **8/8, 48 tarjetas cada una** y las cinco
+    comunas del Gran Concepción habían devuelto exactamente los mismos 48 avisos. Contar
+    resultados no podía notarlo: el número era el correcto."""
+    mismos = frozenset(f"MLC-{i}" for i in range(48))
+    ids = {
+        "concepcion": mismos,
+        "talcahuano": mismos,
+        "hualpen": mismos,
+        "san-pedro-de-la-paz": mismos,
+        "chiguayante": mismos,
+        "antofagasta": frozenset(f"MLC-A{i}" for i in range(48)),
+        "la-serena": frozenset(f"MLC-L{i}" for i in range(48)),
+    }
+    pares = busquedas_que_devuelven_lo_mismo(ids)
+    afectadas = {a for a, _, _, _ in pares} | {b for _, b, _, _ in pares}
+    assert afectadas == {
+        "concepcion",
+        "talcahuano",
+        "hualpen",
+        "san-pedro-de-la-paz",
+        "chiguayante",
+    }
+    assert len(pares) == 10, "los diez pares de las cinco comunas, y ninguno mas"
+
+
+def test_comunas_de_verdad_distintas_no_disparan() -> None:
+    """La contraprueba. Un aviso mal geolocalizado no puede convertir el check en ruido."""
+    ids = {
+        "san-miguel": frozenset(f"MLC-{i}" for i in range(48)),
+        "la-florida": frozenset([*[f"MLC-F{i}" for i in range(47)], "MLC-0"]),  # 1 compartido
+    }
+    assert busquedas_que_devuelven_lo_mismo(ids) == []
+
+
+def test_una_busqueda_vacia_no_es_un_duplicado() -> None:
+    """Cero resultados ya lo agarra el conteo, y es otro diagnóstico: comuna sin oferta o
+    slug malo, no filtro ignorado. Mezclarlos mandaría a arreglar lo que no está roto."""
+    ids = {"a": frozenset(), "b": frozenset(), "c": frozenset(["MLC-1"])}
+    assert busquedas_que_devuelven_lo_mismo(ids) == []
+
+
+def test_el_solape_parcial_cuenta_desde_la_mitad() -> None:
+    """El umbral es del menor de los dos, no del total: una comuna chica contenida entera
+    dentro de una grande es el caso que hay que agarrar."""
+    grande = frozenset(f"MLC-{i}" for i in range(100))
+    chica = frozenset(f"MLC-{i}" for i in range(10))  # contenida entera
+    assert busquedas_que_devuelven_lo_mismo({"grande": grande, "chica": chica}) == [
+        ("chica", "grande", 10, 10)
+    ]

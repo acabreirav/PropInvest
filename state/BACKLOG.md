@@ -1167,3 +1167,37 @@ criterio_de_aceptacion:
   - [ ] Explicar los 103 `fuera_de_rango` de talcahuano mirando avisos concretos
   - [ ] Si el m2 de regiones es superficie total, el parser lo distingue o lo deja `ND`
         (§3.2: no se imputa) — nunca lo mezcla con m2 utiles
+
+
+## T-049 · El portal servia la MISMA pagina a cinco comunas distintas
+estado: hecha
+agente: colector
+fase: 3
+gate: make gates
+
+`cli autopsia venta_concepcion` y `cli autopsia venta_talcahuano` devolvieron salidas
+**identicas byte a byte**: mismos 513/512/514/512/524 KB, mismas 47/48/47/47/48 tarjetas,
+mismo reparto UF/CLP, mismo todo.
+
+Los blobs tienen nombres distintos y **el mismo contenido**. El portal ignoro el filtro de
+comuna y sirvio la misma pagina a las cinco comunas del Gran Concepcion. Al cargarlas todas
+traen los mismos `MLC-`: la primera se lleva las filas y las otras cuatro quedan en CERO —
+no por falta de datos, sino porque son los mismos datos. Y **cual gana depende del orden de
+carga**, que es exactamente por que talcahuano "existia" antes del rebuild y chiguayante
+despues. No hubo intercambio de etiquetas: hubo una sola comuna contada cinco veces.
+
+Tambien explica la mediana de 136 m2 de "chiguayante": no son departamentos de Chiguayante,
+es lo que el portal sirve cuando no aplica el filtro.
+
+**El noveno check vacio, y es el que autorizo toda la corrida.** `probar-comunas` dijo
+*"8/8, 48 tarjetas cada una"*. Contaba el numero correcto sobre el documento equivocado.
+Contar resultados nunca podia detectar esto.
+
+criterio_de_aceptacion:
+  - [x] `probar-comunas` compara los `MLC-` entre comunas, no solo los cuenta
+  - [x] `cli crudo` detecta blobs con el mismo `sha_contenido` bajo busquedas distintas — el
+        sha estaba en cada `.meta.json` desde siempre y nadie lo miraba
+  - [x] Funcion pura `busquedas_que_devuelven_lo_mismo`, con el caso real como test
+  - [x] Contraprueba: un aviso mal geolocalizado no dispara el check
+  - [ ] Encontrar el `region_slug` que el portal SI respeta para Bio-Bio, o registrar que no
+        existe y sacar Gran Concepcion del alcance hasta tener otra fuente

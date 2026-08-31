@@ -2023,3 +2023,30 @@ contestando preguntas de hecho por deducción. `embudo` para "¿dónde se cayó?
 "¿se trajo?", `autopsia` para "¿se entendió?".
 
 gates: VERDE — 641 tests.
+
+## 31-ago-2026 · T-049 · una comuna contada cinco veces
+
+`autopsia venta_concepcion` y `autopsia venta_talcahuano` dieron salidas **idénticas byte a
+byte**: 513/512/514/512/524 KB, 47/48/47/47/48 tarjetas, mismo reparto UF/CLP.
+
+Los blobs tienen nombres distintos y el mismo contenido. **El portal ignoró el filtro de
+comuna y sirvió la misma página a las cinco comunas del Gran Concepción.** Al cargarlas todas
+traen los mismos `MLC-`: la primera se lleva las filas, las otras cuatro quedan en cero. No
+por falta de datos — porque son los mismos datos.
+
+Y cuál gana depende del orden de carga. Ahí está la explicación del "intercambio" que yo
+había leído mal: talcahuano antes del rebuild, chiguayante después. No hubo swap de
+etiquetas; hubo una sola comuna contada cinco veces.
+
+También explica la mediana de 136 m² de "chiguayante": no son departamentos de Chiguayante,
+es lo que el portal devuelve cuando no aplica el filtro.
+
+**Noveno check vacío, y es el que autorizó toda la corrida.** `probar-comunas` dijo *"8/8, 48
+tarjetas cada una"*. Contaba el número correcto sobre el documento equivocado. Contar
+resultados nunca podía detectar esto — sólo compararlos.
+
+Ahora compara los `MLC-` entre comunas. Y `cli crudo` detecta blobs con el mismo
+`sha_contenido` bajo búsquedas distintas: **ese sha estaba en cada `.meta.json` desde el
+primer día** y nadie lo miraba.
+
+gates: VERDE — 645 tests.

@@ -88,3 +88,40 @@ def marca(texto: str | None) -> str:
 
 
 __all__ = ["DUDOSO", "NO_COMPARABLE", "dudoso", "marca", "no_comparable"]
+
+
+# --------------------------------------------------- el filtro que el portal no aplico
+
+
+def busquedas_que_devuelven_lo_mismo(
+    ids_por_busqueda: dict[str, frozenset[str]], umbral: float = 0.5
+) -> list[tuple[str, str, int, int]]:
+    """Pares de busquedas cuyos resultados se solapan demasiado para ser cosas distintas.
+
+    **Contar resultados no basta.** Esa fue la leccion cara de fase 3: `probar-comunas` dijo
+    *"8/8, 48 tarjetas cada una"* y las cinco comunas del Gran Concepcion habian devuelto
+    **exactamente los mismos 48 avisos**. El portal ignoro el filtro de comuna y sirvio la
+    misma pagina cinco veces. El conteo no podia notarlo, porque el numero era el correcto.
+
+    Al cargar, todas traen los mismos `MLC-`: la primera se lleva las filas y las otras
+    cuatro quedan en CERO — no por falta de datos, sino porque son los mismos datos. Y cual
+    gana depende del orden de carga, asi que la comuna "que existe" cambia entre corridas.
+
+    Un departamento esta en una sola comuna. Dos comunas distintas no pueden compartir un
+    aviso, asi que **cualquier** solape es sospechoso; el umbral por defecto exige la mitad
+    para no disparar por un aviso mal geolocalizado, que si pasa.
+
+    Devuelve `(busqueda_a, busqueda_b, comunes, minimo_de_los_dos)`, ordenado.
+    """
+    salida: list[tuple[str, str, int, int]] = []
+    claves = sorted(ids_por_busqueda)
+    for i, a in enumerate(claves):
+        for b in claves[i + 1 :]:
+            ia, ib = ids_por_busqueda[a], ids_por_busqueda[b]
+            if not ia or not ib:
+                continue
+            comunes = len(ia & ib)
+            menor = min(len(ia), len(ib))
+            if comunes >= menor * umbral:
+                salida.append((a, b, comunes, menor))
+    return salida
