@@ -1971,5 +1971,49 @@ def embudo(
     )
 
 
+@app.command()
+def crudo(
+    fuente: str = typer.Option("", help="un source_id, o vacio para todas"),
+    contiene: str = typer.Option("", help="filtra por parte del nombre, ej. 'venta_conce'"),
+) -> None:
+    """Que hay en `data/raw/`, agrupado por dia. La zona cruda es la fuente de verdad (§3.6).
+
+    Sirve para separar dos preguntas que se confunden todo el tiempo y llevan a acciones
+    opuestas: **¿el colector no trajo esto, o lo trajo y se perdio al cargar?** Si el blob
+    existe, el problema esta en el parser o en la carga y se arregla con `rebuild --from-raw`,
+    sin pedirle nada al portal. Si no existe, hay que volver a recolectar.
+
+    Se agrega por dia porque una recoleccion es un dia: ver "30-ago: 40 blobs de venta, 4
+    comunas" contra "8 comunas" contesta la pregunta de un vistazo.
+    """
+    from collections import Counter
+
+    from flujocero.sources.base import blobs_crudos
+
+    blobs = [b for b in blobs_crudos(fuente or None) if b.name != "robots.txt.json.gz"]
+    if contiene:
+        blobs = [b for b in blobs if contiene in b.name]
+    if not blobs:
+        typer.echo("  No hay blobs que calcen con ese filtro en data/raw/.")
+        raise typer.Exit(1)
+
+    # `.../{source_id}/{yyyy}/{mm}/{dd}/nombre.json.gz` — el §3.6 fija esa forma.
+    por_dia: Counter[tuple[str, str]] = Counter()
+    nombres: dict[tuple[str, str], set[str]] = {}
+    for b in blobs:
+        clave = (b.parts[-5], f"{b.parts[-4]}-{b.parts[-3]}-{b.parts[-2]}")
+        por_dia[clave] += 1
+        # El nombre es `{operacion}_{comuna}_pNN`: se agrupa sin la pagina para contar
+        # cuantas comunas distintas se recolectaron ese dia, que es lo que uno quiere saber.
+        nombres.setdefault(clave, set()).add("_".join(b.name.split("_")[:2]))
+
+    typer.echo(f"\n  {len(blobs)} blobs\n")
+    for (fte, dia), n in sorted(por_dia.items()):
+        distintos = sorted(nombres[(fte, dia)])
+        typer.echo(f"  {dia}  {fte:<22} {n:>4} blobs · {len(distintos)} busquedas distintas")
+        for d in distintos:
+            typer.echo(f"      {d}")
+
+
 if __name__ == "__main__":
     app()

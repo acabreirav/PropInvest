@@ -1955,3 +1955,37 @@ comuna equivocada. Con eso la afirmación "chiguayante tiene 103 unidades" pasa 
 auditable en vez de creíble.
 
 gates: VERDE — 641 tests.
+
+## 31-ago-2026 · dos errores míos, corregidos con la evidencia
+
+`embudo --fase 3 --detalle` echó abajo dos cosas que yo había afirmado.
+
+**1. No hubo intercambio de etiquetas.** Las 232 unidades de Chiguayante salieron de
+`venta_chiguayante_p01…p05`. La etiqueta es correcta y sale del filtro con el que se pidió la
+página. Mi lectura de "talcahuano y chiguayante se intercambiaron" era una inferencia sobre
+dos tablas de dos momentos distintos, no una medición.
+
+**2. El precio en pesos NO era la causa de las comunas faltantes.** Las cuatro comunas de
+regiones que sí están tienen **`0 con precio en pesos`**. En regiones se publica en UF igual
+que en Santiago. Mi diagnóstico de T-048 —"en regiones publicar en pesos es mucho más común y
+por eso se perdieron cuatro comunas"— era una hipótesis plausible que presenté como
+conclusión, y es falsa.
+
+El arreglo de `precio_clp` **se queda igual**, porque lo que sí está medido sigue en pie: en
+la RM son 143 unidades, el 6,1% de las ventas, con 11,9% en Santiago y 11,8% en San Miguel.
+Recupera dato real. Lo que no hace es explicar Gran Concepción.
+
+**Lo que el output sí muestra, y es nuevo:** la mediana de m² de Chiguayante es **136 m²**,
+contra 79 en Antofagasta, 70 en La Serena y 65 en Coquimbo. Ahí están sus 103
+`fuera_de_rango`. Un departamento mediano de 136 m² en Chiguayante no es creíble: o el m² que
+trae la tarjeta en esa comuna es superficie total y no útil, o el portal está sirviendo otro
+producto cuando la comuna tiene poco stock de departamentos.
+
+Se agregó `cli crudo` para separar las dos preguntas que se venían confundiendo y que llevan
+a acciones opuestas: **¿el colector no lo trajo, o lo trajo y se perdió al cargar?** Si el
+blob existe, se arregla con `rebuild --from-raw` sin pedirle nada al portal; si no existe,
+hay que volver a recolectar. Yo venía respondiendo eso por aritmética —"3.812 avisos ≈ 8
+comunas × 5 páginas × 2 operaciones × 48, luego las trajo todas"— que es justo el tipo de
+razonamiento que no aguanta.
+
+gates: VERDE — 641 tests.
