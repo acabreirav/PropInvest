@@ -130,7 +130,12 @@ ingresos:
   # arriendan al mismo precio, y mezclarlos corre la mediana hacia donde haya mas oferta.
   # Los cortes siguen la oferta real del stock chileno: studio, 1D, 2D chico, 2D grande, 3D+.
   # El tope de 140 no es arbitrario: sobre eso se pierde el regimen DFL2.
-  rangos_m2: [[0, 35], [35, 50], [50, 70], [70, 100], [100, 140]]
+  # D-018 (30-ago-2026): se parte `0-35` en `0-25` y `25-35`. Medido sobre datos reales, la
+  # banda `0-35` estaba dominada por sus unidades grandes —el 60% de los comparables 1D1B
+  # media 31-35 m2— asi que su mediana describia a un depto grande. A uno de 22-26 m2 se le
+  # acreditaba +17% de arriendo, y como el arriendo es el numerador del yield, ese +17% se
+  # trasladaba entero al yield y lo subia en el ranking. Costo: 34 unidades dejan de rankear.
+  rangos_m2: [[0, 25], [25, 35], [35, 50], [50, 70], [70, 100], [100, 140]]
 
 vacancia_y_riesgo:
   vacancia_gestion_individual: {v: 0.08, evidence: V, rango: [0.08, 0.10]}

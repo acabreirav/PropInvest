@@ -1555,3 +1555,31 @@ vieja.
 Livewire cargo algo. Los montos visibles siguen siendo `$231.000` y `$45.000`, que son el
 `min_price` y el `min_ggcc` del Estudio, o sea los mismos del estatico. Falta mirar el blob
 para saber si aparecieron unidades con m2. Pedido al usuario.
+
+---
+
+## 2026-08-30 · D-018: se parte la banda `0-35`. Decidido con numeros, no con intuicion
+
+La corrida del usuario despues de llenar `m2_mediana` dio el numero que faltaba:
+**9 de las 20 primeras** estaban mas chicas que el depto tipico de su celda, con desvios de
+-15% a -44%. La #1 en -26%; la #3 en -32%; una de 18 m2 en **-44%**.
+
+Y el costo, medido con `cli bandas` sobre datos reales: **34 unidades dejan de rankear**
+(de 1.045, un 3%), cero empiezan, y la banda mas heterogenea pasa de mezclar 2,1x de
+superficie a 1,5x.
+
+El canje se presento asi y el usuario aprobo: 34 unidades recuperables recolectando, a cambio
+de sacar un sesgo sistematico que afectaba a casi la mitad del top. **El sesgo no se promedia**
+—va siempre en la misma direccion, infla lo chico— y lo chico es justo lo que quedaba arriba.
+
+Queda un test que impide volver atras: ninguna banda puede mezclar mas del doble de
+superficie. La banda `0-35` daba 2,33x contra el m2 minimo que acepta el colector, asi que el
+test la rechaza. El invariante vale mas que el valor: alguien puede querer re-ensanchar
+mañana para ganar celdas, y ahi el test le recuerda por que no.
+
+**Lo que NO arregla, y esta escrito en la decision:** `0-25` sigue mezclando 17 con 25 m2. El
+sesgo baja a la mitad, no desaparece. La solucion de fondo son comparables con superficie
+exacta por unidad —lo que Assetplan podria dar si su pagina renderizada trae unidades— y no
+medianas de banda.
+
+**Gates:** VERDE.

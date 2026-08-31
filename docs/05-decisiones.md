@@ -578,3 +578,74 @@ fundamento normativo, no la interpretación de un ejecutivo.
 
 **Cómo lo trata el modelo mientras tanto:** ambos escenarios ya se calculan. La segunda
 unidad, si existiera, correría `sin_subsidio` — que es el supuesto conservador.
+
+---
+
+## D-018 · Partir la banda de m² `0-35` en `0-25` y `25-35`
+
+- **Fecha:** 30-ago-2026
+- **Estado:** aceptada por el inversionista
+- **Tarea:** T-941
+- **Cambia:** `config/params.yml:ingresos.rangos_m2`
+
+### El problema
+
+Las primeras filas del ranking real eran unidades de **18 a 23 m²**, todas emparejadas
+contra la celda de arriendo `0-35 m²`. Medido sobre 1D1B en esa banda:
+
+| tramo | n | arriendo mediano |
+|---|---|---|
+| 17–21 m² | 11 | $320.000 |
+| 22–26 m² | 37 | **$300.000** |
+| 27–30 m² | 145 | $334.800 |
+| 31–35 m² | 289 | $370.000 |
+| **la banda entera** | **482** | **$350.000** |
+
+El **60% de los comparables mide 31–35 m²**, así que la mediana de la banda describe a un
+departamento grande. Acreditársela a uno de 22–26 le regalaba **+17% de arriendo**.
+
+Y el arriendo es el **numerador del yield**: ese +17% se trasladaba entero al yield y
+empujaba a la unidad hacia arriba en el ranking. El sesgo **no se promedia**, porque va
+siempre en la misma dirección —infla lo chico— y lo chico es justo lo que quedaba arriba.
+
+Sobre la corrida real, **9 de las 20 primeras** estaban más chicas que el depto típico de su
+celda, con desvíos de −15% a −44%. La #1 estaba −26%; la #3, −32%.
+
+### La decisión
+
+Se agrega el corte en 25 m². La banda más heterogénea pasa de mezclar **2,1x de superficie a
+1,5x**.
+
+### El costo, medido antes de decidir
+
+| | |
+|---|---|
+| celdas que pueden rankear | 138 → 135 (−3) |
+| **unidades que dejan de rankear** | **34** (de 1.045 ≈ 3%) |
+| unidades que empiezan a rankear | 0 |
+
+Las 34 se recuperan recolectando: `recolectar-portal --dirigida`.
+
+**El umbral de 8 comparables del §7.3 NO se bajó para compensar.** Partir la muestra deja
+algunas celdas bajo el mínimo, y la respuesta correcta es conseguir comparables, no dejar de
+exigirlos: una mediana de tres avisos es ruido con cara de dato.
+
+### Lo que esto NO arregla
+
+`0-25` sigue mezclando 17 con 25 m². **El sesgo baja a la mitad, no desaparece.** La solución
+de fondo son comparables con superficie exacta por unidad, no medianas de banda — que es lo
+que Assetplan podría dar si su página renderizada trae unidades (ADR 008 §4).
+
+Tampoco se corrige el arriendo de ninguna unidad: inventar un ajuste por m² sería imputar, y
+el §3.2 lo prohíbe. Lo que se hizo fue cambiar cómo se agrupa, no cómo se calcula.
+
+### Por qué se decidió con el humano y no solo
+
+El §8.4 manda detenerse cuando un supuesto mueve el ranking en más de un 10% de posiciones.
+Este lo mueve. Se midió el costo con `cli bandas`, se presentó el canje, y el inversionista
+aprobó el 30-ago-2026.
+
+### Cómo se revierte
+
+Cambiando una línea en `params.yml`. Ningún dato se pierde: la agregación es un derivado que
+se recalcula con `agregar-arriendo`.

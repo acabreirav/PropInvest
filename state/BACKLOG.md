@@ -827,7 +827,7 @@ motivo: >
   dato real es exactamente lo que el §3.2 pide de un `E`.
 
 ## T-941 · Una banda de m2 no es homogenea, y el sesgo cae justo en el top del ranking
-estado: medido · decision PENDIENTE DEL USUARIO (§8.4) · comando: `cli bandas` · fase: 1
+estado: hecha · decision D-018 aprobada por el usuario el 30-ago-2026 · fase: 1
 hallazgo: >
   Las primeras filas del ranking real son unidades de **18 a 23 m2**, todas emparejadas
   contra la celda de arriendo `0-35 m2`. Medido sobre 1D1B en esa banda:

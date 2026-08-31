@@ -342,3 +342,41 @@ def test_sin_m2_mediana_no_se_inventa_un_desvio() -> None:
         con.close()
     assert r.unidades
     assert "X" not in r.desvio_m2
+
+
+# --------------------------------------------------------------- el contrato de las bandas
+
+
+def test_las_bandas_de_m2_son_contiguas_y_terminan_en_el_limite_dfl2() -> None:
+    """Un hueco entre bandas deja unidades sin celda y nadie se entera: `etiqueta_rango`
+    devuelve `None` y la unidad cae en `fuera_de_rango`, que se lee como "es muy grande"."""
+    from flujocero.config import cargar
+
+    rangos = cargar("params").crudo("ingresos.rangos_m2")
+    assert rangos[0][0] == 0
+    assert rangos[-1][1] == 140, "sobre 140 m² se pierde el DFL2 (§2.5)"
+    for (_a, b), (c, _d) in zip(rangos, rangos[1:], strict=False):
+        assert b == c, f"hueco entre bandas: {b} → {c}"
+
+
+def test_ninguna_banda_mezcla_mas_del_doble_de_superficie() -> None:
+    """D-018. Es el invariante que impide volver a la banda `0-35`.
+
+    Una banda que mezcla 2x de superficie compara un depto con otro del doble de tamaño y les
+    da la misma mediana de arriendo. Medido: la banda `0-35` regalaba +17% de arriendo a las
+    unidades de 22-26 m², y como el arriendo es el numerador del yield, ese sesgo empujaba
+    unidades al tope del ranking sin merecerlo.
+
+    El piso de la primera banda es el m² más chico que el colector acepta, no cero: dividir
+    por cero no mide nada.
+    """
+    from flujocero.config import cargar
+    from flujocero.sources.portal_busqueda import RANGO_M2
+
+    piso_minimo = RANGO_M2[0]
+    for a, b in cargar("params").crudo("ingresos.rangos_m2"):
+        factor = Decimal(b) / max(Decimal(a), Decimal(piso_minimo))
+        assert factor <= 2, (
+            f"la banda {a}-{b} mezcla {factor:.1f}x de superficie. Ver D-018: "
+            "acreditarle a un depto chico la mediana de uno grande le infla el yield."
+        )
