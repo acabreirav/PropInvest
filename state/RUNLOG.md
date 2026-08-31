@@ -1583,3 +1583,38 @@ exacta por unidad —lo que Assetplan podria dar si su pagina renderizada trae u
 medianas de banda.
 
 **Gates:** VERDE.
+
+---
+
+## 2026-08-30 · D-018 aplicada: la que era #1 del ranking era un artefacto
+
+Corrida del usuario despues del cambio de bandas. Antes → despues:
+
+```
+  rankeables            1.843 → 1.811   (-32; se habian predicho -34)
+  llegan al ranking     1.045 → 1.015
+  sesgadas en el top20      9 →     3
+  sin_comparables       1.027 → 1.061   (+34: las que perdieron su celda)
+```
+
+**Lo que se cayo del top 15**, todas unidades chicas con sesgo grande:
+
+```
+  MLC-3907646442   23 m2   yield 10,24%   sesgo -26%   ← era la #1
+  MLC-2076401873   21 m2   yield  7,83%   sesgo -32%   ← era la #3
+  MLC-1903256663   18 m2   yield  6,88%   sesgo -44%
+  MLC-1942658997   18 m2   yield  6,83%   sesgo -44%
+```
+
+La #1 tenia **10,24% de yield bruto**, muy por encima de todo lo demas, y estaba emparejada
+contra una celda cuyo depto tipico era 26% mas grande. Con la banda partida ya no tiene 8
+comparables en `0-25`: su numero no bajo, **se quedo sin forma de medirlo**. Es la distincion
+que importa — no descubrimos que era mala, descubrimos que no podiamos evaluarla.
+
+El nuevo tope es 7,97%, y el bloque que lo sigue son unidades de 51 a 70 m2 en
+`san-miguel/lo-vial`, comparadas contra celdas de su tamano.
+
+**Lo que quedo**: 3 de 20 siguen sesgadas, ahora en la banda `50-70` con desvios de -15% a
+-22%. Es la mitad del problema de antes y vive en otra banda. El aviso del ranking ahora dice
+en que banda esta el sesgo restante, en vez de repetir el consejo que ya tomamos.
+

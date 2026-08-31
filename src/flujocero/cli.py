@@ -1112,11 +1112,20 @@ def oportunidades(
                 f"      {u.unidad_key}  {u.m2_utiles:>5.0f} m²  {dv:+.0%} vs su celda "
                 f"({n} comparables)"
             )
+        bandas_tocadas = sorted(
+            {
+                r.procedencia_arriendo[u.unidad_key][0].split("·")[-1].strip()
+                for u, _ev, _dv in sesgadas
+            }
+        )
         typer.echo(
             "\n    NO se corrige el arriendo: inventar un ajuste sería imputar (§3.2)."
-            "\n    Lo que corresponde es angostar las bandas de `ingresos.rangos_m2`, y eso"
-            "\n    mueve el ranking más de un 10%, así que es una decisión tuya (§8.4)."
-            "\n    Corré `cli bandas` para ver el costo de angostarlas."
+            f"\n    El sesgo que queda vive en {', '.join(bandas_tocadas)}."
+            "\n    Ya se angostó `0-35` en D-018 y eso sacó 6 de las 9 que estaban sesgadas;"
+            "\n    partir otra banda tiene el mismo canje —menos sesgo, menos celdas— y se"
+            "\n    mide con `cli bandas --propuesta <cortes>` antes de decidir (§8.4)."
+            "\n    La solución de fondo es otra: comparables con superficie exacta por unidad,"
+            "\n    no medianas de banda."
         )
 
 
