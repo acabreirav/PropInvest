@@ -2208,3 +2208,42 @@ directo. Es tamizaje, no cotización — queda como T-056, y ninguna tasa de `pa
 salir de ahí.
 
 gates: VERDE — 650 tests.
+
+## 31-ago-2026 · `cli permanencia` — contar avisos no mide vacancia
+
+El usuario fue a Portal Inmobiliario, dibujó un recuadro de **280 × 453 metros** sobre la
+manzana del departamento y trajo los avisos de arriendo de ahí. Su pregunta: son muchos,
+¿cuánta vacancia hay?
+
+**Primero un error mío, corregido con la evidencia.** Leí que el barrio de esos avisos era
+"Parque O'Higgins" y concluí que la búsqueda estaba en otra zona. Estaba mirando la etiqueta
+en vez del mapa: la URL trae el recuadro exacto y son tres por cinco cuadras. Él confirmó
+después que Google le daba mal la dirección y que Arturo Prat 324 sí está en San Diego.
+
+**Y la pregunta de fondo es buena y no se contesta contando.** Un barrio con 30
+publicaciones puede arrendarlas en dos semanas y otro con 10 puede tenerlas seis meses
+colgadas. Lo que importa no es cuántas hay: es **cuánto duran**.
+
+Eso sí se puede medir, y la zona cruda lo tenía guardado sin que nadie lo mirara: hay una
+foto de mayo y otra de agosto. Un aviso que aparece en las dos estuvo cuatro meses en el
+mercado; uno que estaba en mayo y ya no está, se arrendó.
+
+`cli permanencia` cruza las dos fotos por microzona. Tres decisiones de diseño:
+
+- **Lee del blob, no de la tabla.** `fact_arriendo_comp` guarda solo el último `fetched_at`,
+  así que no distingue "visto en mayo y en agosto" de "visto solo en agosto". La zona cruda
+  sí, y para eso existe (§3.6).
+- **Parte por el hueco más grande entre fechas, no por la mitad de la lista.** Una
+  recolección ocupa varios días seguidos —es una sola foto—, y partir por la mitad mezclaría
+  el final de mayo con agosto: la ventana "nueva" tendría las dos campañas y la permanencia
+  saldría inflada sin que nada avisara. Si el hueco máximo es menor a 21 días, se niega a
+  medir en vez de devolver un número que no significa nada.
+- **Dice lo que el número NO es**: los operadores republican con `MLC-` nuevo, así que la
+  permanencia real es mayor que la medida; un aviso retirado se ve igual que uno arrendado.
+  El sesgo es el mismo en todas las microzonas, así que la comparación vale aunque el nivel
+  absoluto no.
+
+Contexto que sí se pudo medir hoy: en avisos activos de 1D1B 25-35 m², `santiago/san-diego`
+tiene 14 — a mitad de tabla, contra 30 de Santa Isabel y 28 del centro histórico.
+
+gates: VERDE — 650 tests.

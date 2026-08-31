@@ -2392,6 +2392,118 @@ def autopsia(
 
 
 @app.command()
+def permanencia(
+    microzona: str = typer.Option("", help="una microzona, o vacio para todas"),
+    minimo: int = typer.Option(8, help="minimo de avisos en la foto vieja para reportarla"),
+) -> None:
+    """Cuantos avisos de arriendo de la foto vieja SIGUEN publicados en la nueva.
+
+    **Contar avisos no mide vacancia.** Un barrio con 30 publicaciones puede arrendarlas todas
+    en dos semanas y otro con 10 puede tenerlas seis meses colgadas. Lo que importa no es
+    cuantas hay: es cuanto duran. Y eso solo se ve con dos fotos separadas en el tiempo.
+
+    La zona cruda las tiene: mayo y agosto. Un aviso que aparece en las dos estuvo en el
+    mercado cuatro meses; uno que estaba en mayo y ya no esta, se arrendo (o se retiro).
+
+    **Lo que este numero NO es**, y hay que decirlo antes de usarlo:
+      - Un operador multifamily republica con `MLC-` nuevo cada vez, asi que la permanencia
+        real es MAYOR que la medida. El sesgo va hacia abajo.
+      - Un aviso retirado se ve igual que uno arrendado.
+      - No es una tasa de vacancia: es rotacion de la OFERTA publicada.
+
+    Pero el sesgo es el mismo en todas las microzonas, asi que la **comparacion entre ellas
+    si vale**, aunque el nivel absoluto no. Eso es lo que se busca: saber si tu barrio rota
+    mas rapido o mas lento que el de al lado.
+    """
+    import gzip
+    import json
+    from collections import defaultdict
+
+    from flujocero.sources.base import blobs_crudos
+    from flujocero.sources.portal_busqueda import parse_busqueda
+
+    blobs = [b for b in blobs_crudos("portal_busqueda") if b.name.startswith("arriendo_")]
+    if not blobs:
+        typer.echo("  No hay blobs de arriendo en data/raw/. `cli crudo` lista lo que hay.")
+        raise typer.Exit(1)
+
+    # `{fecha: {microzona: set(MLC-)}}`, leyendo del blob y no de la base: la tabla guarda
+    # solo el ULTIMO `fetched_at`, asi que no distingue "visto en mayo y en agosto" de
+    # "visto solo en agosto". La zona cruda si lo distingue, y para eso existe (§3.6).
+    por_fecha: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    for b in blobs:
+        meta_ruta = b.with_name(b.name.replace(".json.gz", ".meta.json"))
+        if not meta_ruta.is_file():
+            continue
+        url = json.loads(meta_ruta.read_text(encoding="utf-8")).get("source_url", "")
+        dia = f"{b.parts[-4]}-{b.parts[-3]}-{b.parts[-2]}"
+        html = gzip.decompress(b.read_bytes()).decode("utf-8", errors="ignore")
+        for t in parse_busqueda(html, url, "arriendo", datetime.now(UTC), str(b), "x"):
+            if t.microzona_id:
+                por_fecha[dia][t.microzona_id].add(t.portal_id)
+
+    fechas = sorted(por_fecha)
+    if len(fechas) < 2:
+        typer.echo(f"  Solo hay una fecha de recoleccion ({fechas[0] if fechas else '—'}).")
+        typer.echo("  Hacen falta dos fotos separadas en el tiempo para medir permanencia.")
+        raise typer.Exit(1)
+
+    # Se parte por el HUECO MAS GRANDE entre fechas, no por la mitad de la lista. Una
+    # recoleccion ocupa varios dias seguidos —es una sola foto—, y partir por la mitad de la
+    # lista mezclaria el final de mayo con agosto: la ventana "nueva" contendria las dos
+    # campanas y la permanencia saldria inflada sin que nada avisara.
+    from datetime import date as _date
+
+    def _d(f: str) -> _date:
+        a_, m_, d_ = (int(x) for x in f.split("-"))
+        return _date(a_, m_, d_)
+
+    huecos = [((_d(b_) - _d(a_)).days, b_) for a_, b_ in zip(fechas, fechas[1:], strict=False)]
+    dias_hueco, corte = max(huecos)
+    if dias_hueco < 21:
+        typer.echo(
+            f"  Las recolecciones estan a {dias_hueco} dias como maximo unas de otras.\n"
+            "  Con esa separacion no se mide permanencia: casi nada alcanza a arrendarse."
+        )
+        raise typer.Exit(1)
+    vieja: dict[str, set[str]] = defaultdict(set)
+    nueva: dict[str, set[str]] = defaultdict(set)
+    for f in fechas:
+        destino = vieja if f < corte else nueva
+        for mz, ids in por_fecha[f].items():
+            destino[mz] |= ids
+
+    v_ini, v_fin = fechas[0], max(f for f in fechas if f < corte)
+    n_ini, n_fin = corte, fechas[-1]
+    typer.echo(f"\n  foto vieja: {v_ini} a {v_fin}   ·   foto nueva: {n_ini} a {n_fin}\n")
+
+    filas = []
+    for mz, ids in vieja.items():
+        if microzona and mz != microzona:
+            continue
+        if len(ids) < minimo:
+            continue
+        siguen = len(ids & nueva.get(mz, set()))
+        filas.append((siguen / len(ids), mz, len(ids), siguen, len(nueva.get(mz, set()))))
+    if not filas:
+        typer.echo(f"  Ninguna microzona llega a {minimo} avisos en la foto vieja.")
+        raise typer.Exit(1)
+
+    filas.sort()
+    typer.echo(f"  {'microzona':<40} {'antes':>6} {'siguen':>7} {'%':>6} {'ahora':>6}")
+    for pct, mz, antes, siguen, ahora in filas:
+        marca = "  <--" if microzona and mz == microzona else ""
+        typer.echo(f"  {mz:<40} {antes:>6} {siguen:>7} {pct:>5.0%} {ahora:>6}{marca}")
+
+    typer.echo(
+        "\n  Menos % = la oferta rota mas rapido = mas facil arrendar ahi."
+        "\n  Un aviso que sigue publicado cuatro meses despues no se arrendo."
+        "\n\n  Ojo con el nivel absoluto: los operadores republican con MLC- nuevo, asi que la"
+        "\n  permanencia real es MAYOR que esta. La comparacion entre microzonas si vale."
+    )
+
+
+@app.command()
 def buscar_en_crudo(
     patron: str = typer.Argument(..., help="texto o regex a buscar, ej. 'units_by_size'"),
     contiene: str = typer.Option("", help="filtra los blobs por nombre, ej. 'assetplan'"),
