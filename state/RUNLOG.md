@@ -2401,3 +2401,13 @@ Si no corrio nada a mano, hay que buscar que lo movio.
 - Con esto los 100 puntos del §12 tienen fuente: deficit/pie/TIR (motor), riesgo (censo+
   avisos), descuento (precios), catalizador (OSM+curaduria). Pendiente correr en la maquina
   real: recolectar-metro → puente-censo → oportunidades → sensibilidad catalizador=0.
+
+## 2026-09-01 · dos cierres
+
+- **Misterio de medianas resuelto**: agg_arriendo_microzona esta calculada 31-ago 22:29:25
+  con 1.024 celdas; la corrida pegada en el chat mostro 1.005. Hubo una segunda
+  agregar-arriendo esa noche tras mas avisos (la recoleccion dirigida de arriendo estaba
+  en la lista de pendientes del inversionista). Nada movio datos por si solo.
+- **habilitacion_inicial_uf: 0 → 25** por decision del inversionista, con la medicion
+  previa de que no mueve el ranking (0 entradas/salidas/posiciones). CoC y TIR bajan a su
+  nivel honesto: el modelo deja de asumir que amoblar la entrega cuesta $0.

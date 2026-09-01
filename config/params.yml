@@ -117,7 +117,10 @@ gastos_de_cierre:
   # reparaciones. Parte en 0 —el comportamiento historico— a proposito: un numero
   # inventado seria imputar (§3.2). Es un `E` declarado con rango para poder medirlo con
   # `cli sensibilidad gastos_de_cierre.habilitacion_inicial_uf=25` y decidir con el §8.4.
-  habilitacion_inicial_uf: {v: 0, evidence: E, rango: [0, 60]}
+  # Activada en UF 25 (~$1M: cortinas, lamparas, pintura) por decision del inversionista
+  # el 01-sep-2026, tras medir con `sensibilidad` que no mueve ni una posicion del
+  # ranking: solo baja CoC y TIR a su nivel honesto. El rango queda para re-medirla.
+  habilitacion_inicial_uf: {v: 25, evidence: E, rango: [0, 60]}
 
 iva_vivienda:
   exencion_vigente: {v: null, evidence: C, nota: "aprobada por Congreso 04-ago-2026; publicación en DO NO confirmada al 28-ago-2026"}

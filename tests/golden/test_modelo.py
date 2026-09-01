@@ -269,7 +269,9 @@ def test_el_cash_on_cash_se_calcula_sobre_el_pie_que_de_verdad_se_pone(cfg) -> N
     p, inv = cfg
     ev = evaluar(unidad(es_vivienda_nueva=False), escenario(pie_pct=D("0.10")), p, inv)
     cierre = gastos_de_cierre_uf(D(3000), ev.credito_uf, p)
-    assert ev.capital_invertido_uf == D(3000) * D("0.20") + cierre
+    # pie + cierre + habilitacion: la plata que sale del bolsillo el dia uno, completa.
+    habilitacion = p.d("gastos_de_cierre.habilitacion_inicial_uf")
+    assert ev.capital_invertido_uf == D(3000) * D("0.20") + cierre + habilitacion
 
 
 def test_el_subsidio_tampoco_se_aplica_sobre_el_tope_de_uf6000(cfg) -> None:
