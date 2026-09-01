@@ -2350,3 +2350,22 @@ igual que docs/02. El gap lista→cierre (Capa 5) sigue sin fuente — el yield 
 lista, como siempre, hasta que exista `factor_gap_lista_cierre`.
 
 Suite completa tras el conjunto: 632 passed. Gates verdes en cada paso.
+
+## 2026-09-01 · T-014 + T-014b · el Censo entra y riesgo_microzona despierta
+
+Cadena completa, verificada contra los archivos reales en la maquina del inversionista:
+
+- `ingerir-censo`: 197.032 manzanas-entidad (CSV oficial con '*' enmascarado → NULL, coma
+  decimal, ID_ENTIDAD destruido por Excel EN el archivo oficial — se usa MANZENT).
+  Geometria: la llave numerica del DBF viene TRUNCADA del origen (~7 cifras); la buena es
+  la gemela textual `Mzent_TX`. 77.733 manzanas con poligono, cruce 65-72% por region
+  (el resto: manzanas sin viviendas). Desocupacion censal RM: 5,2%.
+- `recolectar-barrios`: classified_locations de MELI VIVO (a diferencia de /search, 403
+  desde ADR 003): 196 requests, 158 barrios, 18/18 comunas, 107 microzonas con centro.
+- `puente-censo` (nuevo): Voronoi manzana → barrio + riesgo por microzona (desocupacion,
+  saturacion B2, profundidad de arriendo; pesos E en params). ADR 009 declara los limites
+  de la aproximacion. Emparejar usa el riesgo medido y CUENTA cuantas unidades quedan en
+  el 0.5 por defecto — el defecto no es un dato.
+
+Pendiente de correr en la maquina real: `puente-censo` + `oportunidades` (activa el 15%
+del §12) + `sensibilidad score.pesos.riesgo_microzona=0` para medir cuanto mueve.

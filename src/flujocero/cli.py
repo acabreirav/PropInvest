@@ -1148,6 +1148,20 @@ def oportunidades(
     # `puntuar()` sobre el conjunto vivo real —no una lista hardcodeada— y redistribuye su
     # peso entre los que si miden; aca solo se dice. Un score "sobre 100" que midio 75 y no
     # lo dice es la casilla vacia de siempre.
+    # T-014b · si el puente corrio, el riesgo viene medido; si no, todas al 0.5. Un
+    # componente donde el defecto domina ordena poco, y eso se dice con numeros.
+    total_riesgo = r.riesgo_medido + r.riesgo_por_defecto
+    if r.riesgo_medido and r.riesgo_por_defecto:
+        typer.echo(
+            f"\n  riesgo_microzona: medido en {r.riesgo_medido} unidades · "
+            f"{r.riesgo_por_defecto} quedan en 0.5 por defecto (sin puente censal ahi)."
+        )
+    elif total_riesgo and not r.riesgo_medido:
+        typer.echo(
+            "\n  riesgo_microzona sin medir (0.5 en todas): corre `puente-censo` despues de"
+            "\n  `ingerir-censo` y `recolectar-barrios` para activar ese 15% del §12."
+        )
+
     inertes = next((ev.score_inertes for ev in evals if not ev.excluido), ())
     if inertes:
         muerto = op.peso_inerte(inertes, p)
@@ -1357,6 +1371,64 @@ def recolectar_barrios() -> None:
             "\n    con centro NULL (ND) y no participan del puente con las manzanas."
         )
     typer.echo("\n  Siguiente: el puente manzana → microzona por barrio mas cercano (T-014b).")
+
+
+@app.command()
+def puente_censo() -> None:
+    """T-014b · asigna cada manzana censal a su barrio mas cercano y calcula el riesgo.
+
+    Necesita `ingerir-censo` (manzanas con centroide) y `recolectar-barrios` (microzonas
+    con centro) corridos antes. Es un derivado puro: re-correrlo reconstruye el puente y
+    el riesgo completos. La aproximacion de Voronoi esta declarada en docs/adr/009.
+    """
+    import duckdb
+
+    from flujocero.geo import puente
+
+    p = cargar("params")
+    con = duckdb.connect(str(db.crear()))
+    try:
+        res = puente.asignar_manzanas(con, datetime.now(UTC))
+        if not res.manzanas_asignadas:
+            typer.echo(
+                "✗ 0 manzanas asignadas. ¿Corriste `ingerir-censo` (centroides) y\n"
+                "  `recolectar-barrios` (centros de barrio)? Sin esos dos no hay puente."
+            )
+            raise typer.Exit(1)
+        typer.echo(
+            f"✓ puente: {res.manzanas_asignadas:,} manzanas asignadas a "
+            f"{res.microzonas_con_manzanas} microzonas"
+            + (
+                f" · {res.manzanas_sin_centro_de_barrio:,} en comunas sin barrio con centro"
+                if res.manzanas_sin_centro_de_barrio
+                else ""
+            )
+        )
+        n = puente.calcular_riesgo(con, p, datetime.now(UTC))
+        typer.echo(f"✓ riesgo calculado para {n} microzonas. Las 10 mas riesgosas del alcance:\n")
+        filas = con.execute(
+            "SELECT microzona_id, riesgo, desocupacion, saturacion, profundidad_arriendo, "
+            "n_manzanas FROM agg_riesgo_microzona WHERE riesgo IS NOT NULL "
+            "ORDER BY riesgo DESC LIMIT 10"
+        ).fetchall()
+        typer.echo(
+            f"  {'microzona':<42} {'riesgo':>6} {'desocup':>8} {'satur':>6} {'prof':>6} {'mz':>5}"
+        )
+        for mid, riesgo, desocup, satur, prof, n_mz in filas:
+            typer.echo(
+                f"  {mid:<42} {riesgo:>6.2f} "
+                f"{desocup if desocup is not None else float('nan'):>7.1%} "
+                f"{satur if satur is not None else float('nan'):>6.2f} "
+                f"{prof if prof is not None else float('nan'):>5.1%} {n_mz:>5}"
+            )
+        typer.echo(
+            "\n  riesgo: 0 = la mejor del alcance, 1 = la peor. desocup = viviendas"
+            "\n  desocupadas censales; satur = avisos activos por hogar arrendatario;"
+            "\n  prof = % de hogares que arriendan (mas = mercado mas hondo)."
+            "\n\n  Corre `oportunidades`: riesgo_microzona (15% del §12) ya no esta inerte."
+        )
+    finally:
+        con.close()
 
 
 @app.command()

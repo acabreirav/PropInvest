@@ -138,6 +138,31 @@ CREATE TABLE IF NOT EXISTS fact_arriendo_comp (
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );
 
+-- T-014b · el puente: cada manzana censal asignada a su barrio MELI mas cercano dentro
+-- de su comuna (Voronoi sobre centros — aproximacion DECLARADA, ver docs/adr/009).
+-- Derivado puro: se recalcula entero en cada corrida de `cli puente-censo`.
+CREATE TABLE IF NOT EXISTS map_microzona_manzana (
+  manzent       VARCHAR PRIMARY KEY,
+  microzona_id  VARCHAR NOT NULL,
+  distancia_m   DOUBLE,                    -- del centroide de la manzana al centro del barrio
+  calculado_en  TIMESTAMPTZ
+);
+
+-- T-014b · los insumos de `riesgo_microzona`, agregados sobre las manzanas del puente.
+-- Cada componente es `D` (calculo deterministico sobre el Censo y los avisos); el `riesgo`
+-- final combina con pesos `E` declarados en params.yml (riesgo_microzona.*).
+CREATE TABLE IF NOT EXISTS agg_riesgo_microzona (
+  microzona_id         VARCHAR PRIMARY KEY,
+  n_manzanas           INTEGER,
+  desocupacion         DOUBLE,             -- viv desocupadas / (ocupadas + desocupadas), censal
+  profundidad_arriendo DOUBLE,             -- hogares arrendatarios / hogares, censal
+  hogares_arrendatarios INTEGER,
+  avisos_arriendo      INTEGER,            -- activos hoy en la microzona (B2: proxy saturacion)
+  saturacion           DOUBLE,             -- avisos / hogares arrendatarios
+  riesgo               DOUBLE,             -- 0..1 combinado, min-max sobre el alcance
+  calculado_en         TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS agg_arriendo_microzona (
   microzona_id VARCHAR, tipologia VARCHAR, rango_m2 VARCHAR,
   n INTEGER,

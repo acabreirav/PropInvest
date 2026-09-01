@@ -203,6 +203,14 @@ activo:
   premio_cercania_metro: {v: 0.20, evidence: V, rango: [0.15, 0.30]}
   radio_metro_metros: 600
 
+# T-014b · como se combinan los tres insumos censales/de oferta en `riesgo_microzona`.
+# Los COMPONENTES son D (calculo sobre el Censo 2024 y los avisos activos); estos PESOS
+# son E y por eso van aca, con rango, medibles con `cli sensibilidad`.
+riesgo_microzona:
+  peso_desocupacion: {v: 0.5, evidence: E, rango: [0.3, 0.7], nota: "vacancia estructural censal"}
+  peso_saturacion: {v: 0.3, evidence: E, rango: [0.1, 0.5], nota: "avisos activos / hogares arrendatarios (B2)"}
+  peso_profundidad: {v: 0.2, evidence: E, rango: [0.0, 0.4], nota: "hogares arrendatarios / hogares; mas = menos riesgo"}
+
 score:
   # D-012 (28-ago-2026, aprobada por el inversionista): el componente de mayor peso pasa
   # de deficit de CAJA a COSTO REAL de tenencia, o sea el deficit neto de amortizacion.

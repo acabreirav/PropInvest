@@ -57,6 +57,11 @@ class Emparejamiento:
     # se cuentan: son pocas y cada una merece una mirada — la primera que aparecio era una
     # cesion de promesa encabezando el ranking.
     implausibles: list[tuple[str, str]] = field(default_factory=list)
+    # T-014b · cuantas unidades rankeables llevan un riesgo de microzona MEDIDO (censo +
+    # avisos, via agg_riesgo_microzona) y cuantas quedaron en el 0.5 por defecto. El
+    # defecto no es un dato: si domina, el componente ordena poco y hay que decirlo.
+    riesgo_medido: int = 0
+    riesgo_por_defecto: int = 0
 
     @property
     def total(self) -> int:
@@ -130,6 +135,14 @@ def emparejar(
     es lo que necesitan los tests para hablar de otra cosa sin tener que inventar fechas.
     """
     celdas = celdas_de_arriendo(conexion)
+    # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
+    # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
+    riesgos: dict[str, Decimal] = {
+        mid: Decimal(str(v))
+        for mid, v in conexion.execute(
+            "SELECT microzona_id, riesgo FROM agg_riesgo_microzona WHERE riesgo IS NOT NULL"
+        ).fetchall()
+    }
     r = Emparejamiento(
         descartes=dict.fromkeys(
             (
@@ -288,6 +301,11 @@ def emparejar(
 
         arriendo, n, m2_celda = celda
         med = mediana_zona.get(mz)
+        riesgo = riesgos.get(mz)
+        if riesgo is None:
+            r.riesgo_por_defecto += 1
+        else:
+            r.riesgo_medido += 1
         r.unidades.append(
             Unidad(
                 unidad_key=key,
@@ -315,6 +333,10 @@ def emparejar(
                 # dos precios publicados y una division. Era el 5% del §12 que valia 0 en
                 # todas las unidades — un peso del score que nadie calculaba nunca.
                 descuento_vs_microzona=(med - precio / m2) / med if med else D(0),
+                # T-014b · medido desde el Censo y los avisos cuando el puente corrio;
+                # 0.5 (el default historico del dataclass) cuando no hay medicion. El
+                # conteo medido/por-defecto viaja en el Emparejamiento y se muestra.
+                riesgo_microzona=riesgo if riesgo is not None else D("0.5"),
             )
         )
         r.procedencia_arriendo[key] = (f"{mz} · {tip} · {rango} m²", n, arriendo)
