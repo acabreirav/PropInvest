@@ -552,8 +552,9 @@ def test_el_arriendo_de_equilibrio_real_equilibra_de_verdad(cfg):
     la forma cerrada no descontaba incobrabilidad y congelaba el opex, cuando 4 de sus
     lineas crecen con el arriendo. El mismo defecto del par de pies, con la misma cura.
     """
-    from flujocero.finance.modelo import arriendo_equilibrio_real, evaluar
     from dataclasses import replace as reemplazar
+
+    from flujocero.finance.modelo import arriendo_equilibrio_real, evaluar
 
     p, inv = cfg
     u = unidad(arriendo_mensual_uf=D(8))  # deficitaria: el equilibrio esta por encima
