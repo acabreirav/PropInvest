@@ -242,6 +242,7 @@ def cargar_geometria(conexion: object, raiz: Path | None = None) -> dict[str, st
     import zipfile
 
     import geopandas as gpd
+    import pandas as pd
 
     resultados: dict[str, str] = {}
     for zip_path in _blobs_crudos("shp-apc2023-r*.zip", raiz):
@@ -253,7 +254,18 @@ def cargar_geometria(conexion: object, raiz: Path | None = None) -> dict[str, st
             resultados[zip_path.name] = "sin capa Manzana_Urbana.shp adentro"
             continue
         gdf = gpd.read_file(f"zip://{zip_path}!{miembro}")
-        col = next((c for c in gdf.columns if "manzent" in c.lower()), None)
+        # El DBF de la APC2023 trae la llave DOS veces: `MANZENT` como numerico —que el
+        # formato DBF truncó a ~7 cifras significativas EN EL ORIGEN (1.310109e+13), por
+        # eso todas las llaves salian terminadas en 000 y el cruce calzaba 1%— y
+        # `Mzent_TX`, la misma llave como texto e intacta (13101091001001). Se prefiere
+        # SIEMPRE una candidata de texto; la numerica queda de respaldo y normalizada,
+        # para un shapefile futuro que no traiga la gemela textual.
+        candidatas = [c for c in gdf.columns if "manzent" in c.lower() or "mzent" in c.lower()]
+        # "de texto" = no numerica: segun la version de pandas, una columna de cadenas
+        # llega como dtype `object` o como el nuevo `str` — preguntar por uno solo de los
+        # dos es la clase de detalle que funciona en el test y falla en la otra maquina.
+        de_texto = [c for c in candidatas if not pd.api.types.is_numeric_dtype(gdf[c])]
+        col = de_texto[0] if de_texto else (candidatas[0] if candidatas else None)
         if col is None:
             resultados[zip_path.name] = f"sin columna MANZENT; el DBF trae: {list(gdf.columns)}"
             continue

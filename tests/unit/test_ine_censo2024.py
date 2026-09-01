@@ -208,3 +208,39 @@ def test_llave_numerica_del_dbf_no_rompe_el_cruce(tmp_path):
         ).fetchone()[0]
         is True
     ), "la llave float normalizada calza"
+
+
+def test_prefiere_la_llave_de_texto_cuando_la_numerica_viene_truncada(tmp_path):
+    """El caso REAL del DBF de la APC2023: `MANZENT` numerico truncado a ~7 cifras por el
+    formato DBF (todas las llaves terminaban en 000, cruce al 1%) y `Mzent_TX` con la
+    llave intacta como texto. Se debe usar la de texto."""
+    import zipfile
+
+    import duckdb
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+
+    from flujocero import db
+
+    origen = _csv_como_el_del_ine(tmp_path)
+    gdf = gpd.GeoDataFrame(
+        {
+            "MANZENT": [13119011001000.0],  # truncada en el origen, como en el DBF real
+            "Mzent_TX": ["13119011001001"],  # la gemela textual, intacta
+            "geometry": [Polygon([(0, 0), (0, 1), (1, 1)])],
+        },
+        crs="EPSG:4326",
+    )
+    carpeta = tmp_path / "SHP_APC2023_R13"
+    carpeta.mkdir()
+    gdf.to_file(carpeta / "Manzana_Urbana.shp")
+    with zipfile.ZipFile(origen / "shp-apc2023-r13.zip", "w") as zf:
+        for f in carpeta.iterdir():
+            zf.write(f, f"SHP_APC2023_R13/{f.name}")
+
+    censo.promover(origen, tmp_path / "raw")
+    con = duckdb.connect()
+    db.aplicar_esquema(con)
+    censo.cargar_csv(con, tmp_path / "raw")
+    res = censo.cargar_geometria(con, tmp_path / "raw")["shp-apc2023-r13.zip"]
+    assert res == "1 poligonos · 1 calzan con el censo", res
