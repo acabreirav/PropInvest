@@ -211,6 +211,14 @@ riesgo_microzona:
   peso_saturacion: {v: 0.3, evidence: E, rango: [0.1, 0.5], nota: "avisos activos / hogares arrendatarios (B2)"}
   peso_profundidad: {v: 0.2, evidence: E, rango: [0.0, 0.4], nota: "hogares arrendatarios / hogares; mas = menos riesgo"}
 
+# T-922 · como se convierte "distancia a la estacion elegible mas cercana" en el
+# catalizador 0..1 del §12. El umbral de fecha creible (<=3 anios) es del propio §12.
+catalizador:
+  dist_plena_m: {v: 400, evidence: E, rango: [200, 600], nota: "hasta aqui, beneficio pleno (1.0)"}
+  dist_max_m: {v: 1200, evidence: E, rango: [800, 2000], nota: "mas alla, 0: la caminata deja de vender"}
+  factor_en_construccion: {v: 0.7, evidence: E, rango: [0.4, 1.0], nota: "descuento por riesgo de fecha de apertura"}
+  horizonte_fecha_anios: {v: 3, evidence: V, nota: "CLAUDE.md §12: fecha creible <= 3 anios"}
+
 score:
   # D-012 (28-ago-2026, aprobada por el inversionista): el componente de mayor peso pasa
   # de deficit de CAJA a COSTO REAL de tenencia, o sea el deficit neto de amortizacion.

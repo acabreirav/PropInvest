@@ -1382,6 +1382,45 @@ def recolectar_barrios() -> None:
 
 
 @app.command()
+def recolectar_metro() -> None:
+    """T-922 · estaciones de Metro y Biotren desde OpenStreetMap (una request a Overpass).
+
+    Datos abiertos ODbL, `json_publico` en el orden del §3.5. Las fechas de lo que esta
+    en construccion NO vienen de OSM: viven curadas con fuente en `config/metro.yml`.
+    """
+    import duckdb
+    import httpx
+
+    from flujocero.sources import osm_metro
+
+    typer.echo("  consultando Overpass (una request, ~20 s)…")
+    with httpx.Client(timeout=120) as cliente:
+        cosecha = osm_metro.recolectar(cliente)
+    if cosecha.error:
+        typer.echo(f"✗ {cosecha.error}")
+        raise typer.Exit(1)
+    if not cosecha.estaciones:
+        typer.echo("✗ Overpass respondio sin estaciones: revisa la consulta contra el blob crudo.")
+        raise typer.Exit(1)
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        n = osm_metro.cargar(con, cosecha, datetime.now(UTC))
+        resumen = con.execute(
+            "SELECT red, estado, count(*) FROM dim_estacion_metro GROUP BY red, estado "
+            "ORDER BY red, estado"
+        ).fetchall()
+    finally:
+        con.close()
+    typer.echo(f"✓ {n} estaciones cargadas:")
+    for red, estado, cuenta in resumen:
+        typer.echo(f"    {red:<16} {estado:<13} {cuenta:>4}")
+    if cosecha.sin_nombre:
+        typer.echo(f"  {cosecha.sin_nombre} nodos sin nombre quedaron fuera (no auditables).")
+    typer.echo("\n  Ahora corre `puente-censo`: el catalizador se calcula ahi.")
+
+
+@app.command()
 def puente_censo() -> None:
     """T-014b · asigna cada manzana censal a su barrio mas cercano y calcula el riesgo.
 
@@ -1433,8 +1472,31 @@ def puente_censo() -> None:
             "\n  riesgo: 0 = la mejor del alcance, 1 = la peor. desocup = viviendas"
             "\n  desocupadas censales; satur = avisos activos por hogar arrendatario;"
             "\n  prof = % de hogares que arriendan (mas = mercado mas hondo)."
-            "\n\n  Corre `oportunidades`: riesgo_microzona (15% del §12) ya no esta inerte."
         )
+        cat = puente.calcular_catalizador(con, p, datetime.now(UTC))
+        if cat["microzonas"]:
+            typer.echo(
+                f"\n✓ catalizador Metro: {cat['microzonas']} microzonas medidas contra "
+                f"{cat['elegibles']} estaciones elegibles."
+            )
+            if cat["construccion_sin_fecha"]:
+                typer.echo(
+                    f"  {cat['construccion_sin_fecha']} estaciones en construccion quedaron"
+                    "\n  FUERA: sin linea en OSM o sin fecha creible en config/metro.yml."
+                    " No se les inventa fecha."
+                )
+            arriba = con.execute(
+                "SELECT microzona_id, dist_metro_m, catalizador FROM agg_riesgo_microzona "
+                "WHERE catalizador > 0 ORDER BY catalizador DESC, dist_metro_m LIMIT 5"
+            ).fetchall()
+            for mid, dist, valor in arriba:
+                typer.echo(f"    {mid:<42} {valor:>4.2f}  a {dist:,.0f} m")
+        else:
+            typer.echo(
+                "\n  catalizador sin medir: `dim_estacion_metro` esta vacia. Corre"
+                " `recolectar-metro` primero."
+            )
+        typer.echo("\n  Corre `oportunidades`: los componentes medidos del §12 entran solos.")
     finally:
         con.close()
 

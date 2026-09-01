@@ -168,3 +168,96 @@ def calcular_riesgo(conexion: Any, p: Config, ahora: datetime) -> int:
             (mid, n_mz, desocupacion, profundidad, arrend, n_avisos, saturacion, riesgo, ahora),
         )
     return len(brutos)
+
+
+def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str, int]:
+    """El catalizador del §12 por microzona: distancia a la estacion ELEGIBLE mas cercana.
+
+    Elegible = operativa, o en construccion cuya linea tenga fecha creible dentro del
+    horizonte en `config/metro.yml`. Una estacion en construccion sin linea declarada en
+    OSM o sin fecha curada NO cataliza: se cuenta, no se le inventa fecha (§3.2).
+
+    La conversion distancia -> 0..1 es lineal con dos umbrales E declarados en params
+    (`catalizador.*`): pleno hasta `dist_plena_m`, cero desde `dist_max_m`. Las estaciones
+    en construccion valen `factor_en_construccion` de lo que valdria una operativa.
+
+    Escribe sobre `agg_riesgo_microzona` (upsert): la fila puede existir del riesgo o
+    nacer aca — una microzona con centro y sin manzanas igual tiene distancia al Metro.
+    Con `dim_estacion_metro` vacia no se escribe nada: catalizador NULL = sin medir,
+    que el emparejamiento cuenta como defecto. Cero seria "medimos y no hay Metro cerca",
+    y eso es otra afirmacion.
+    """
+    from flujocero.config import cargar as cargar_config
+
+    filas = conexion.execute(
+        "SELECT estacion_id, linea, estado, lat, lon FROM dim_estacion_metro"
+    ).fetchall()
+    if not filas:
+        return {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0}
+
+    fechas = {
+        str(e["linea"]).lower(): e["fecha_apertura"]
+        for e in (cargar_config("metro").crudo("lineas_en_construccion") or [])
+    }
+    horizonte_anios = int(p.d("catalizador.horizonte_fecha_anios"))
+    plena = float(p.d("catalizador.dist_plena_m"))
+    maxima = float(p.d("catalizador.dist_max_m"))
+    factor_constr = float(p.d("catalizador.factor_en_construccion"))
+
+    elegibles: list[tuple[float, float, float]] = []  # (lat, lon, factor)
+    construccion_sin_fecha = 0
+    for _eid, linea, estado, lat, lon in filas:
+        if estado == "operativa":
+            elegibles.append((float(lat), float(lon), 1.0))
+            continue
+        fecha = fechas.get((linea or "").lower())
+        if fecha is None:
+            construccion_sin_fecha += 1
+            continue
+        # date del YAML; el horizonte corre desde `ahora` (que entra por argumento, §11)
+        anios = (fecha - ahora.date()).days / 365.25
+        if 0 <= anios <= horizonte_anios:
+            elegibles.append((float(lat), float(lon), factor_constr))
+        else:
+            construccion_sin_fecha += 1
+
+    centros = conexion.execute(
+        "SELECT microzona_id, centro_lat, centro_lon FROM dim_microzona "
+        "WHERE centro_lat IS NOT NULL"
+    ).fetchall()
+    n = 0
+    for mid, clat, clon in centros:
+        mejor = 0.0
+        mejor_dist = None
+        for elat, elon, factor in elegibles:
+            d = _distancia_m(float(clat), float(clon), elat, elon)
+            if mejor_dist is None or d < mejor_dist:
+                mejor_dist = d
+            if d <= plena:
+                puntaje = factor
+            elif d >= maxima:
+                puntaje = 0.0
+            else:
+                puntaje = factor * (maxima - d) / (maxima - plena)
+            mejor = max(mejor, puntaje)
+        existe = conexion.execute(
+            "SELECT 1 FROM agg_riesgo_microzona WHERE microzona_id = ?", (mid,)
+        ).fetchone()
+        if existe:
+            conexion.execute(
+                "UPDATE agg_riesgo_microzona SET dist_metro_m = ?, catalizador = ?, "
+                "calculado_en = ? WHERE microzona_id = ?",
+                (mejor_dist, mejor, ahora, mid),
+            )
+        else:
+            conexion.execute(
+                "INSERT INTO agg_riesgo_microzona (microzona_id, dist_metro_m, catalizador, "
+                "calculado_en) VALUES (?, ?, ?, ?)",
+                (mid, mejor_dist, mejor, ahora),
+            )
+        n += 1
+    return {
+        "microzonas": n,
+        "construccion_sin_fecha": construccion_sin_fecha,
+        "elegibles": len(elegibles),
+    }

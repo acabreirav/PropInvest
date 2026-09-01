@@ -1,0 +1,14 @@
+# T-922 · fechas de apertura de lineas EN CONSTRUCCION, con fuente. Curado a mano porque
+# OSM trae la geometria pero no la fecha, y una estacion en construccion SIN fecha creible
+# no cataliza nada (§12). Solo entran lineas con apertura dentro del horizonte.
+#
+# `linea` se compara contra lo que OSM declare en los tags del nodo (ref/line), en
+# minusculas y sin espacios. Una estacion en construccion cuya linea no aparezca aca
+# queda fuera del catalizador y se cuenta — no se le inventa fecha.
+lineas_en_construccion:
+  - linea: "l7"
+    fecha_apertura: 2028-12-31
+    fuente: "docs/00-hallazgos.md · eje L7 2028 (Recoleta, mayor alza RM +9,6% a/a)"
+  - linea: "l6"
+    fecha_apertura: 2027-12-31
+    fuente: "docs/00-hallazgos.md · extension L6 a Lo Errazuriz, 46% de avance, apertura 2027"

@@ -62,6 +62,8 @@ class Emparejamiento:
     # defecto no es un dato: si domina, el componente ordena poco y hay que decirlo.
     riesgo_medido: int = 0
     riesgo_por_defecto: int = 0
+    catalizador_medido: int = 0
+    catalizador_por_defecto: int = 0
 
     @property
     def total(self) -> int:
@@ -141,6 +143,15 @@ def emparejar(
         mid: Decimal(str(v))
         for mid, v in conexion.execute(
             "SELECT microzona_id, riesgo FROM agg_riesgo_microzona WHERE riesgo IS NOT NULL"
+        ).fetchall()
+    }
+    # T-922 · idem para el catalizador Metro. NULL = sin medir (sin estaciones o sin
+    # centro de barrio): la unidad queda en el 0 por defecto del dataclass, contada.
+    catalizadores: dict[str, Decimal] = {
+        mid: Decimal(str(v))
+        for mid, v in conexion.execute(
+            "SELECT microzona_id, catalizador FROM agg_riesgo_microzona "
+            "WHERE catalizador IS NOT NULL"
         ).fetchall()
     }
     r = Emparejamiento(
@@ -306,6 +317,11 @@ def emparejar(
             r.riesgo_por_defecto += 1
         else:
             r.riesgo_medido += 1
+        catalizador = catalizadores.get(mz)
+        if catalizador is None:
+            r.catalizador_por_defecto += 1
+        else:
+            r.catalizador_medido += 1
         r.unidades.append(
             Unidad(
                 unidad_key=key,
@@ -337,6 +353,7 @@ def emparejar(
                 # 0.5 (el default historico del dataclass) cuando no hay medicion. El
                 # conteo medido/por-defecto viaja en el Emparejamiento y se muestra.
                 riesgo_microzona=riesgo if riesgo is not None else D("0.5"),
+                catalizador=catalizador if catalizador is not None else D(0),
             )
         )
         r.procedencia_arriendo[key] = (f"{mz} · {tip} · {rango} m²", n, arriendo)

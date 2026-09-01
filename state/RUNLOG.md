@@ -2387,3 +2387,17 @@ Duda abierta, preguntada al inversionista: entre las dos corridas de `oportunida
 cambiaron medianas de arriendo (vicente-valdes paso de tenencia -22.341 a -16.872 y
 sin_comparables bajo 28) sin que en el chat aparezca una recoleccion de por medio.
 Si no corrio nada a mano, hay que buscar que lo movio.
+
+## 2026-09-01 · T-922 · catalizador Metro construido
+
+- `recolectar-metro`: una request Overpass (OSM, ODbL, json_publico §3.5) → dim_estacion_metro
+  (Metro Santiago operativo + en construccion + Biotren). Fechas de construccion curadas con
+  fuente en config/metro.yml (L7 2028, ext L6 2027): OSM trae geometria, no fechas, y una
+  estacion en obra sin fecha creible no cataliza (§12) — se cuenta, no se le inventa.
+- `puente-censo` ahora calcula tambien el catalizador por microzona: distancia del centro
+  de barrio a la estacion elegible mas cercana, lineal entre dist_plena_m y dist_max_m
+  (E declarados), factor_en_construccion para lo no inaugurado. NULL = sin medir (contado
+  como defecto); 0 = medido y lejos, que es una afirmacion distinta.
+- Con esto los 100 puntos del §12 tienen fuente: deficit/pie/TIR (motor), riesgo (censo+
+  avisos), descuento (precios), catalizador (OSM+curaduria). Pendiente correr en la maquina
+  real: recolectar-metro → puente-censo → oportunidades → sensibilidad catalizador=0.

@@ -148,6 +148,20 @@ CREATE TABLE IF NOT EXISTS map_microzona_manzana (
   calculado_en  TIMESTAMPTZ
 );
 
+-- T-922 · estaciones de Metro (Santiago) y Biotren (Concepcion), desde OpenStreetMap
+-- (ODbL, json publico). Las OPERATIVAS alimentan el catalizador directo; las EN
+-- CONSTRUCCION solo cuentan si su linea tiene fecha creible <= 3 anios en config/metro.yml.
+CREATE TABLE IF NOT EXISTS dim_estacion_metro (
+  estacion_id     VARCHAR PRIMARY KEY,   -- id del nodo OSM
+  nombre          VARCHAR,
+  red             VARCHAR,               -- 'metro-santiago' | 'biotren' | otra
+  linea           VARCHAR,               -- si OSM la declara; NULL si no
+  estado          VARCHAR,               -- 'operativa' | 'construccion'
+  lat DOUBLE, lon DOUBLE,
+  source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
+  parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
+);
+
 -- T-014b · los insumos de `riesgo_microzona`, agregados sobre las manzanas del puente.
 -- Cada componente es `D` (calculo deterministico sobre el Censo y los avisos); el `riesgo`
 -- final combina con pesos `E` declarados en params.yml (riesgo_microzona.*).
@@ -160,6 +174,9 @@ CREATE TABLE IF NOT EXISTS agg_riesgo_microzona (
   avisos_arriendo      INTEGER,            -- activos hoy en la microzona (B2: proxy saturacion)
   saturacion           DOUBLE,             -- avisos / hogares arrendatarios
   riesgo               DOUBLE,             -- 0..1 combinado, min-max sobre el alcance
+  -- T-922 · catalizador Metro por microzona (necesita centro de barrio + estaciones)
+  dist_metro_m         DOUBLE,             -- a la estacion elegible mas cercana
+  catalizador          DOUBLE,             -- 0..1; NULL = sin medir (sin estaciones cargadas)
   calculado_en         TIMESTAMPTZ
 );
 

@@ -31,6 +31,9 @@ COLUMNAS_AGREGADAS: tuple[tuple[str, str, str], ...] = (
     # microzona con las manzanas censales mientras no exista un poligono de verdad.
     ("dim_microzona", "centro_lat", "DOUBLE"),
     ("dim_microzona", "centro_lon", "DOUBLE"),
+    # T-922: catalizador Metro sobre la misma tabla de riesgo por microzona.
+    ("agg_riesgo_microzona", "dist_metro_m", "DOUBLE"),
+    ("agg_riesgo_microzona", "catalizador", "DOUBLE"),
 )
 
 

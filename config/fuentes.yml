@@ -102,6 +102,19 @@ fuentes:
     adr: "docs/adr/003-meli.md"
     razon_deshabilitada: "misma que meli_venta: HTTP 403 en /sites/MLC/search"
 
+  - id: osm_metro
+    capa: 2
+    legal_tier: json_publico
+    enabled: true
+    base: "https://overpass-api.de/api/interpreter"
+    auth: ninguna
+    cadencia: mensual
+    produce: dim_estacion_metro
+    nota: >
+      OpenStreetMap via Overpass, licencia ODbL con atribucion. Trae la geometria de
+      estaciones (Metro Santiago subway + red Biotren); las FECHAS de lo que esta en
+      construccion no estan en OSM y viven curadas con fuente en config/metro.yml.
+
   - id: portal_busqueda
     capa: 3
     legal_tier: html_permitido      # SOLO rutas `_Desde_`, que el robots.txt permite
