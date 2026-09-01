@@ -227,14 +227,22 @@ def comparables_desde_duckdb(
         "sin_tipologia": 0,
         "sin_m2": 0,
         "desactualizado": 0,
+        "sin_fecha": 0,
         "amoblado": 0,
         "sin_uf_del_dia": 0,
     }
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
     for mz, tip, m2, arr_uf, arr_clp, momento, url in filas:
-        if limite is not None and momento is not None and momento < limite:
-            descartes["desactualizado"] += 1
-            continue
+        if limite is not None:
+            if momento is None:
+                # El mismo hoyo que tenia el emparejamiento de venta: una fila sin
+                # `fetched_at` no puede probar los 21 dias del §7.3, y el
+                # `momento is not None` del filtro la dejaba pasar para siempre.
+                descartes["sin_fecha"] += 1
+                continue
+            if momento < limite:
+                descartes["desactualizado"] += 1
+                continue
         if no_comparable(url):
             # Un amoblado es OTRO negocio: lo toma un trabajador de faena o un turista, dura
             # meses en vez de anios, y el arrendador repone muebles. Este inversionista

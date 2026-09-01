@@ -2312,3 +2312,41 @@ del pie (20%) cae al mismo D(1) para todas. La API usa pie exacto; el atajo no.
 Pendiente y anotado: `descuento_vs_microzona` es calculable HOY con lo que hay en la base
 (UF/m2 de la unidad contra la mediana de su microzona). `catalizador` y `riesgo_microzona`
 necesitan fuentes que no existen todavia (Metro, vacancia, stock entrando).
+
+## 2026-09-01 · Auditoría integral pedida por el inversionista — código, cálculos y objetivo
+
+Recorrido adversarial completo: motor financiero contra docs/02, capa de datos, score y docs.
+**Nueve hallazgos, todos aplicados**, en serie con gates entre cada cambio de motor (§8.3):
+
+1. **La detección de outliers marcaba el min y el max de CADA microzona** (percentiles
+   interpolados: `min < p1` siempre). 161 "outliers" → 13 reales con cerca de Tukey
+   3×IQR + piso ±10% de la mediana. ADR D-019.
+2. **`sospechoso` no lo escribía nadie** (T-043): el filtro de la mediana de arriendo
+   filtraba una columna vacía desde T-023. `quality/sospechosos.py` lo persiste en ambas
+   tablas, misma cerca del gate, recalculado por corrida. Primer efecto: 2 avisos a 2–3×
+   la banda de su zona salen de la mediana — el numerador del yield.
+3. **`descuento_vs_microzona` (5% del §12) valía 0 en todas las unidades.** Ahora se
+   calcula en `emparejar` contra la mediana de UF/m² de su microzona, sobre las MISMAS
+   candidatas del ranking y sin sospechosos.
+4. **El arriendo de equilibrio no equilibraba**: sin incobrabilidad y con opex congelado
+   (4 líneas crecen con el arriendo). Medido en el caso real UF 1.100: cerrada $372.051,
+   real $398.160 — **7% corto**. `arriendo_equilibrio_real()` por bisección + caso de oro
+   "cobrando el equilibrio, flujo = 0 ± 0,02 UF".
+5. **El impuesto a la renta gravaba el PGI** — arriendo que en vacancia no existe. Base
+   corregida a `max(0, EGI − contribuciones)`; docs/02 además restaba el impuesto DOS
+   veces (NOI y ATCF) — documento corregido al comportamiento del código.
+6. **`con_fogaes=con_sub` acoplaba dos beneficios independientes**: el contraste
+   sin_subsidio perdía además FOGAES y su pie mínimo saltaba a 20%. Desacoplado.
+7. **`habilitación` estaba en docs/02 (CoC) y en ningún otro lado.** Declarada `E` en
+   params (v: 0, rango [0, 60] UF), cableada a capital invertido y TIR t=0. Pendiente
+   medirla: `cli sensibilidad gastos_de_cierre.habilitacion_inicial_uf=25`.
+8. **Dos hoyos de frescura**: filas sin `fetched_at` pasaban el gate del §7.3 para
+   siempre, en venta y en arriendo. Nuevo descarte `sin_fecha` en ambos.
+9. **Dos mecanismos de componentes inertes** (uno hardcodeado, T-057 el otro): dos
+   verdades. Unificado en `puntuar()`; y `sin_m2` no se anotaba en el embudo por comuna.
+
+No aplicado, documentado: `break_even_occupancy` sigue la convención de libro (sobre PGI),
+igual que docs/02. El gap lista→cierre (Capa 5) sigue sin fuente — el yield usa precio de
+lista, como siempre, hasta que exista `factor_gap_lista_cierre`.
+
+Suite completa tras el conjunto: 632 passed. Gates verdes en cada paso.
