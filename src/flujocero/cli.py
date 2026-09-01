@@ -1165,11 +1165,19 @@ def oportunidades(
     inertes = next((ev.score_inertes for ev in evals if not ev.excluido), ())
     if inertes:
         muerto = op.peso_inerte(inertes, p)
+        # La fuente que le falta a cada componente, para que el mensaje no envejezca como
+        # el anterior: siguio diciendo "falta el Censo" despues de que el Censo ya estaba.
+        faltantes_fuente = {
+            "catalizador": "distancias a Metro, T-922",
+            "riesgo_microzona": "correr `puente-censo`",
+            "descuento_vs_microzona": "precios de venta en la microzona",
+        }
+        detalle = "; ".join(f"{k} ({faltantes_fuente.get(k, 'sin fuente')})" for k in inertes)
+        verbo = "vale" if len(inertes) == 1 else "valen"
         typer.echo(
-            f"\n  ⚠ {muerto:.0%} del score no se pudo medir: {', '.join(inertes)} valen lo\n"
-            f"    mismo en todas las unidades (faltan el Censo 2024 y las distancias a\n"
-            f"    Metro, T-014). Su peso se repartio entre los componentes que si miden;\n"
-            f"    el ranking ordena por lo que hay, y dice que es lo que hay."
+            f"\n  ⚠ {muerto:.0%} del score no se pudo medir: {detalle}\n"
+            f"    {verbo} lo mismo en todas las unidades. Su peso se repartio entre los\n"
+            f"    componentes que si miden; el ranking ordena por lo que hay, y lo dice."
         )
 
     vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]

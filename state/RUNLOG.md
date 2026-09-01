@@ -2369,3 +2369,21 @@ Cadena completa, verificada contra los archivos reales en la maquina del inversi
 
 Pendiente de correr en la maquina real: `puente-censo` + `oportunidades` (activa el 15%
 del §12) + `sensibilidad score.pesos.riesgo_microzona=0` para medir cuanto mueve.
+
+## 2026-09-01 · T-014b corrido sobre la base real — riesgo_microzona activo
+
+- Puente: 23.567 manzanas → 157 microzonas (54.166 quedan en comunas fuera del alcance,
+  esperado: la cartografia es regional y los barrios solo del §10).
+- `sensibilidad score.pesos.riesgo_microzona=0`: el componente mueve 4,1% de las
+  posiciones (39 de 961) y cambia el top 5 — bajo el umbral del §8.4, activo y moderado.
+- Validacion cruzada gratis: nunoa/estadio-nacional da 16,3% de desocupacion censal, y
+  Tattersall ya la tenia marcada saturada por otra via. Dos fuentes, mismo lugar.
+- Hallazgo de lectura (al ADR 009): la desocupacion censal COSTERA es segunda vivienda
+  (avenida-del-mar 60,1%, guanaquero 61,6%) — riesgo real de estacionalidad para un
+  arrendador, pero fenomeno distinto a la vacancia urbana; no comparar 1:1.
+- El aviso de inertes quedo como el §12 manda: solo catalizador (10%), esperando Metro.
+
+Duda abierta, preguntada al inversionista: entre las dos corridas de `oportunidades`
+cambiaron medianas de arriendo (vicente-valdes paso de tenencia -22.341 a -16.872 y
+sin_comparables bajo 28) sin que en el chat aparezca una recoleccion de por medio.
+Si no corrio nada a mano, hay que buscar que lo movio.

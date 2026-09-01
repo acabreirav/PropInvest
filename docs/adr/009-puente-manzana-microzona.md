@@ -39,6 +39,16 @@ El `riesgo` combina los tres, min-max sobre el alcance, con pesos `E` declarados
 - **NULL censal** (conteos enmascarados `*`): queda fuera de las sumas — jamás cero. Una
   microzona sin ningún dato queda con riesgo NULL y cae al 0.5 por defecto del motor,
   **contada y reportada** como no-medida en `oportunidades`.
+- **La desocupación censal en la costa mezcla dos cosas** (medido 01-sep-2026 sobre la
+  base real): las 10 microzonas más riesgosas del alcance son casi todas costeras —
+  `la-serena/avenida-del-mar` 60,1% de viviendas desocupadas, `coquimbo/guanaquero`
+  61,6%, Tongoy 41,1%. Eso no es abandono: es **segunda vivienda de veraneo vacía el día
+  del censo**. Para un arrendador de largo plazo sigue siendo señal de riesgo real
+  (demanda estacional, competencia de temporada), así que se mantiene en el índice, pero
+  su MAGNITUD viene de otro fenómeno y no es comparable 1:1 con el 16,3% de
+  `nunoa/estadio-nacional` — que sí es vacancia urbana, y que además **coincide con la
+  evidencia independiente de Tattersall** que ya tenía esa microzona marcada saturada:
+  dos fuentes distintas apuntando al mismo lugar.
 
 ## Reversa
 
