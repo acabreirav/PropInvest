@@ -1289,6 +1289,75 @@ def oportunidades(
 
 
 @app.command()
+def ingerir_censo() -> None:
+    """T-014 · promueve los archivos del Censo 2024 (descarga manual) a la zona cruda.
+
+    El INE se descarga a mano —el proxy del entorno remoto lo bloquea y son cientos de
+    MB—: los archivos se dejan en `data/incoming/censo2024/` y este comando los copia
+    verbatim a `data/raw/ine_censo2024/` con su `.meta.json` del §3.1 al lado, fechados
+    por su fecha de descarga. Idempotente por sha; un mismo nombre con contenido distinto
+    se reporta como conflicto y NO se pisa.
+
+    El parseo (CSV de 189 variables -> dim_manzana, SHP -> geometrias) es la mitad que
+    sigue, y se escribe contra el formato real de los archivos.
+    """
+    from flujocero.sources import ine_censo2024 as censo
+
+    resultado = censo.promover()
+    if not resultado:
+        typer.echo(
+            f"  No hay nada en {censo.CARPETA_INCOMING}.\n"
+            "  Descarga la base por manzana (censo2024.ine.gob.cl/resultados) y la\n"
+            "  cartografia APC 2023 (Geodatos Abiertos) y dejalas en esa carpeta."
+        )
+        raise typer.Exit(1)
+    for pr in resultado:
+        typer.echo(f"  {pr.accion:>9}  {pr.nombre:<40} {pr.bytes / 1_048_576:8.1f} MB")
+    conflictos = [pr for pr in resultado if pr.accion == "conflicto"]
+    if conflictos:
+        typer.echo(
+            f"\n✗ {len(conflictos)} archivo(s) con el mismo nombre y DISTINTO contenido que\n"
+            "  la zona cruda. No se piso nada: mira cual es cual antes de seguir."
+        )
+        raise typer.Exit(2)
+    typer.echo(
+        f"\n✓ {sum(1 for x in resultado if x.accion != 'conflicto')} archivos en la zona cruda."
+        " Los originales de incoming/ se conservan."
+    )
+
+    import duckdb
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        n = censo.cargar_csv(con)
+        typer.echo(f"\n✓ dim_manzana: {n:,} manzanas-entidad cargadas desde el CSV")
+        typer.echo("  cargando geometria (los 4 ZIP regionales tardan un par de minutos)…")
+        for archivo, resultado_geo in censo.cargar_geometria(con).items():
+            typer.echo(f"    {archivo:<28} {resultado_geo}")
+        con_geo, total = con.execute("SELECT count(geom_wkb), count(*) FROM dim_manzana").fetchone()
+        typer.echo(
+            f"\n  {con_geo:,} de {total:,} manzanas con poligono "
+            f"({con_geo / total:.0%}: el CSV es pais completo y la cartografia son las 4"
+            "\n  regiones del alcance del §10 — el resto queda sin dibujo, no sin dato)."
+        )
+        desocup = con.execute(
+            "SELECT sum(n_viv_desocupadas) * 1.0 / nullif(sum(n_viv_ocupadas) + "
+            "sum(n_viv_desocupadas), 0) FROM dim_manzana WHERE cut // 1000 = 13"
+        ).fetchone()[0]
+        if desocup is not None:
+            typer.echo(
+                f"  desocupacion censal de viviendas RM: {desocup:.1%} — el insumo de"
+                " `riesgo_microzona`."
+            )
+    finally:
+        con.close()
+    typer.echo(
+        "\n  Falta el puente manzana → microzona (las microzonas no tienen poligono aun):"
+        "\n  es la tarea que sigue en el backlog (T-014b)."
+    )
+
+
+@app.command()
 def gates() -> None:
     """Gates que no dependen de datos recolectados (CLAUDE.md §7)."""
     fallos: list[str] = []

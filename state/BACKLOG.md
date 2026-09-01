@@ -1407,3 +1407,13 @@ criterio_de_aceptacion:
   - [ ] `docs/01-fuentes.md` registra compara.cl como tamizaje, con la discrepancia medida
   - [ ] Ninguna tasa de `params.yml` sale de compara: solo de simuladores del banco o de la
         CMF, con fecha y captura
+## T-014b · Puente manzana → microzona
+estado: pendiente
+agente: geo-microzonas
+fase: 2
+depende_de: [T-014]
+criterio_de_aceptacion:
+  - cada microzona del alcance queda mapeada a un conjunto de manzanas (map_microzona_manzana)
+  - riesgo_microzona se calcula desde dim_manzana (desocupacion censal, % arriendo, densidad depto) y deja de estar inerte
+  - el metodo del puente queda en un ADR: las microzonas NO tienen poligono; opciones — poligonos de barrios MELI, geocodificar avisos y usar sus manzanas, o dibujar a mano las del alcance
+gate: make gates

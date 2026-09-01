@@ -81,6 +81,41 @@ CREATE TABLE IF NOT EXISTS fact_unidad_venta (
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );
 
+-- CAPA 1 · Censo 2024 por manzana-entidad (T-014). Subconjunto DECLARADO de las 189
+-- variables del INE: la llave, la demografia base y las que alimentan `riesgo_microzona`
+-- (desocupacion de viviendas, profundidad del mercado de arriendo, densidad vertical).
+-- Las 189 completas viven en la zona cruda: agregar una columna es una linea aqui, otra
+-- en el INSERT de sources/ine_censo2024.py, y `cli ingerir-censo` de nuevo.
+-- Los conteos chicos vienen enmascarados con '*' por privacidad: entran como NULL (ND),
+-- jamas como 0 — un cero inventado sesgaria toda tasa calculada encima (§3.2).
+CREATE TABLE IF NOT EXISTS dim_manzana (
+  manzent         VARCHAR PRIMARY KEY,   -- id manzana-entidad del INE, llave del censo
+  cut             INTEGER,               -- codigo unico territorial de la comuna
+  comuna          VARCHAR,
+  region          VARCHAR,
+  tipo_mz         VARCHAR,               -- URBANO | RURAL
+  n_personas      INTEGER,
+  n_hogares       INTEGER,
+  prom_personas_hogar DOUBLE,
+  prom_edad       DOUBLE,
+  prom_escolaridad18 DOUBLE,
+  n_viviendas     INTEGER,               -- viviendas particulares
+  n_viv_ocupadas  INTEGER,
+  n_viv_desocupadas INTEGER,             -- el numerador de la desocupacion censal
+  n_viv_depto     INTEGER,
+  n_viv_casa      INTEGER,
+  n_hog_arrienda_contrato INTEGER,
+  n_hog_arrienda_sin_contrato INTEGER,
+  n_hog_propia_pagada INTEGER,
+  n_hog_propia_pagandose INTEGER,
+  n_hog_unipersonales INTEGER,
+  lat DOUBLE, lon DOUBLE,                -- centroide (EPSG:4326), para distancias rapidas
+  geom_wkb        BLOB,                  -- poligono WKB; BLOB a proposito: legible con y
+                                         -- sin la extension spatial de DuckDB
+  source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
+  parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
+);
+
 CREATE TABLE IF NOT EXISTS fact_arriendo_comp (
   comp_id         VARCHAR PRIMARY KEY,
   microzona_id    VARCHAR REFERENCES dim_microzona(microzona_id),
