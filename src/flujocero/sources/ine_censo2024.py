@@ -34,7 +34,7 @@ from pathlib import Path
 from flujocero.sources.base import RAIZ, ZONA_CRUDA
 
 SOURCE_ID = "ine_censo2024"
-PARSER_VERSION = "0.1.0"
+PARSER_VERSION = "0.2.0"
 CARPETA_INCOMING = RAIZ / "data" / "incoming" / "censo2024"
 
 # La URL de la pagina de descarga oficial, por familia de archivo. Idealmente seria el
@@ -136,30 +136,49 @@ def _meta_de(blob: Path) -> dict[str, object]:
     return json.loads(meta.read_text(encoding="utf-8"))
 
 
-# Columna del CSV del INE -> columna de dim_manzana. El resto de las 189 queda en la zona
-# cruda; sumar una es agregarla aqui y al DDL, y re-correr `ingerir-censo`.
-_MAPEO_CSV = {
-    "MANZENT": "manzent",
-    "CUT": "cut",
-    "COMUNA": "comuna",
-    "REGION": "region",
-    "TIPO_MZ": "tipo_mz",
-    "n_per": "n_personas",
-    "n_hog": "n_hogares",
-    "prom_per_hog": "prom_personas_hogar",
-    "prom_edad": "prom_edad",
-    "prom_escolaridad18": "prom_escolaridad18",
-    "n_vp": "n_viviendas",
-    "n_vp_ocupada": "n_viv_ocupadas",
-    "n_vp_desocupada": "n_viv_desocupadas",
-    "n_tipo_viv_depto": "n_viv_depto",
-    "n_tipo_viv_casa": "n_viv_casa",
-    "n_tenencia_arrendada_contrato": "n_hog_arrienda_contrato",
-    "n_tenencia_arrendada_sin_contrato": "n_hog_arrienda_sin_contrato",
-    "n_tenencia_propia_pagada": "n_hog_propia_pagada",
-    "n_tenencia_propia_pagandose": "n_hog_propia_pagandose",
-    "n_hog_unipersonales": "n_hog_unipersonales",
+# Columna del CSV del INE -> (columna de dim_manzana, tipo). El resto de las 189 queda en
+# la zona cruda; sumar una es agregarla aqui y al DDL, y re-correr `ingerir-censo`.
+# El tipo va DECLARADO por columna porque el olfateador de DuckDB no es determinista: con
+# el mismo `decimal_separator=','`, sobre la fixture de test infirio DOUBLE y sobre el
+# archivo real infirio texto — y el INSERT reventaba con "Could not convert '3,3'".
+# Se lee todo como texto (`all_varchar`) y la conversion es nuestra, explicita, igual
+# para cualquier version de DuckDB.
+_MAPEO_CSV: dict[str, tuple[str, str]] = {
+    "MANZENT": ("manzent", "texto"),
+    "CUT": ("cut", "entero"),
+    "COMUNA": ("comuna", "texto"),
+    "REGION": ("region", "texto"),
+    "TIPO_MZ": ("tipo_mz", "texto"),
+    "n_per": ("n_personas", "entero"),
+    "n_hog": ("n_hogares", "entero"),
+    "prom_per_hog": ("prom_personas_hogar", "decimal"),
+    "prom_edad": ("prom_edad", "decimal"),
+    "prom_escolaridad18": ("prom_escolaridad18", "decimal"),
+    "n_vp": ("n_viviendas", "entero"),
+    "n_vp_ocupada": ("n_viv_ocupadas", "entero"),
+    "n_vp_desocupada": ("n_viv_desocupadas", "entero"),
+    "n_tipo_viv_depto": ("n_viv_depto", "entero"),
+    "n_tipo_viv_casa": ("n_viv_casa", "entero"),
+    "n_tenencia_arrendada_contrato": ("n_hog_arrienda_contrato", "entero"),
+    "n_tenencia_arrendada_sin_contrato": ("n_hog_arrienda_sin_contrato", "entero"),
+    "n_tenencia_propia_pagada": ("n_hog_propia_pagada", "entero"),
+    "n_tenencia_propia_pagandose": ("n_hog_propia_pagandose", "entero"),
+    "n_hog_unipersonales": ("n_hog_unipersonales", "entero"),
 }
+
+
+def _expresion(columna: str, tipo: str) -> str:
+    """La conversion explicita de una columna leida como texto.
+
+    `nullif(.., '')` porque una celda vacia tampoco es un cero; la coma decimal chilena
+    se cambia por punto ANTES del cast. El '*' enmascarado ya llego como NULL via nullstr.
+    """
+    limpia = f"nullif(trim(\"{columna}\"), '')"
+    if tipo == "entero":
+        return f"CAST({limpia} AS INTEGER)"
+    if tipo == "decimal":
+        return f"CAST(replace({limpia}, ',', '.') AS DOUBLE)"
+    return limpia
 
 
 def cargar_csv(conexion: object, raiz: Path | None = None) -> int:
@@ -185,23 +204,22 @@ def cargar_csv(conexion: object, raiz: Path | None = None) -> int:
     blob = blobs[-1]  # el mas reciente, por orden de ruta fechada
     meta = _meta_de(blob)
 
-    # MANZENT llega inferido como BIGINT y la llave es texto; el resto va tal cual.
-    origen = ", ".join(
-        'CAST("MANZENT" AS VARCHAR)' if c == "MANZENT" else f'"{c}"' for c in _MAPEO_CSV
-    )
-    destino = ", ".join(_MAPEO_CSV.values())
+    origen = ", ".join(_expresion(c, tipo) for c, (_, tipo) in _MAPEO_CSV.items())
+    destino = ", ".join(nombre for nombre, _ in _MAPEO_CSV.values())
     conexion.execute("DELETE FROM dim_manzana")  # type: ignore[attr-defined]
     conexion.execute(  # type: ignore[attr-defined]
         f"INSERT INTO dim_manzana ({destino}, source_id, source_url, fetched_at, "  # noqa: S608
         "parser_version, raw_blob_path, robots_snapshot_sha) "
         f"SELECT {origen}, ?, ?, ?, ?, ?, ? "  # noqa: S608
-        "FROM read_csv(?, delim=';', header=true, nullstr='*', decimal_separator=',', "
-        "sample_size=-1)",
+        "FROM read_csv(?, delim=';', header=true, nullstr='*', all_varchar=true)",
         (
             meta["source_id"],
             meta["source_url"],
             meta["fetched_at"],
-            meta["parser_version"],
+            # La version del parser que PRODUJO la fila (esta), no la del promotor que
+            # copio el blob: si el parseo mejora, la fila nueva tiene que poder
+            # distinguirse de la vieja aunque el blob sea el mismo (§3.1).
+            PARSER_VERSION,
             str(blob),
             meta["robots_snapshot_sha"],
             str(blob),
