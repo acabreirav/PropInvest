@@ -311,7 +311,11 @@ def construir_opex(u: Unidad, e: Escenario, egi_uf: Decimal, p: Config) -> f.Ope
     contrib = contribuciones_anuales_uf(u.precio_uf, dfl2 and ventana_dfl2_abierta(u, p), p)
     renta = D(0)
     if not dfl2:
-        base = max(D(0), u.arriendo_mensual_uf * D(12) - contrib)
+        # Sobre el EGI, no el PGI: el IGC grava la renta efectivamente percibida, y el mes
+        # de vacancia nadie la percibe. Con PGI se tributaba por arriendo que no existio —
+        # conservador, pero conservador tambien es un error de calculo: sesgaba el NOI de
+        # TODO el stock no-DFL2 hacia abajo ~12% del impuesto, siempre en la misma direccion.
+        base = max(D(0), egi_uf - contrib)
         renta = base * p.d("tributacion.igc_tasa_marginal_default")
     return f.Opex(
         contribuciones=contrib,

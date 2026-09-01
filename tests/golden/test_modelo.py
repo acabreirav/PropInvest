@@ -74,7 +74,10 @@ def test_delta_dfl2_exacto(cfg) -> None:
 
     contrib_sin = contribuciones_anuales_uf(u.precio_uf, False, p)
     contrib_con = contribuciones_anuales_uf(u.precio_uf, True, p)
-    renta_evitada = max(D(0), u.arriendo_mensual_uf * D(12) - contrib_sin) * p.d(
+    # Sobre el EGI —renta efectivamente percibida—, no el PGI: el mes de vacancia no
+    # tributa. `egi_uf` es igual en ambos escenarios porque comparten vacancia.
+    assert con.egi_uf == sin.egi_uf
+    renta_evitada = max(D(0), con.egi_uf - contrib_sin) * p.d(
         "tributacion.igc_tasa_marginal_default"
     )
     esperado = renta_evitada + (contrib_sin - contrib_con)

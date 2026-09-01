@@ -73,10 +73,14 @@ dividendo_total = dividendo_uf + desgravamen + incendio/sismo
 **Flujos**
 ```
 BTCF_mensual = NOI/12 − dividendo_total_mensual
-ATCF         = BTCF − impuesto_renta
+ATCF         = BTCF                       ← el impuesto YA está dentro del NOI (línea de opex)
   impuesto_renta = 0                                          si DFL2 y ≤2 viviendas
-  impuesto_renta = tasa_marginal_IGC × (renta − contribuciones) en otro caso
+  impuesto_renta = tasa_marginal_IGC × max(0, EGI − contribuciones) en otro caso
 ```
+⚠️ La versión anterior de este documento decía `ATCF = BTCF − impuesto_renta` **y además**
+listaba el impuesto dentro del NOI: restarlo en los dos lados es doble conteo. El código
+siempre lo restó una vez (en el NOI); el documento queda igual que el código. Y la base es
+el **EGI** — renta efectivamente percibida — no el PGI: el mes de vacancia no tributa.
 ⚠️ En Chile la amortización de capital **no es deducible**, y los intereses hipotecarios solo lo son
 bajo el art. 55 bis con topes y límite de renta. No importes la lógica tributaria estadounidense.
 
