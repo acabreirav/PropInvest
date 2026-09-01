@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS dim_microzona (
   comuna_id           VARCHAR NOT NULL REFERENCES dim_comuna(comuna_id),
   nombre              VARCHAR NOT NULL,
   meli_neighborhood_id VARCHAR,             -- puente al vocabulario comercial
+  centro_lat          DOUBLE,               -- centro del barrio segun MELI (T-014b)
+  centro_lon          DOUBLE,
   geom                GEOMETRY,
   saturada            BOOLEAN DEFAULT FALSE, -- evidencia Tattersall; excluye del ranking
   fuente_saturacion   VARCHAR,

@@ -1289,6 +1289,77 @@ def oportunidades(
 
 
 @app.command()
+def recolectar_barrios() -> None:
+    """T-014b · el diccionario de barrios MELI con su centro, para el alcance del §10.
+
+    API oficial (§3.5). Necesita red y las credenciales de MercadoLibre en `.env`;
+    renueva el token y reescribe MELI_REFRESH_TOKEN, igual que `medir-meli`.
+    ~300 requests con pausa de cortesia: toma un par de minutos.
+    """
+    import os
+
+    from dotenv import load_dotenv
+
+    from flujocero.sources import meli_locations as ml
+    from flujocero.sources.meli import ErrorDeFuente as ErrorMeli
+    from flujocero.sources.meli import desde_entorno as meli_desde_entorno
+
+    ruta_env = RAIZ / ".env"
+    load_dotenv(ruta_env)
+    try:
+        cliente = meli_desde_entorno(dict(os.environ), ruta_env)
+    except ErrorMeli as exc:
+        typer.echo(f"✗ {exc}")
+        raise typer.Exit(2) from exc
+    typer.echo("✓ token renovado y MELI_REFRESH_TOKEN actualizado en .env")
+
+    alcance = desde_config(cargar("zonas"))
+    typer.echo(f"  recolectando barrios de {len(alcance.comunas)} comunas del §10…")
+    try:
+        cosecha = ml.recolectar(cliente, alcance.comunas)
+    finally:
+        cliente.cerrar()
+
+    typer.echo(
+        f"\n  {cosecha.requests} requests · {len(cosecha.barrios)} barrios en "
+        f"{len(cosecha.comunas_encontradas)} comunas"
+    )
+    if cosecha.comunas_sin_ciudad_meli:
+        typer.echo(
+            "  ⚠ sin ciudad MELI que calce por slug: "
+            + ", ".join(sorted(cosecha.comunas_sin_ciudad_meli))
+        )
+    for e in cosecha.errores[:8]:
+        typer.echo(f"  ✗ {e}")
+    if len(cosecha.errores) > 8:
+        typer.echo(f"  … y {len(cosecha.errores) - 8} errores mas")
+    if not cosecha.barrios:
+        typer.echo(
+            "\n✗ Sin barrios. Si todos los errores son 403, classified_locations corrio la"
+            "\n  misma suerte que /search (ADR 003) y el puente necesita otra fuente."
+        )
+        raise typer.Exit(1)
+
+    import duckdb
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        contadores = ml.cargar(con, cosecha, datetime.now(UTC))
+    finally:
+        con.close()
+    typer.echo(
+        f"\n✓ dim_microzona: {contadores['actualizadas']} microzonas nuestras ganan centro"
+        f" · {contadores['insertadas']} barrios nuevos insertados"
+    )
+    if contadores["sin_centro"]:
+        typer.echo(
+            f"  ⚠ {contadores['sin_centro']} barrios SIN geo_information en la API: quedan"
+            "\n    con centro NULL (ND) y no participan del puente con las manzanas."
+        )
+    typer.echo("\n  Siguiente: el puente manzana → microzona por barrio mas cercano (T-014b).")
+
+
+@app.command()
 def ingerir_censo() -> None:
     """T-014 · promueve los archivos del Censo 2024 (descarga manual) a la zona cruda.
 

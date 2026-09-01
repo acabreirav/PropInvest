@@ -27,6 +27,10 @@ def ruta_esquema(raiz: Path | None = None) -> Path:
 COLUMNAS_AGREGADAS: tuple[tuple[str, str, str], ...] = (
     ("agg_arriendo_microzona", "m2_mediana", "DECIMAL(10,2)"),
     ("fact_unidad_venta", "precio_clp", "DECIMAL(14,0)"),
+    # T-014b: el centro del barrio segun MELI. Es lo minimo que hace puenteable la
+    # microzona con las manzanas censales mientras no exista un poligono de verdad.
+    ("dim_microzona", "centro_lat", "DOUBLE"),
+    ("dim_microzona", "centro_lon", "DOUBLE"),
 )
 
 
