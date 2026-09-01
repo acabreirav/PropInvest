@@ -102,6 +102,11 @@ class Evaluacion:
     # `pie_minimo_flujo_cero`, que es la forma cerrada comparable con la literatura, y las dos
     # no coinciden: ver `pie_flujo_cero_real()`.
     pie_flujo_cero_real: Decimal | None = None
+    # El arriendo de equilibrio REAL, resuelto sobre el modelo completo. Convive con
+    # `arriendo_equilibrio_uf` (forma cerrada) igual que el par de pies: la cerrada trata el
+    # opex como fijo y 4 de sus lineas crecen con el arriendo, asi que subestima. `None` =
+    # no calculado todavia (es caro y se calcula donde se muestra, no en el ranking masivo).
+    arriendo_equilibrio_real_uf: Decimal | None = None
     excluido: bool = False
     motivo_exclusion: str | None = None
     score: Decimal = D(0)
@@ -408,7 +413,7 @@ def evaluar(
     ev.capital_invertido_uf = u.precio_uf * ev.pie_efectivo + cierre
     ev.cash_on_cash = ev.btcf_mensual_uf * D(12) / ev.capital_invertido_uf
     ev.arriendo_equilibrio_uf = f.arriendo_equilibrio_uf(
-        servicio_anual, ev.opex_anual_uf, e.vacancia, pi
+        servicio_anual, ev.opex_anual_uf, e.vacancia, p.d("vacancia_y_riesgo.incobrabilidad"), pi
     )
     ev.pie_minimo_flujo_cero = f.pie_minimo_flujo_cero(
         ev.rentabilidad_bruta, ev.tasa_aplicada, plazo, ev.opex_anual_uf / ev.pgi_uf
@@ -479,6 +484,44 @@ def pie_flujo_cero_real(
         return None  # ni poniendo el 95% se paga sola
     if flujo(bajo) >= 0:
         return D(0)  # se paga sola sin pie
+    while alto - bajo > tolerancia:
+        medio = (bajo + alto) / 2
+        if flujo(medio) < 0:
+            bajo = medio
+        else:
+            alto = medio
+    return alto
+
+
+def arriendo_equilibrio_real(
+    u: Unidad, e: Escenario, p: Config, inv: Config, tolerancia: Decimal = D("0.01")
+) -> Decimal | None:
+    """El arriendo mensual, en UF, con el que el flujo REAL llega a cero al pie del escenario.
+
+    La forma cerrada (`core.arriendo_equilibrio_uf`) congela el opex en el nivel del arriendo
+    ACTUAL, pero administracion (% del EGI), mantencion (% del PGI), corretaje (meses de
+    arriendo) e impuesto a la renta crecen con el arriendo: al subirlo hasta el equilibrio,
+    parte de cada peso extra se lo comen esos cuatro. Por eso la cerrada subestima — el mismo
+    defecto, con la misma cura, que el par `pie_minimo_flujo_cero` / `pie_flujo_cero_real`:
+    dos metricas contradiciendose en la misma fila, y la optimista era la que se mostraba.
+
+    Se resuelve por biseccion sobre `evaluar()` completo, con la unidad reevaluada a cada
+    arriendo candidato, para que el numero sea coherente con el resto de la fila. `None` si
+    ni multiplicando el arriendo actual por 8 se llega a flujo cero (con deuda al 90% y un
+    ticket alto pasa; el numero deja de ser informativo mucho antes).
+    """
+
+    def flujo(arr: Decimal) -> Decimal:
+        prueba = replace(u, arriendo_mensual_uf=arr)
+        return evaluar(prueba, e, p, inv, saltar_exclusiones=True).btcf_mensual_uf
+
+    # El piso es la tolerancia y no cero: con arriendo 0 el PGI es 0 y el GRM del modelo
+    # divide por el. Un equilibrio bajo 0,01 UF/mes es cero a efectos practicos igual.
+    bajo, alto = tolerancia, max(u.arriendo_mensual_uf, D(1)) * D(8)
+    if flujo(alto) < 0:
+        return None
+    if flujo(bajo) >= 0:
+        return D(0)  # practicamente sin renta ya esta en flujo cero
     while alto - bajo > tolerancia:
         medio = (bajo + alto) / 2
         if flujo(medio) < 0:

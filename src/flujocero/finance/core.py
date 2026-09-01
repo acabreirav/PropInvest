@@ -193,10 +193,23 @@ def arriendo_equilibrio_uf(
     servicio_deuda_anual_uf: Decimal,
     opex_anual_uf: Decimal,
     vacancia: Decimal,
+    incobrabilidad: Decimal,
     inflacion_anual: Decimal,
 ) -> Decimal:
-    """Arriendo mensual mínimo, en UF, para flujo cero."""
-    denom = D(12) * (D(1) - vacancia) * factor_erosion(inflacion_anual)
+    """Arriendo mensual mínimo, en UF, para flujo cero. Forma cerrada, y APROXIMADA.
+
+    Dos cosas que hay que saber para leerla:
+
+    - **Descuenta incobrabilidad**, igual que el EGI. La version anterior no lo hacia: un
+      "equilibrio" que al cobrarse pasa por `(1 - incobrabilidad)` no equilibra — quedaba
+      corto exactamente en esa fraccion.
+    - **Trata el opex como fijo, y no lo es**: administracion, mantencion, corretaje e
+      impuesto crecen con el arriendo. Por eso esta forma SUBESTIMA el arriendo necesario
+      cuando el equilibrio queda lejos del arriendo actual. La cifra honesta es
+      `modelo.arriendo_equilibrio_real()`, que resuelve sobre el modelo completo — la misma
+      relacion que hay entre `pie_minimo_flujo_cero` y `pie_flujo_cero_real`.
+    """
+    denom = D(12) * (D(1) - vacancia) * (D(1) - incobrabilidad) * factor_erosion(inflacion_anual)
     return (servicio_deuda_anual_uf + opex_anual_uf) / denom
 
 

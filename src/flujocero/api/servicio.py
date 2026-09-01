@@ -78,6 +78,9 @@ class Foto:
     segundos_calculo: float = 0.0
     capacidades: dict[str, Any] = field(default_factory=dict)
     advertencias: list[str] = field(default_factory=list)
+    # El escenario con que se evaluo la foto. La ficha lo necesita para las metricas caras
+    # que se calculan por unidad y no en el ranking masivo (arriendo de equilibrio real).
+    escenario: Any = None
 
 
 def _capacidades(conexion: Any) -> dict[str, Any]:
@@ -176,7 +179,21 @@ class Servicio:
         return f
 
     def fila(self, unidad_key: str, pie: Decimal | None = None) -> Fila | None:
-        return next((f for f in self.foto(pie).filas if f.unidad.unidad_key == unidad_key), None)
+        foto = self.foto(pie)
+        f = next((x for x in foto.filas if x.unidad.unidad_key == unidad_key), None)
+        if f is None:
+            return None
+        # El arriendo de equilibrio REAL se resuelve por biseccion sobre el modelo completo:
+        # ~13 evaluaciones extra. En el ranking masivo seria prohibitivo; en la ficha de UNA
+        # unidad es invisible. Se rellena perezoso y queda cacheado en la evaluacion.
+        if f.evaluacion.arriendo_equilibrio_real_uf is None and foto.escenario is not None:
+            from flujocero.finance.modelo import arriendo_equilibrio_real
+
+            p, inv = cargar("params"), cargar("inversionista")
+            f.evaluacion.arriendo_equilibrio_real_uf = arriendo_equilibrio_real(
+                f.unidad, foto.escenario, p, inv
+            )
+        return f
 
     def invalidar(self) -> None:
         """Bota todo lo cacheado. Se llama cuando la base cambió bajo nuestros pies."""
@@ -330,6 +347,7 @@ class Servicio:
             con_fogaes=sum(1 for _, ev in vivos if ev.fogaes_aplicado),
             valor_uf_clp=p.d("macro.valor_uf_clp"),
             fuente_uf=fuente_uf,
+            escenario=e,
             segundos_calculo=time.monotonic() - t0,
             capacidades=capacidades,
             advertencias=advertencias,

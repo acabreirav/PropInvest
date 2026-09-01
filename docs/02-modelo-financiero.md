@@ -83,9 +83,17 @@ bajo el art. 55 bis con topes y límite de renta. No importes la lógica tributa
 **Cobertura y equilibrio**
 ```
 DSCR = NOI_anual / servicio_deuda_anual
-arriendo_min_uf = (dividendo_total_anual + opex_anual) / [ 12 × (1−vacancia) / (1+π/2) ]
+arriendo_min_uf ≈ (dividendo_total_anual + opex_anual) / [ 12 × (1−vacancia) × (1−incobrabilidad) / (1+π/2) ]
 BEO             = (opex_anual + servicio_deuda_anual) / PGI
 ```
+⚠️ La forma cerrada de `arriendo_min_uf` es **aproximada por construcción**: congela el opex en
+el nivel del arriendo actual, pero administración (% del EGI), mantención (% del PGI), corretaje
+(meses de arriendo) e impuesto a la renta **crecen con el arriendo**, así que subestima — medido
+~7% en un caso real (UF 1.100, arriendo 8,2 UF). La cifra que se muestra como definitiva es
+`modelo.arriendo_equilibrio_real()`: bisección sobre el modelo completo, la misma relación que
+hay entre `pie_minimo` (cerrada, comparable con la literatura) y `pie_flujo_cero_real`.
+(La versión anterior de la cerrada tampoco descontaba incobrabilidad: un "equilibrio" que al
+cobrarse pasa por `(1−incobrabilidad)` no equilibra. Corregido el 31-ago-2026.)
 Con 90% LTV y cap rates de 4–5%, el **DSCR típico de un departamento nuevo chileno está entre
 0,55 y 0,80**: el inversionista aporta flujo todos los meses. Es lo normal, y el retorno viene de
 la amortización y la plusvalía, no del carry.

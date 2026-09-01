@@ -79,7 +79,7 @@ def _fila_json(f: Fila) -> dict[str, Any]:
     # El precio y los m2 vienen de un aviso: `V`. Todo lo que sale del motor es `D`, salvo lo
     # que toca vacancia u opex, que son supuestos `E` de params.yml y arrastran su nivel.
     con_supuestos = nivel_derivado("V", "E")
-    return {
+    d = {
         "posicion": f.posicion,
         "unidad_key": u.unidad_key,
         "microzona_id": u.microzona_id,
@@ -134,6 +134,15 @@ def _fila_json(f: Fila) -> dict[str, Any]:
             else None
         ),
     }
+    if f.evaluacion.arriendo_equilibrio_real_uf is not None:
+        # La cifra honesta del equilibrio: resuelta sobre el modelo completo, con el opex
+        # creciendo con el arriendo. Solo la ficha la calcula (es una biseccion por unidad);
+        # en el ranking masivo la clave no viaja — ausente, no null, para que nadie confunda
+        # "no calculado" con un numero.
+        d["arriendo_equilibrio_real_uf"] = cifra(
+            f.evaluacion.arriendo_equilibrio_real_uf, "E", "UF/mes"
+        )
+    return d
 
 
 def _foto_json(fo: Foto, filas: list[Fila]) -> dict[str, Any]:

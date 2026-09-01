@@ -540,3 +540,42 @@ def test_score_con_una_sola_unidad_no_declara_nada_inerte(cfg):
     vivos = [e for e in evals if not e.excluido]
     if vivos:
         assert vivos[0].score_inertes == ()
+
+
+# ------------------------------------------------------------- 9 · arriendo de equilibrio
+
+
+def test_el_arriendo_de_equilibrio_real_equilibra_de_verdad(cfg):
+    """Cobrando el equilibrio real, el flujo mensual queda en cero (± la tolerancia).
+
+    Es la definicion de la metrica, y la version anterior no la cumplia por dos lados:
+    la forma cerrada no descontaba incobrabilidad y congelaba el opex, cuando 4 de sus
+    lineas crecen con el arriendo. El mismo defecto del par de pies, con la misma cura.
+    """
+    from flujocero.finance.modelo import arriendo_equilibrio_real, evaluar
+    from dataclasses import replace as reemplazar
+
+    p, inv = cfg
+    u = unidad(arriendo_mensual_uf=D(8))  # deficitaria: el equilibrio esta por encima
+    e = escenario()
+    eq = arriendo_equilibrio_real(u, e, p, inv)
+    assert eq is not None and eq > D(8)
+
+    ev = evaluar(reemplazar(u, arriendo_mensual_uf=eq), e, p, inv, saltar_exclusiones=True)
+    assert abs(ev.btcf_mensual_uf) < D("0.02"), (
+        f"cobrando el 'equilibrio' el flujo da {ev.btcf_mensual_uf} UF/mes, no cero"
+    )
+
+    # Y la forma cerrada queda por DEBAJO, como su docstring declara: si algun dia la
+    # supera, una de las dos cambio de significado y hay que mirar.
+    assert ev.arriendo_equilibrio_uf <= eq + D("0.02")
+
+
+def test_la_forma_cerrada_descuenta_incobrabilidad(cfg):
+    """Con incobrabilidad i, el denominador lleva (1-i): un equilibrio que al cobrarse pasa
+    por (1-i) y no lo descuenta, no equilibra — quedaba corto exactamente en esa fraccion."""
+    from flujocero.finance import core as f
+
+    con_i = f.arriendo_equilibrio_uf(D(100), D(20), D("0.08"), D("0.02"), D("0.03"))
+    sin_i = f.arriendo_equilibrio_uf(D(100), D(20), D("0.08"), D(0), D("0.03"))
+    assert abs(con_i - sin_i / (D(1) - D("0.02"))) < D("1e-12")
