@@ -260,16 +260,47 @@ def cargar_geometria(conexion: object, raiz: Path | None = None) -> dict[str, st
         gdf = gdf.to_crs(4326)
         tabla = gdf[[col]].copy()
         tabla.columns = ["manzent"]
-        tabla["manzent"] = tabla["manzent"].astype("int64", errors="ignore").astype(str)
+        # El DBF guarda la llave como numerico y geopandas la entrega como float: str()
+        # directo da "13119011001001.0" y el cruce con el censo calza CERO. Se pasa por el
+        # entero nullable antes de ir a texto; un NaN queda como <NA> y no calza, que es
+        # lo correcto — un poligono sin llave no puede pegarse a ninguna manzana.
+        serie = tabla["manzent"]
+        if serie.dtype.kind == "f":
+            serie = serie.astype("Int64")
+        # `removesuffix(".0")` por si la serie ya venia como texto con decimal pegado;
+        # `lstrip("0")` por si el DBF rellena con ceros a la izquierda ("02101...") — el
+        # CSV nunca los tiene: la region va de 1 a 16, asi que un MANZENT legitimo jamas
+        # empieza en cero y el strip no puede romper una llave buena.
+        tabla["manzent"] = serie.astype(str).str.strip().str.removesuffix(".0").str.lstrip("0")
         centroides = gdf.geometry.representative_point()
         tabla["lat"] = centroides.y
         tabla["lon"] = centroides.x
         tabla["wkb"] = gdf.geometry.to_wkb()
         conexion.register("tmp_geo", tabla)  # type: ignore[attr-defined]
+        calzan = conexion.execute(  # type: ignore[attr-defined]
+            "SELECT count(*) FROM dim_manzana WHERE manzent IN (SELECT manzent FROM tmp_geo)"
+        ).fetchone()[0]
         conexion.execute(  # type: ignore[attr-defined]
             "UPDATE dim_manzana SET lat = g.lat, lon = g.lon, geom_wkb = g.wkb "
             "FROM tmp_geo g WHERE dim_manzana.manzent = g.manzent"
         )
         conexion.unregister("tmp_geo")  # type: ignore[attr-defined]
-        resultados[zip_path.name] = f"{len(tabla)} poligonos leidos"
+        resultado = f"{len(tabla)} poligonos · {calzan} calzan con el censo"
+        if len(tabla) and calzan / len(tabla) < 0.5:
+            # El cruce esta roto y el mensaje ES el diagnostico: se muestran llaves de los
+            # dos lados para poder ver el desajuste sin abrir nada a mano. La region sale
+            # del nombre del zip (r13 -> CUT que empieza con 13).
+            region = zip_path.name.split("-r")[-1].split(".")[0].lstrip("0")
+            muestras_shp = ", ".join(tabla["manzent"].head(3))
+            filas_csv = conexion.execute(  # type: ignore[attr-defined]
+                "SELECT manzent FROM dim_manzana WHERE CAST(cut AS VARCHAR) LIKE ? "
+                "ORDER BY manzent LIMIT 3",
+                (f"{region}%",),
+            ).fetchall()
+            muestras_csv = ", ".join(f[0] for f in filas_csv)
+            resultado += (
+                f"\n        CRUCE ROTO — llaves del SHP: [{muestras_shp}]"
+                f"\n                     llaves del CSV: [{muestras_csv}]"
+            )
+        resultados[zip_path.name] = resultado
     return resultados

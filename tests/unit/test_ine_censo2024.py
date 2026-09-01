@@ -145,7 +145,7 @@ def test_carga_geometria_desde_el_zip_regional(tmp_path):
     db.aplicar_esquema(con)
     censo.cargar_csv(con, tmp_path / "raw")
     resultados = censo.cargar_geometria(con, tmp_path / "raw")
-    assert resultados == {"shp-apc2023-r13.zip": "1 poligonos leidos"}
+    assert resultados == {"shp-apc2023-r13.zip": "1 poligonos · 1 calzan con el censo"}
 
     lat, lon, wkb = con.execute(
         "SELECT lat, lon, geom_wkb FROM dim_manzana WHERE manzent = '13119011001001'"
@@ -159,3 +159,52 @@ def test_carga_geometria_desde_el_zip_regional(tmp_path):
         ]
         is None
     )
+
+
+def test_llave_numerica_del_dbf_no_rompe_el_cruce(tmp_path):
+    """El DBF entrega la llave como float: str() directo da '13119011001001.0' y calza CERO.
+
+    Paso EXACTO en la maquina real: 109.543 poligonos leidos, 2.853 calzaron (1%). Este
+    test fija la normalizacion float -> Int64 -> texto, y que el diagnostico de cruce roto
+    aparezca cuando calza menos de la mitad.
+    """
+    import zipfile
+
+    import duckdb
+    import geopandas as gpd
+    import numpy as np
+    from shapely.geometry import Polygon
+
+    from flujocero import db
+
+    origen = _csv_como_el_del_ine(tmp_path)
+    gdf = gpd.GeoDataFrame(
+        {
+            "MANZENT": np.array([13119011001001.0, 99999999999999.0]),  # float, como el DBF
+            "geometry": [
+                Polygon([(0, 0), (0, 1), (1, 1)]),
+                Polygon([(2, 2), (2, 3), (3, 3)]),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+    carpeta = tmp_path / "SHP_APC2023_R13"
+    carpeta.mkdir()
+    gdf.to_file(carpeta / "Manzana_Urbana.shp")
+    with zipfile.ZipFile(origen / "shp-apc2023-r13.zip", "w") as zf:
+        for f in carpeta.iterdir():
+            zf.write(f, f"SHP_APC2023_R13/{f.name}")
+
+    censo.promover(origen, tmp_path / "raw")
+    con = duckdb.connect()
+    db.aplicar_esquema(con)
+    censo.cargar_csv(con, tmp_path / "raw")
+    res = censo.cargar_geometria(con, tmp_path / "raw")["shp-apc2023-r13.zip"]
+    assert res.startswith("2 poligonos · 1 calzan"), res
+
+    assert (
+        con.execute(
+            "SELECT geom_wkb IS NOT NULL FROM dim_manzana WHERE manzent = '13119011001001'"
+        ).fetchone()[0]
+        is True
+    ), "la llave float normalizada calza"
