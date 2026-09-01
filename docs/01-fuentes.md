@@ -228,6 +228,15 @@ Banco Central API BDE → si3.bcentral.cl/estadisticas/principal1/web_services/ 
 `https://www.cmfchile.cl/portal/estadisticas/617/articles-46417_recurso_1.xls`
 Desagregado por institución individual: portal InfoFinanciera ✅, archivo exacto ❓.
 
+**compara.cl — SOLO TAMIZAJE, nunca dato de modelo (T-056):**
+Agregador de cotizaciones hipotecarias. Útil para ver el ABANICO de tasas del día y elegir
+a qué bancos cotizar en serio. **No entra a `params.yml` ni a la base**: el 31-ago-2026 se
+midió contra el simulador del propio banco y discrepó en las dos direcciones — Santander
+4,10% en compara vs 4,65% en su simulador; BancoEstado 4,54% vs 4,29%. Una tasa que el
+banco no confirma en SU canal es marketing, no dato (§13: verifica la aritmética de toda
+cifra publicada). La tasa que alimenta el modelo sale de la CMF (arriba) o de una
+cotización formal emitida por el banco.
+
 ### Cartografía y censo
 | Fuente | Contenido | Formato |
 |---|---|---|
