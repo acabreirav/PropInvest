@@ -118,7 +118,7 @@ CoC = BTCF_anual / capital_invertido
 
 **TIR real apalancada y VAN**
 ```
-t=0    : −(pie + gastos_de_cierre)
+t=0    : −capital_invertido                            (pie + gastos_de_cierre + habilitación)
 t=1..N : +ATCF_anual                                   (en UF)
 t=N    : +valor_venta_uf × (1 − 0,03×1,19)             (comisión de venta)
          −saldo_insoluto_uf(N)

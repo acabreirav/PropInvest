@@ -112,6 +112,12 @@ gastos_de_cierre:
   notaria_escritura_mutuo_uf: {v: 3.0, evidence: V}
   inscripcion_cbr_clp: {v: 165000, evidence: V, rango: [80000, 250000]}
   certificados_clp: {v: 50000, evidence: V}
+  # docs/02 la lista en el capital invertido del CoC desde el dia uno, y el motor no la
+  # tenia EN NINGUNA PARTE: cortinas, lamparas, a veces pintura, en un usado ademas
+  # reparaciones. Parte en 0 —el comportamiento historico— a proposito: un numero
+  # inventado seria imputar (§3.2). Es un `E` declarado con rango para poder medirlo con
+  # `cli sensibilidad gastos_de_cierre.habilitacion_inicial_uf=25` y decidir con el §8.4.
+  habilitacion_inicial_uf: {v: 0, evidence: E, rango: [0, 60]}
 
 iva_vivienda:
   exencion_vigente: {v: null, evidence: C, nota: "aprobada por Congreso 04-ago-2026; publicación en DO NO confirmada al 28-ago-2026"}

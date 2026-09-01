@@ -414,7 +414,12 @@ def evaluar(
     # El capital invertido va sobre el pie EFECTIVO, no sobre el deseado: si el banco
     # exige 20%, el cash-on-cash se calcula sobre esos 20%, no sobre los 10% que uno
     # hubiera querido poner. Con el pie deseado, el retorno saldria inflado al doble.
-    ev.capital_invertido_uf = u.precio_uf * ev.pie_efectivo + cierre
+    # La habilitacion es plata que sale del bolsillo el dia uno igual que el pie: docs/02
+    # la lista en el CoC desde siempre y el motor la omitia (hoy vale 0 en params, pero
+    # el cable existe y `sensibilidad` puede moverla).
+    ev.capital_invertido_uf = (
+        u.precio_uf * ev.pie_efectivo + cierre + p.d("gastos_de_cierre.habilitacion_inicial_uf")
+    )
     ev.cash_on_cash = ev.btcf_mensual_uf * D(12) / ev.capital_invertido_uf
     ev.arriendo_equilibrio_uf = f.arriendo_equilibrio_uf(
         servicio_anual, ev.opex_anual_uf, e.vacancia, p.d("vacancia_y_riesgo.incobrabilidad"), pi

@@ -48,9 +48,14 @@ def construir_escenarios(p: Config, inv: Config) -> list[Escenario]:
                 vacancia=vac,
                 tasa_anual=tasa,
                 tasa_sin_subsidio=caida,
-                # El escenario OFRECE FOGAES; el motor decide si el inmueble califica.
-                # Es la misma regla que el subsidio: condicion del inmueble, no del deseo.
-                con_fogaes=con_sub,
+                # El escenario OFRECE FOGAES siempre; el motor decide si el inmueble
+                # califica. FOGAES y subsidio a la tasa son beneficios INDEPENDIENTES —
+                # el propio modelo lo advierte— y acoplarlos aqui (`con_fogaes=con_sub`)
+                # le cargaba al contraste `sin_subsidio` un segundo castigo que la norma
+                # no impone: ademas de la tasa, el pie minimo saltaba de 10% a 20%. El
+                # mismo error de "confundir dos cosas" que el comentario de las tasas
+                # de arriba dice evitar.
+                con_fogaes=True,
             )
         )
     return salida
