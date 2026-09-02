@@ -1543,17 +1543,27 @@ def probar_planok(
                     extra=f"&id_modelo={mid}&tipo_devolucion=orientacion",
                     etiqueta=f"_ori_m{mid}",
                 )
-                sondear("Productos", extra=f"&id_modelo={mid}", etiqueta=f"_m{mid}")
+                # La segunda aparicion de Productos.php en cotiza.js (la que el dedupe
+                # escondia) usa tipo_devolucion=solo_productos: ESA es la llamada de
+                # unidades. Se prueba sola y con la orientacion real como filtro.
                 try:
                     ori = json_lib.loads(orientaciones.strip("()")).get("data", [])
                     primera_ori = ori[0].get("id", "") if ori else ""
                 except (ValueError, AttributeError, IndexError):
                     primera_ori = ""
+                sondear(
+                    "Productos",
+                    extra=f"&id_modelo={mid}&tipo_devolucion=solo_productos",
+                    etiqueta=f"_sp_m{mid}",
+                )
                 if primera_ori:
                     sondear(
                         "Productos",
-                        extra=f"&id_modelo={mid}&filtro_orientacion={primera_ori}",
-                        etiqueta=f"_fo_m{mid}",
+                        extra=(
+                            f"&id_modelo={mid}&tipo_devolucion=solo_productos"
+                            f"&filtro_orientacion={primera_ori}"
+                        ),
+                        etiqueta=f"_spfo_m{mid}",
                     )
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
