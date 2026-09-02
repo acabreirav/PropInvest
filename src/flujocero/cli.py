@@ -1689,11 +1689,12 @@ def _volcar_ld_desde_sitemap(
     )
     if not ver_pagina.allowed:
         raise typer.Exit(2)
-    for url in proyectos[:n_paginas]:
+
+    def _volcar_pagina(url: str) -> None:
         r = cliente.get(url, headers={"User-Agent": ua})
         typer.echo(f"\n  {url}: HTTP {r.status_code} · {len(r.content):,} bytes")
         if r.status_code != 200:
-            continue
+            return
         escribir_crudo(
             "wpjson_inmobiliarias",
             url,
@@ -1703,8 +1704,9 @@ def _volcar_ld_desde_sitemap(
             nombre=f"{dominio.replace('.', '_')}_{url.rstrip('/').rsplit('/', 1)[-1]}",
             parser_version="probe/0.2.0",
         )
+        html = r.text
         bloques = re_mod.findall(
-            r'<script type="application/ld\+json">(.*?)</script>', r.text, re_mod.S
+            r'<script type="application/ld\+json">(.*?)</script>', html, re_mod.S
         )
         typer.echo(f"    {len(bloques)} bloques JSON-LD:")
         for i, bloque in enumerate(bloques):
@@ -1715,6 +1717,35 @@ def _volcar_ld_desde_sitemap(
             if len(bonito) > 20_000:
                 bonito = bonito[:20_000] + "\n    …(truncado)"
             typer.echo(f"    --- bloque {i + 1} ---\n{bonito}")
+        # la primera ronda mostro que el JSON-LD de la pagina de unidad no trae precio:
+        # se escanea el HTML crudo — atributos data-*, blobs JS y endpoints internos.
+        contextos: list[str] = []
+        for m in re_mod.finditer(r"(?i)precio|price|valor_uf|valor uf|\buf\b|\bclf\b|desde", html):
+            trozo = " ".join(html[max(0, m.start() - 80) : m.end() + 110].split())
+            if any(c.isdigit() for c in trozo) and trozo not in contextos:
+                contextos.append(trozo)
+        typer.echo(f"    contextos con pinta de precio en el HTML: {len(contextos)}")
+        for trozo in contextos[:18]:
+            typer.echo(f"      · {trozo}")
+        endpoints = sorted(
+            {
+                " ".join(html[max(0, m.start() - 60) : m.end() + 120].split())
+                for m in re_mod.finditer(r"(?i)wp-json|admin-ajax|/rest/|api\.", html)
+            }
+        )
+        typer.echo(f"    endpoints internos mencionados: {len(endpoints)}")
+        for e in endpoints[:10]:
+            typer.echo(f"      · {e}")
+
+    # las URLs del sitemap son de UNIDAD (…/proyecto-slug/casa-123/); el precio puede
+    # vivir un nivel arriba, en la pagina del proyecto — se vuelcan ambas.
+    padres: list[str] = []
+    for u in proyectos:
+        padre = u.rstrip("/").rsplit("/", 1)[0] + "/"
+        if padre not in padres and padre != f"{base}/nuestros-proyectos/":
+            padres.append(padre)
+    for url in proyectos[:n_paginas] + padres[:2]:
+        _volcar_pagina(url)
     typer.echo("\n  Pegame TODA la salida: con esto se escribe el parser del colector T-925c.")
 
 
