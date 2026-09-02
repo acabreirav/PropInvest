@@ -1,8 +1,7 @@
 # ADR 010 · Cotizador PlanOK: la API completa, y dónde está la línea
 
-**Fecha**: 02-sep-2026 · **Estado**: lectura aprobada; **opción (a) aprobada por el
-inversionista el 02-sep-2026** — piloto acotado: cotizaciones automáticas SOLO en comunas
-del alcance, tope 25 unidades/día, pausa de cortesía · **Tarea**: T-925
+**Fecha**: 02-sep-2026 · **Estado**: lectura aprobada; **cotización masiva DESCARTADA
+el 02-sep-2026** (ver adenda) · **Tarea**: T-925
 
 ## Qué se investigó y cómo
 
@@ -53,3 +52,27 @@ esta es la pregunta. Opciones presentadas al inversionista el 02-sep-2026:
   No vive en el cotizador; se cosecha de los sitios de inmobiliarias y portales de
   proyectos nuevos (Pabellón/Enlace, docs/01 #8). Tarea aparte (T-925b).
 - El proyecto de ejemplo es de Puerto Montt: sirvió para la ingeniería, no para el dato.
+
+
+## Adenda 02-sep-2026 · La cotización NO es anónima — el piloto (a) se descarta
+
+El inversionista verificó el flujo real en el navegador: al apretar "Continuar", el
+cotizador **pide los datos personales del cliente ANTES de generar la cotización** (por eso
+`GenerarCotizacion` fallaba en `Get_Insert_Eventos_Personales1`: falta la persona). No hay
+cotización sin identificarse.
+
+Consecuencia directa: cotizar en masa exigiría (i) entregar los datos reales del
+inversionista decenas de veces al día — cada una un lead que gatilla seguimiento comercial —
+o (ii) inventar identidades, que el §9 prohíbe sin ambigüedad. **Ninguna es aceptable; la
+opción (a) aprobada horas antes asumía anonimato y queda sin efecto.**
+
+Lo que queda en pie de esta fuente:
+- **Lectura** (proyectos, dirección, modelos, unidades disponibles, stock): aprobada,
+  útil como censo de oferta nueva y señal de disponibilidad. Sin precio.
+- **Cotizador como canal de outreach del §9**: uno a uno, con identidad real, para
+  proyectos que de verdad interesen — que es exactamente lo que el §9 declaró preferido.
+
+**El precio masivo de proyectos nuevos cambia de ruta** a la #3 del orden de ataque de
+docs/01 — `wp-json/wp/v2/proyecto` + JSON-LD de las inmobiliarias (Socovesa publica
+priceCurrency "CLF" = UF), JSON público sin formularios, esfuerzo muy bajo, riesgo muy
+bajo — complementada por Pabellón/Enlace (#8) y listas PDF vía outreach. Tarea: T-925c.

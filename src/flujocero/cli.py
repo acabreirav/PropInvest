@@ -1622,6 +1622,69 @@ def probar_planok(
 
 
 @app.command()
+def probar_wpjson(
+    dominio: str = typer.Option("socovesa.cl", help="dominio de la inmobiliaria, sin https://"),
+) -> None:
+    """T-925c · sondea el wp-json y el JSON-LD de una inmobiliaria: la ruta #3 de docs/01.
+
+    JSON publico de WordPress, sin formularios ni datos personales — el reemplazo del
+    cotizador PlanOK para el precio masivo de proyectos nuevos (ADR 010, adenda).
+    Robots primero, cada respuesta a crudo, y un resumen de que campos trae.
+    """
+    import json as json_lib
+
+    import httpx
+
+    from flujocero.sources import robots_check
+    from flujocero.sources.base import escribir_crudo
+
+    ua = "FlujoCero-ResearchBot/1.0"
+    momento = datetime.now(UTC)
+    with httpx.Client(timeout=30, follow_redirects=True) as cliente:
+        base = f"https://www.{dominio}" if not dominio.startswith("www.") else f"https://{dominio}"
+        veredicto = robots_check.verificar(
+            f"{base}/wp-json/", ua, source_id="wpjson_inmobiliarias", cliente=cliente
+        )
+        typer.echo(f"  robots.txt {dominio}: {'permitido' if veredicto.allowed else 'PROHIBIDO'}")
+        if not veredicto.allowed:
+            raise typer.Exit(2)
+        rutas = (
+            "/wp-json/wp/v2/proyecto?per_page=5",
+            "/wp-json/wp/v2/proyectos?per_page=5",
+            "/wp-json/wp/v2/types",
+        )
+        for ruta in rutas:
+            r = cliente.get(f"{base}{ruta}", headers={"User-Agent": ua})
+            cuerpo = r.text.strip()
+            typer.echo(f"\n  {ruta}: HTTP {r.status_code} · {len(cuerpo):,} bytes")
+            if r.status_code != 200 or not cuerpo:
+                continue
+            escribir_crudo(
+                "wpjson_inmobiliarias",
+                f"{base}{ruta}",
+                r.content,
+                momento,
+                robots_snapshot_sha=veredicto.snapshot_sha,
+                nombre=f"{dominio.replace('.', '_')}_{ruta.strip('/').replace('/', '_').split('?')[0]}",
+                parser_version="probe/0.1.0",
+            )
+            try:
+                datos = json_lib.loads(cuerpo)
+            except ValueError:
+                typer.echo(f"    (no es JSON) {cuerpo[:200]}")
+                continue
+            if isinstance(datos, list) and datos:
+                typer.echo(f"    {len(datos)} items · claves del primero: {sorted(datos[0])[:20]}")
+                typer.echo(f"    muestra: {json_lib.dumps(datos[0], ensure_ascii=False)[:700]}")
+            elif isinstance(datos, dict):
+                typer.echo(f"    claves: {sorted(datos)[:25]}")
+    typer.echo(
+        "\n  Pegame la salida. Con los campos reales escribo el parser; si `types` lista"
+        "\n  otro nombre de post-type para proyectos, se sondea ese."
+    )
+
+
+@app.command()
 def recolectar_metro() -> None:
     """T-922 · estaciones de Metro y Biotren desde OpenStreetMap (una request a Overpass).
 

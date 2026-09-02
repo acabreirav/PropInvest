@@ -1443,7 +1443,7 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-925 · Colector de proyectos NUEVOS via cotizador PlanOK
-estado: en_curso
+estado: reencuadrada  # la cotizacion exige datos personales: masivo descartado (ADR 010 adenda)
 agente: colector
 fase: 2
 depende_de: []
@@ -1454,4 +1454,15 @@ criterio_de_aceptacion:
     la maquina del inversionista, resolver el payload de datos.php (unico ❓ del docs/01 B.1)
   - paso 2: ADR con robots + legal_tier, parser con selftest, >=300 unidades con precio
     por unidad en la RM
+gate: make gates
+
+## T-925c · Precios de proyectos nuevos via wp-json / JSON-LD de inmobiliarias
+estado: en_curso
+agente: colector
+fase: 2
+depende_de: []
+criterio_de_aceptacion:
+  - sonda contra 2-3 inmobiliarias reales (Socovesa primero: publica CLF=UF en JSON-LD)
+  - robots verificado por dominio; raw primero; parser con selftest
+  - >=300 unidades/tipologias nuevas con precio en la RM, evidence V con su URL
 gate: make gates
