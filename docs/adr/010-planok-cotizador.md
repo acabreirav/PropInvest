@@ -1,7 +1,8 @@
 # ADR 010 · Cotizador PlanOK: la API completa, y dónde está la línea
 
-**Fecha**: 02-sep-2026 · **Estado**: lectura aprobada; generación de cotizaciones PENDIENTE
-de decisión del inversionista · **Tarea**: T-925
+**Fecha**: 02-sep-2026 · **Estado**: lectura aprobada; **opción (a) aprobada por el
+inversionista el 02-sep-2026** — piloto acotado: cotizaciones automáticas SOLO en comunas
+del alcance, tope 25 unidades/día, pausa de cortesía · **Tarea**: T-925
 
 ## Qué se investigó y cómo
 

@@ -1385,6 +1385,11 @@ def recolectar_barrios() -> None:
 def probar_planok(
     key: str = typer.Option("inmobiliariagpr", help="slug de la inmobiliaria en el cotizador"),
     id_sub: int = typer.Option(52, help="id_subagrupaciones (etapa/proyecto)"),
+    cotizar: bool = typer.Option(
+        False,
+        "--cotizar",
+        help="genera UNA cotizacion de prueba (crea un registro en el CRM; ADR 010 opcion a)",
+    ),
 ) -> None:
     """T-925 (paso 1) · sondea el cotizador PlanOK y captura las respuestas a la zona cruda.
 
@@ -1558,14 +1563,22 @@ def probar_planok(
                     ).get("data", [])
                 except (ValueError, AttributeError):
                     prods = []
-                if prods:
-                    pid, pack = prods[0].get("id"), prods[0].get("pack")
-                    sondear("Secundarios", extra=f"&pack={pack}", etiqueta="_pack")
-                    sondear("Secundarios", extra=f"&id_producto={pid}", etiqueta="_idp")
-                    sondear(
-                        "Secundarios",
-                        extra=f"&id_producto={pid}&pack={pack}&id_modelo={mid}",
-                        etiqueta="_todo",
+                if prods and cotizar:
+                    # ADR 010 opcion (a), aprobada 02-sep-2026: UNA cotizacion de prueba
+                    # para revelar donde viene el precio (¿en este JSON o en la ficha?).
+                    # Los parametros son los EXACTOS del params #1 de cotiza.js.
+                    pid = prods[0].get("id")
+                    extra = (
+                        f"&id_subagrupacion={id_sub}&new_client=false&id_cliente=0"
+                        f"&id_visita=&producto={pid}&productos_secundarios="
+                    )
+                    respuesta = sondear("GenerarCotizacion", extra=extra, etiqueta="_test")
+                    if respuesta:
+                        typer.echo(f"\n  respuesta completa:\n  {respuesta[:2000]}")
+                elif prods:
+                    typer.echo(
+                        f"\n  {len(prods)} unidades listas. El precio requiere generar una"
+                        "\n  cotizacion: corre con --cotizar para UNA de prueba (ADR 010)."
                     )
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
