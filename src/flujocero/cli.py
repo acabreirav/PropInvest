@@ -1621,15 +1621,119 @@ def probar_planok(
     )
 
 
+def _volcar_ld_desde_sitemap(
+    cliente: "httpx.Client",  # noqa: F821 — httpx se importa en el comando
+    base: str,
+    dominio: str,
+    ua: str,
+    momento: datetime,
+    veredicto: object,
+    n_paginas: int,
+) -> None:
+    """Enumera el sitemap, aisla las URLs de proyecto y vuelca su JSON-LD completo.
+
+    Es la mitad de reconocimiento de T-925c: con estas paginas como fixture se escribe
+    el parser del colector. Todo pasa por robots y todo queda en la zona cruda.
+    """
+    import json as json_lib
+    import re as re_mod
+
+    from flujocero.sources import robots_check
+    from flujocero.sources.base import escribir_crudo
+
+    sha = getattr(veredicto, "snapshot_sha", None)
+
+    def _locs(xml: str) -> list[str]:
+        return re_mod.findall(r"<loc>\s*(.*?)\s*</loc>", xml)
+
+    urls_paginas: list[str] = []
+    for candidato in ("/sitemap.xml", "/sitemap_index.xml", "/wp-sitemap.xml"):
+        r = cliente.get(f"{base}{candidato}", headers={"User-Agent": ua})
+        typer.echo(f"\n  {candidato}: HTTP {r.status_code} · {len(r.content):,} bytes")
+        if r.status_code != 200:
+            continue
+        escribir_crudo(
+            "wpjson_inmobiliarias",
+            f"{base}{candidato}",
+            r.content,
+            momento,
+            robots_snapshot_sha=sha,
+            nombre=f"{dominio.replace('.', '_')}_sitemap",
+            parser_version="probe/0.2.0",
+        )
+        locs = _locs(r.text)
+        sub_sitemaps = [u for u in locs if u.endswith(".xml")]
+        urls_paginas = [u for u in locs if not u.endswith(".xml")]
+        # indice de sitemaps: se bajan primero los que mencionan "proyecto", luego el resto
+        for sub in sorted(sub_sitemaps, key=lambda u: "proyecto" not in u):
+            if any("proyecto" in u for u in urls_paginas):
+                break
+            rs = cliente.get(sub, headers={"User-Agent": ua})
+            typer.echo(f"    sub-sitemap {sub.rsplit('/', 1)[-1]}: HTTP {rs.status_code}")
+            if rs.status_code == 200:
+                urls_paginas.extend(u for u in _locs(rs.text) if not u.endswith(".xml"))
+        if urls_paginas:
+            break
+    proyectos = [u for u in urls_paginas if "proyecto" in u]
+    typer.echo(f"\n  URLs en sitemap: {len(urls_paginas)} · con 'proyecto': {len(proyectos)}")
+    for u in proyectos[:10]:
+        typer.echo(f"    {u}")
+    if not proyectos:
+        typer.echo("  Sin URLs de proyecto: pegame la salida y buscamos el patron real.")
+        return
+    ver_pagina = robots_check.verificar(
+        proyectos[0], ua, source_id="wpjson_inmobiliarias", cliente=cliente
+    )
+    typer.echo(
+        f"  robots para paginas de proyecto: {'permitido' if ver_pagina.allowed else 'PROHIBIDO'}"
+    )
+    if not ver_pagina.allowed:
+        raise typer.Exit(2)
+    for url in proyectos[:n_paginas]:
+        r = cliente.get(url, headers={"User-Agent": ua})
+        typer.echo(f"\n  {url}: HTTP {r.status_code} · {len(r.content):,} bytes")
+        if r.status_code != 200:
+            continue
+        escribir_crudo(
+            "wpjson_inmobiliarias",
+            url,
+            r.content,
+            momento,
+            robots_snapshot_sha=ver_pagina.snapshot_sha,
+            nombre=f"{dominio.replace('.', '_')}_{url.rstrip('/').rsplit('/', 1)[-1]}",
+            parser_version="probe/0.2.0",
+        )
+        bloques = re_mod.findall(
+            r'<script type="application/ld\+json">(.*?)</script>', r.text, re_mod.S
+        )
+        typer.echo(f"    {len(bloques)} bloques JSON-LD:")
+        for i, bloque in enumerate(bloques):
+            try:
+                bonito = json_lib.dumps(json_lib.loads(bloque), ensure_ascii=False, indent=1)
+            except ValueError:
+                bonito = bloque.strip()
+            if len(bonito) > 20_000:
+                bonito = bonito[:20_000] + "\n    …(truncado)"
+            typer.echo(f"    --- bloque {i + 1} ---\n{bonito}")
+    typer.echo("\n  Pegame TODA la salida: con esto se escribe el parser del colector T-925c.")
+
+
 @app.command()
 def probar_wpjson(
     dominio: str = typer.Option("socovesa.cl", help="dominio de la inmobiliaria, sin https://"),
+    volcar_ld: int = typer.Option(
+        0,
+        "--volcar-ld",
+        help="enumera el sitemap y vuelca los bloques JSON-LD COMPLETOS de N paginas de proyecto",
+    ),
 ) -> None:
     """T-925c · sondea el wp-json y el JSON-LD de una inmobiliaria: la ruta #3 de docs/01.
 
     JSON publico de WordPress, sin formularios ni datos personales — el reemplazo del
     cotizador PlanOK para el precio masivo de proyectos nuevos (ADR 010, adenda).
     Robots primero, cada respuesta a crudo, y un resumen de que campos trae.
+    Con --volcar-ld N ejecuta en cambio la ruta de enumeracion: sitemap.xml → URLs de
+    proyecto → JSON-LD completo de las primeras N, que es la fixture del futuro colector.
     """
     import json as json_lib
 
@@ -1648,6 +1752,11 @@ def probar_wpjson(
         typer.echo(f"  robots.txt {dominio}: {'permitido' if veredicto.allowed else 'PROHIBIDO'}")
         if not veredicto.allowed:
             raise typer.Exit(2)
+        if volcar_ld > 0:
+            _volcar_ld_desde_sitemap(
+                cliente, base, dominio, ua, momento, veredicto, n_paginas=volcar_ld
+            )
+            return
         # /types/proyecto trae el `rest_base` real del tipo (puede no llamarse "proyecto"
         # en la URL), y la primera ronda mostro que /wp/v2/proyecto REDIRIGE a una pagina
         # HTML — por eso se imprime la URL final y, si es HTML, se le extrae el JSON-LD,
