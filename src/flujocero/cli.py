@@ -1474,6 +1474,36 @@ def probar_planok(
                 ctx = rj.text[ini : m.end() + 90].replace("\n", " ").strip()
                 typer.echo(f"    endpoint: {m.group()}")
                 typer.echo(f"      contexto: …{ctx}…")
+
+        # Ronda final de la sonda: los endpoints /controllers/ ya son conocidos (cotiza.js)
+        # y sus dos parametros de ambiente —el host de datos `xservercot` y `portal`— viven
+        # como inputs ocultos del index. Se leen de ahi y se llama a los tres que importan,
+        # guardando cada JSON en crudo: el material definitivo del parser.
+        def _oculto(nombre: str) -> str:
+            m = re.search(rf'id="{nombre}"[^>]*value="([^"]*)"', r.text)
+            return m.group(1) if m else ""
+
+        xserver = _oculto("xservercot")
+        portal = _oculto("portal")
+        typer.echo(f"\n  xservercot={xserver!r} · portal={portal!r}")
+        if xserver:
+            comun = f"api_key={key}&portal={portal}&id_subagrupaciones={id_sub}"
+            for ep in ("Informacion_proyecto", "Modelos", "Productos"):
+                url_ep = f"{xserver}/controllers/{ep}.php?{comun}"
+                re_ = cliente.get(url_ep, headers={"User-Agent": ua})
+                cuerpo = re_.text.strip()
+                typer.echo(f"\n  {ep}.php: HTTP {re_.status_code} · {len(cuerpo):,} bytes")
+                if re_.status_code == 200 and cuerpo:
+                    escribir_crudo(
+                        "planok_cotizador",
+                        url_ep,
+                        re_.content,
+                        momento,
+                        robots_snapshot_sha=veredicto.snapshot_sha,
+                        nombre=f"{ep.lower()}_{key}_{id_sub}",
+                        parser_version="probe/0.1.0",
+                    )
+                    typer.echo(f"    muestra: {cuerpo[:600]}")
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
         "\n  payload de datos.php y escribo el parser + ADR (T-925 paso 2)."
