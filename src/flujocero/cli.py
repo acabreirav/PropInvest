@@ -1484,6 +1484,9 @@ def probar_planok(
             return m.group(1) if m else ""
 
         xserver = _oculto("xservercot")
+        # El index lo entrega relativo al esquema ('//host/rest'): se le antepone https.
+        if xserver.startswith("//"):
+            xserver = "https:" + xserver
         portal = _oculto("portal")
         typer.echo(f"\n  xservercot={xserver!r} · portal={portal!r}")
         if xserver:
