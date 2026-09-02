@@ -1465,6 +1465,14 @@ def probar_planok(
                 nombre=script.split("/")[-1].split("?")[0],
                 parser_version="probe/0.1.0",
             )
+            # Los objetos `params = {...}` del JS: ahi se arma el payload de Secundarios
+            # y de GenerarCotizacion, que es lo que falta para llegar al PRECIO.
+            for i_p, mp in enumerate(re.finditer(r"params\s*=\s*\{", rj.text)):
+                if i_p >= 4:
+                    break
+                ctx_p = rj.text[mp.start() : mp.start() + 600].replace("\n", " ").strip()
+                typer.echo(f"    params #{i_p + 1}: …{ctx_p}…")
+
             # Dedupe por endpoint SALVO Productos.php: el flujo del cotizador lo llama
             # mas de una vez con parametros distintos (orientaciones vs unidades) y la
             # primera version de esta sonda escondio justo la llamada que importaba.
@@ -1535,35 +1543,29 @@ def probar_planok(
                 mid = modelo.get("id")
                 if not mid:
                     continue
-                # tipo_devolucion=orientacion devolvio ORIENTACIONES ({"id":"SUR"}), no
-                # unidades: ese parametro dice QUE devolver. Las unidades salen de otra
-                # variante; se prueban las dos formas que el flujo de la UI sugiere.
-                orientaciones = sondear(
-                    "Productos",
-                    extra=f"&id_modelo={mid}&tipo_devolucion=orientacion",
-                    etiqueta=f"_ori_m{mid}",
-                )
-                # La segunda aparicion de Productos.php en cotiza.js (la que el dedupe
-                # escondia) usa tipo_devolucion=solo_productos: ESA es la llamada de
-                # unidades. Se prueba sola y con la orientacion real como filtro.
+                # tipo_devolucion=solo_productos es la llamada de unidades (resuelto en la
+                # ronda anterior). Con las unidades en mano se sondea Secundarios con las
+                # formas de nombrar la unidad que el esquema sugiere (pack / id_producto).
+                # NO se toca GenerarCotizacion todavia: crea un registro de cotizacion en
+                # el CRM de la inmobiliaria y esa decision es del inversionista (ADR).
                 try:
-                    ori = json_lib.loads(orientaciones.strip("()")).get("data", [])
-                    primera_ori = ori[0].get("id", "") if ori else ""
-                except (ValueError, AttributeError, IndexError):
-                    primera_ori = ""
-                sondear(
-                    "Productos",
-                    extra=f"&id_modelo={mid}&tipo_devolucion=solo_productos",
-                    etiqueta=f"_sp_m{mid}",
-                )
-                if primera_ori:
+                    prods = json_lib.loads(
+                        sondear(
+                            "Productos",
+                            extra=f"&id_modelo={mid}&tipo_devolucion=solo_productos",
+                            etiqueta=f"_sp_m{mid}",
+                        ).strip("()")
+                    ).get("data", [])
+                except (ValueError, AttributeError):
+                    prods = []
+                if prods:
+                    pid, pack = prods[0].get("id"), prods[0].get("pack")
+                    sondear("Secundarios", extra=f"&pack={pack}", etiqueta="_pack")
+                    sondear("Secundarios", extra=f"&id_producto={pid}", etiqueta="_idp")
                     sondear(
-                        "Productos",
-                        extra=(
-                            f"&id_modelo={mid}&tipo_devolucion=solo_productos"
-                            f"&filtro_orientacion={primera_ori}"
-                        ),
-                        etiqueta=f"_spfo_m{mid}",
+                        "Secundarios",
+                        extra=f"&id_producto={pid}&pack={pack}&id_modelo={mid}",
+                        etiqueta="_todo",
                     )
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
