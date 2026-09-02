@@ -1471,7 +1471,8 @@ def probar_planok(
                     continue
                 vistos_js.add(m.group())
                 ini = max(0, m.start() - 90)
-                ctx = rj.text[ini : m.end() + 90].replace("\n", " ").strip()
+                # ventana larga hacia adelante: ahi viene la lista de parametros completa
+                ctx = rj.text[ini : m.end() + 300].replace("\n", " ").strip()
                 typer.echo(f"    endpoint: {m.group()}")
                 typer.echo(f"      contexto: …{ctx}…")
 
@@ -1490,12 +1491,18 @@ def probar_planok(
         portal = _oculto("portal")
         typer.echo(f"\n  xservercot={xserver!r} · portal={portal!r}")
         if xserver:
+            import json as json_lib
+
             comun = f"api_key={key}&portal={portal}&id_subagrupaciones={id_sub}"
-            for ep in ("Informacion_proyecto", "Modelos", "Productos"):
-                url_ep = f"{xserver}/controllers/{ep}.php?{comun}"
+
+            def sondear(ep: str, extra: str = "", etiqueta: str = "") -> str:
+                url_ep = f"{xserver}/controllers/{ep}.php?{comun}{extra}"
                 re_ = cliente.get(url_ep, headers={"User-Agent": ua})
                 cuerpo = re_.text.strip()
-                typer.echo(f"\n  {ep}.php: HTTP {re_.status_code} · {len(cuerpo):,} bytes")
+                typer.echo(
+                    f"\n  {ep}.php{extra and ' [' + extra + ']'}: "
+                    f"HTTP {re_.status_code} · {len(cuerpo):,} bytes"
+                )
                 if re_.status_code == 200 and cuerpo:
                     escribir_crudo(
                         "planok_cotizador",
@@ -1503,10 +1510,32 @@ def probar_planok(
                         re_.content,
                         momento,
                         robots_snapshot_sha=veredicto.snapshot_sha,
-                        nombre=f"{ep.lower()}_{key}_{id_sub}",
+                        nombre=f"{ep.lower()}{etiqueta}_{key}_{id_sub}",
                         parser_version="probe/0.1.0",
                     )
                     typer.echo(f"    muestra: {cuerpo[:600]}")
+                return cuerpo
+
+            sondear("Informacion_proyecto")
+            cuerpo_modelos = sondear("Modelos")
+
+            # Productos.php reclamo sin id_modelo ("Imposible ejecutar la consulta"): el
+            # flujo real del cotizador es elegir modelo -> pedir SUS unidades. Se encadena
+            # con los dos primeros modelos que Modelos.php ya entrego. La respuesta viene
+            # envuelta en parentesis (JSONP sin callback): se pelan antes de parsear.
+            try:
+                modelos = json_lib.loads(cuerpo_modelos.strip("()")).get("data", [])
+            except (ValueError, AttributeError):
+                modelos = []
+            for modelo in modelos[:2]:
+                mid = modelo.get("id")
+                if not mid:
+                    continue
+                sondear(
+                    "Productos",
+                    extra=f"&id_modelo={mid}&tipo_devolucion=orientacion",
+                    etiqueta=f"_m{mid}",
+                )
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
         "\n  payload de datos.php y escribo el parser + ADR (T-925 paso 2)."
