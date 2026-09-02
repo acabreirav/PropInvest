@@ -1465,11 +1465,15 @@ def probar_planok(
                 nombre=script.split("/")[-1].split("?")[0],
                 parser_version="probe/0.1.0",
             )
-            vistos_js: set[str] = set()
+            # Dedupe por endpoint SALVO Productos.php: el flujo del cotizador lo llama
+            # mas de una vez con parametros distintos (orientaciones vs unidades) y la
+            # primera version de esta sonda escondio justo la llamada que importaba.
+            vistos_js: dict[str, int] = {}
             for m in re.finditer(r"[\w./-]*\.php[^\"' ]*", rj.text):
-                if m.group() in vistos_js:
+                tope = 4 if "Productos" in m.group() else 1
+                vistos_js[m.group()] = vistos_js.get(m.group(), 0) + 1
+                if vistos_js[m.group()] > tope:
                     continue
-                vistos_js.add(m.group())
                 ini = max(0, m.start() - 90)
                 # ventana larga hacia adelante: ahi viene la lista de parametros completa
                 ctx = rj.text[ini : m.end() + 300].replace("\n", " ").strip()
@@ -1527,15 +1531,30 @@ def probar_planok(
                 modelos = json_lib.loads(cuerpo_modelos.strip("()")).get("data", [])
             except (ValueError, AttributeError):
                 modelos = []
-            for modelo in modelos[:2]:
+            for modelo in modelos[:1]:
                 mid = modelo.get("id")
                 if not mid:
                     continue
-                sondear(
+                # tipo_devolucion=orientacion devolvio ORIENTACIONES ({"id":"SUR"}), no
+                # unidades: ese parametro dice QUE devolver. Las unidades salen de otra
+                # variante; se prueban las dos formas que el flujo de la UI sugiere.
+                orientaciones = sondear(
                     "Productos",
                     extra=f"&id_modelo={mid}&tipo_devolucion=orientacion",
-                    etiqueta=f"_m{mid}",
+                    etiqueta=f"_ori_m{mid}",
                 )
+                sondear("Productos", extra=f"&id_modelo={mid}", etiqueta=f"_m{mid}")
+                try:
+                    ori = json_lib.loads(orientaciones.strip("()")).get("data", [])
+                    primera_ori = ori[0].get("id", "") if ori else ""
+                except (ValueError, AttributeError, IndexError):
+                    primera_ori = ""
+                if primera_ori:
+                    sondear(
+                        "Productos",
+                        extra=f"&id_modelo={mid}&filtro_orientacion={primera_ori}",
+                        etiqueta=f"_fo_m{mid}",
+                    )
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
         "\n  payload de datos.php y escribo el parser + ADR (T-925 paso 2)."
