@@ -1648,15 +1648,24 @@ def probar_wpjson(
         typer.echo(f"  robots.txt {dominio}: {'permitido' if veredicto.allowed else 'PROHIBIDO'}")
         if not veredicto.allowed:
             raise typer.Exit(2)
-        rutas = (
+        # /types/proyecto trae el `rest_base` real del tipo (puede no llamarse "proyecto"
+        # en la URL), y la primera ronda mostro que /wp/v2/proyecto REDIRIGE a una pagina
+        # HTML — por eso se imprime la URL final y, si es HTML, se le extrae el JSON-LD,
+        # que es donde la investigacion vio los precios CLF (=UF) de Socovesa.
+        rutas = [
+            "/wp-json/wp/v2/types/proyecto",
             "/wp-json/wp/v2/proyecto?per_page=5",
-            "/wp-json/wp/v2/proyectos?per_page=5",
-            "/wp-json/wp/v2/types",
-        )
-        for ruta in rutas:
+        ]
+        rest_base_visto: str | None = None
+        i_ruta = 0
+        while i_ruta < len(rutas):
+            ruta = rutas[i_ruta]
+            i_ruta += 1
             r = cliente.get(f"{base}{ruta}", headers={"User-Agent": ua})
             cuerpo = r.text.strip()
             typer.echo(f"\n  {ruta}: HTTP {r.status_code} · {len(cuerpo):,} bytes")
+            if str(r.url) != f"{base}{ruta}":
+                typer.echo(f"    redirigio a: {r.url}")
             if r.status_code != 200 or not cuerpo:
                 continue
             escribir_crudo(
@@ -1671,13 +1680,52 @@ def probar_wpjson(
             try:
                 datos = json_lib.loads(cuerpo)
             except ValueError:
-                typer.echo(f"    (no es JSON) {cuerpo[:200]}")
+                # HTML: se le extraen los bloques JSON-LD y se cazan los nodos con precio.
+                import re as re_mod
+
+                bloques = re_mod.findall(
+                    r'<script type="application/ld\+json">(.*?)</script>', cuerpo, re_mod.S
+                )
+                typer.echo(f"    HTML con {len(bloques)} bloques JSON-LD")
+
+                def _con_precio(nodo: object, hallados: list) -> None:
+                    if isinstance(nodo, dict):
+                        if "price" in nodo or "priceCurrency" in nodo or "offers" in nodo:
+                            hallados.append(nodo)
+                        for valor_n in nodo.values():
+                            _con_precio(valor_n, hallados)
+                    elif isinstance(nodo, list):
+                        for item in nodo:
+                            _con_precio(item, hallados)
+
+                for bloque in bloques:
+                    try:
+                        ld = json_lib.loads(bloque)
+                    except ValueError:
+                        continue
+                    hallados: list = []
+                    _con_precio(ld, hallados)
+                    for h in hallados[:4]:
+                        typer.echo(
+                            f"    nodo con precio: {json_lib.dumps(h, ensure_ascii=False)[:500]}"
+                        )
+                    if not hallados:
+                        tipos_ld = [
+                            n.get("@type") for n in ld.get("@graph", []) if isinstance(n, dict)
+                        ] or [ld.get("@type")]
+                        typer.echo(f"    sin precio; @types: {tipos_ld[:10]}")
                 continue
             if isinstance(datos, list) and datos:
                 typer.echo(f"    {len(datos)} items · claves del primero: {sorted(datos[0])[:20]}")
                 typer.echo(f"    muestra: {json_lib.dumps(datos[0], ensure_ascii=False)[:700]}")
             elif isinstance(datos, dict):
                 typer.echo(f"    claves: {sorted(datos)[:25]}")
+                # el detalle del tipo trae la ruta REST real: se sondea al vuelo
+                rb = datos.get("rest_base")
+                if rb and rb != "proyecto" and rest_base_visto is None:
+                    rest_base_visto = str(rb)
+                    rutas.append(f"/wp-json/wp/v2/{rest_base_visto}?per_page=5")
+                    typer.echo(f"    rest_base real: {rb!r} — se sondea a continuacion")
     typer.echo(
         "\n  Pegame la salida. Con los campos reales escribo el parser; si `types` lista"
         "\n  otro nombre de post-type para proyectos, se sondea ese."
