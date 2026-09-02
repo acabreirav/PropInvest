@@ -1564,17 +1564,52 @@ def probar_planok(
                 except (ValueError, AttributeError):
                     prods = []
                 if prods and cotizar:
-                    # ADR 010 opcion (a), aprobada 02-sep-2026: UNA cotizacion de prueba
-                    # para revelar donde viene el precio (¿en este JSON o en la ficha?).
-                    # Los parametros son los EXACTOS del params #1 de cotiza.js.
+                    # ADR 010 opcion (a): UNA cotizacion de prueba. El primer intento fallo
+                    # con "Get_Insert_Eventos_Personales1": el registro del evento de visita
+                    # espera algo que el navegador manda solo. Se prueban las cabeceras que
+                    # un XHR real lleva (Referer, X-Requested-With) y dos variantes de
+                    # parametros; cada intento para en el primero que responda JSON.
                     pid = prods[0].get("id")
-                    extra = (
+                    cabeceras_xhr = {
+                        "User-Agent": ua,
+                        "Referer": url_index,
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json, text/javascript, */*; q=0.01",
+                    }
+                    base_params = (
                         f"&id_subagrupacion={id_sub}&new_client=false&id_cliente=0"
                         f"&id_visita=&producto={pid}&productos_secundarios="
                     )
-                    respuesta = sondear("GenerarCotizacion", extra=extra, etiqueta="_test")
-                    if respuesta:
-                        typer.echo(f"\n  respuesta completa:\n  {respuesta[:2000]}")
+                    variantes = (
+                        ("cabeceras XHR", base_params),
+                        (
+                            "XHR + utm vacios + pais",
+                            base_params
+                            + "&utm_source=&utm_medium=&utm_campaign=&utm_term="
+                            + "&utm_content=&pais=CL",
+                        ),
+                        ("XHR + sin id_visita", base_params.replace("&id_visita=", "")),
+                    )
+                    for etiqueta_v, extra in variantes:
+                        url_gc = f"{xserver}/controllers/GenerarCotizacion.php?{comun}{extra}"
+                        r_gc = cliente.get(url_gc, headers=cabeceras_xhr)
+                        cuerpo_gc = r_gc.text.strip()
+                        typer.echo(
+                            f"\n  GenerarCotizacion [{etiqueta_v}]: HTTP {r_gc.status_code}"
+                            f" · {len(cuerpo_gc):,} bytes"
+                        )
+                        typer.echo(f"    {cuerpo_gc[:800]}")
+                        if cuerpo_gc.startswith("(") or cuerpo_gc.startswith("{"):
+                            escribir_crudo(
+                                "planok_cotizador",
+                                url_gc,
+                                r_gc.content,
+                                momento,
+                                robots_snapshot_sha=veredicto.snapshot_sha,
+                                nombre=f"generarcotizacion_{key}_{id_sub}",
+                                parser_version="probe/0.1.0",
+                            )
+                            break
                 elif prods:
                     typer.echo(
                         f"\n  {len(prods)} unidades listas. El precio requiere generar una"
