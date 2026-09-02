@@ -1443,6 +1443,37 @@ def probar_planok(
                 nombre=f"datos_sin_payload_{key}",
                 parser_version="probe/0.1.0",
             )
+
+        # La pagina llega con los selectores de unidades VACIOS: los llena js/cotiza.js.
+        # El endpoint que trae las unidades con precio vive ahi, asi que la sonda baja los
+        # scripts propios de la app y extrae ella misma toda mencion a un .php con su
+        # contexto — el material exacto para escribir el colector, sin DevTools.
+        import re
+
+        for script in re.findall(r'src="(js/(?:cotiza|Common)\.js[^"]*)"', r.text):
+            url_js = f"{base}/cotizador/{script}"
+            rj = cliente.get(url_js, headers={"User-Agent": ua})
+            typer.echo(f"\n  {script}: HTTP {rj.status_code} · {len(rj.content):,} bytes")
+            if rj.status_code != 200:
+                continue
+            escribir_crudo(
+                "planok_cotizador",
+                url_js,
+                rj.content,
+                momento,
+                robots_snapshot_sha=veredicto.snapshot_sha,
+                nombre=script.split("/")[-1].split("?")[0],
+                parser_version="probe/0.1.0",
+            )
+            vistos_js: set[str] = set()
+            for m in re.finditer(r"[\w./-]*\.php[^\"' ]*", rj.text):
+                if m.group() in vistos_js:
+                    continue
+                vistos_js.add(m.group())
+                ini = max(0, m.start() - 90)
+                ctx = rj.text[ini : m.end() + 90].replace("\n", " ").strip()
+                typer.echo(f"    endpoint: {m.group()}")
+                typer.echo(f"      contexto: …{ctx}…")
     typer.echo(
         "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
         "\n  payload de datos.php y escribo el parser + ADR (T-925 paso 2)."
