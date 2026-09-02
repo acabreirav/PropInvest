@@ -115,6 +115,20 @@ fuentes:
       estaciones (Metro Santiago subway + red Biotren); las FECHAS de lo que esta en
       construccion no estan en OSM y viven curadas con fuente en config/metro.yml.
 
+  - id: planok_cotizador
+    capa: 3
+    legal_tier: json_publico
+    enabled: false          # <- lectura investigada y aprobada; cotizaciones PENDIENTES de decision
+    base: "https://cotizador.saladeventasdigital.com/rest/controllers/"
+    auth: ninguna
+    cadencia: semanal
+    produce: fact_unidad_venta
+    adr: "docs/adr/010-planok-cotizador.md"
+    nota: >
+      API JSON del cotizador estandar de la industria (robots permite). Leer proyectos,
+      modelos y unidades es gratis; el PRECIO solo aparece al generar una cotizacion, que
+      crea un registro en el CRM de la inmobiliaria — decision del inversionista (ADR 010).
+
   - id: portal_busqueda
     capa: 3
     legal_tier: html_permitido      # SOLO rutas `_Desde_`, que el robots.txt permite
