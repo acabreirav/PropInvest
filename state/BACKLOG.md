@@ -1417,3 +1417,41 @@ criterio_de_aceptacion:
   - riesgo_microzona se calcula desde dim_manzana (desocupacion censal, % arriendo, densidad depto) y deja de estar inerte
   - el metodo del puente queda en un ADR: las microzonas NO tienen poligono; opciones — poligonos de barrios MELI, geocodificar avisos y usar sus manzanas, o dibujar a mano las del alcance
 gate: make gates
+
+## T-922b · Estaciones EN CONSTRUCCION ausentes de la cosecha OSM
+estado: pendiente
+agente: colector
+fase: 2
+depende_de: [T-922]
+criterio_de_aceptacion:
+  - la corrida real trajo 130 estaciones y CERO en construccion: los nodos de L7 y de la
+    extension L6 no calzan con los tags de la consulta actual (railway=construction/proposed
+    + station=subway). Investigar el tagging real en OSM (pueden ser ways/relations o
+    construction=station) y ampliar la consulta
+  - mientras tanto el factor_en_construccion esta ocioso y Recoleta/Cerrillos no reciben
+    su catalizador — el sesgo es de SUBmedicion, no de invento
+gate: make gates
+
+## T-922c · 126 estaciones operativas vs ~143 reales del Metro
+estado: pendiente
+agente: colector
+fase: 2
+depende_de: [T-922]
+criterio_de_aceptacion:
+  - identificar las ~17 faltantes (probablemente mapeadas como way/relation y no como node)
+  - la consulta las trae o el ADR documenta por que no
+gate: make gates
+
+## T-925 · Colector de proyectos NUEVOS via cotizador PlanOK
+estado: en_curso
+agente: colector
+fase: 2
+depende_de: []
+criterio_de_aceptacion:
+  - hoy el ranking es 100% usado: el subsidio de la Ley 21.748 (6,7 puntos de pie) jamas se
+    ha aplicado a una unidad real — es la brecha estrategica del producto
+  - paso 1 (probar-planok): capturar respuestas reales del cotizador a la zona cruda desde
+    la maquina del inversionista, resolver el payload de datos.php (unico ❓ del docs/01 B.1)
+  - paso 2: ADR con robots + legal_tier, parser con selftest, >=300 unidades con precio
+    por unidad en la RM
+gate: make gates

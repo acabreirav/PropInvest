@@ -1382,6 +1382,74 @@ def recolectar_barrios() -> None:
 
 
 @app.command()
+def probar_planok(
+    key: str = typer.Option("inmobiliariagpr", help="slug de la inmobiliaria en el cotizador"),
+    id_sub: int = typer.Option(52, help="id_subagrupaciones (etapa/proyecto)"),
+) -> None:
+    """T-925 (paso 1) · sondea el cotizador PlanOK y captura las respuestas a la zona cruda.
+
+    Hoy el ranking es 100% usado: el subsidio de la Ley 21.748 jamas se ha aplicado a una
+    unidad real. La fuente de precio POR UNIDAD de proyectos nuevos es este cotizador
+    (docs/01-fuentes.md B.1, verificado), y su unico ❓ es el payload de `datos.php`.
+    Este comando NO recolecta masivamente: consulta UN proyecto de ejemplo, verifica
+    robots.txt primero (§3.5), guarda cada respuesta cruda, y reporta que trajo — el
+    material real con que se escribe el parser y el ADR.
+    """
+    import httpx
+
+    from flujocero.sources import robots_check
+    from flujocero.sources.base import escribir_crudo
+
+    ua = "FlujoCero-ResearchBot/1.0"
+    base = "https://cotizador.saladeventasdigital.com"
+    url_index = f"{base}/cotizador/index.php?id_subagrupaciones={id_sub}&key={key}&open_dialog=true"
+    with httpx.Client(timeout=30, follow_redirects=True) as cliente:
+        veredicto = robots_check.verificar(
+            url_index, ua, source_id="planok_cotizador", cliente=cliente
+        )
+        typer.echo(f"  robots.txt: {'permitido' if veredicto.allowed else 'PROHIBIDO'}")
+        if not veredicto.allowed:
+            typer.echo("✗ El §3.5 manda parar aqui y decidir en docs/05-decisiones.md.")
+            raise typer.Exit(2)
+        momento = datetime.now(UTC)
+        r = cliente.get(url_index, headers={"User-Agent": ua})
+        typer.echo(f"  index.php: HTTP {r.status_code} · {len(r.content):,} bytes")
+        if r.status_code == 200:
+            escribir_crudo(
+                "planok_cotizador",
+                url_index,
+                r.content,
+                momento,
+                robots_snapshot_sha=veredicto.snapshot_sha,
+                nombre=f"index_{key}_{id_sub}",
+                parser_version="probe/0.1.0",
+            )
+            texto = r.text.lower()
+            pistas = {
+                p: (p in texto)
+                for p in ("datos.php", "precio", "orientacion", "bodega", "csrf", "token")
+            }
+            typer.echo(f"  pistas en el HTML: {pistas}")
+        # datos.php sin payload: el codigo de respuesta ya informa (405/400 = espera POST)
+        r2 = cliente.get(f"{base}/cotizador/datos.php", headers={"User-Agent": ua})
+        typer.echo(f"  datos.php sin payload: HTTP {r2.status_code} · {r2.text[:120]!r}")
+        if r2.status_code == 200 and r2.content:
+            escribir_crudo(
+                "planok_cotizador",
+                f"{base}/cotizador/datos.php",
+                r2.content,
+                momento,
+                robots_snapshot_sha=veredicto.snapshot_sha,
+                nombre=f"datos_sin_payload_{key}",
+                parser_version="probe/0.1.0",
+            )
+    typer.echo(
+        "\n  Pegame esta salida completa. Si el index trajo HTML util, con eso resuelvo el"
+        "\n  payload de datos.php y escribo el parser + ADR (T-925 paso 2)."
+    )
+
+
+@app.command()
 def recolectar_metro() -> None:
     """T-922 · estaciones de Metro y Biotren desde OpenStreetMap (una request a Overpass).
 
