@@ -22,8 +22,20 @@ from typing import Any
 from flujocero.sources.base import escribir_crudo
 
 SOURCE_ID = "osm_metro"
-PARSER_VERSION = "0.1.0"
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+PARSER_VERSION = "0.2.0"
+# El endpoint principal devolvio HTTP 406 en la maquina real: el frontal de
+# overpass-api.de rechaza clientes sin User-Agent identificable (politica de uso de OSM).
+# Se manda identificacion honesta y, si un servidor igual rechaza, se prueba el siguiente
+# espejo oficial — son la misma base de datos.
+OVERPASS_URLS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://z.overpass-api.de/api/interpreter",
+)
+CABECERAS = {
+    "User-Agent": "FlujoCero-ResearchBot/1.0 (investigacion inmobiliaria personal, Chile)",
+    "Accept": "application/json",
+}
 
 # subway agarra Metro de Santiago; la red Biotren va por nombre porque es tren de
 # cercania, no subway. `railway=construction` + subway trae las estaciones de L7.
@@ -100,24 +112,32 @@ def parsear(cuerpo: dict[str, Any]) -> CosechaMetro:
 def recolectar(
     cliente: Any, ahora: datetime | None = None, raiz: Path | None = None
 ) -> CosechaMetro:
-    """Una request a Overpass, blob a la zona cruda, y a parsear."""
+    """Una request a Overpass (con espejos de respaldo), blob a la zona cruda, y a parsear."""
     momento = ahora or datetime.now(UTC)
-    r = cliente.post(OVERPASS_URL, data={"data": CONSULTA})
-    if r.status_code != 200:
-        c = CosechaMetro()
-        c.error = f"Overpass HTTP {r.status_code}: {r.text[:200]}"
-        return c
-    doc = escribir_crudo(
-        SOURCE_ID,
-        OVERPASS_URL,
-        r.content,
-        momento,
-        robots_snapshot_sha="api-publica-odbl",
-        nombre="estaciones_cl",
-        raiz=raiz,
-        parser_version=PARSER_VERSION,
-    )
-    return parsear(json.loads(doc.contenido.decode("utf-8")))
+    errores: list[str] = []
+    for url in OVERPASS_URLS:
+        try:
+            r = cliente.post(url, data={"data": CONSULTA}, headers=CABECERAS)
+        except Exception as exc:  # noqa: BLE001 — un espejo caido no es fatal, se anota
+            errores.append(f"{url}: {type(exc).__name__}: {exc}")
+            continue
+        if r.status_code != 200:
+            errores.append(f"{url}: HTTP {r.status_code}: {r.text[:120]}")
+            continue
+        doc = escribir_crudo(
+            SOURCE_ID,
+            url,
+            r.content,
+            momento,
+            robots_snapshot_sha="api-publica-odbl",
+            nombre="estaciones_cl",
+            raiz=raiz,
+            parser_version=PARSER_VERSION,
+        )
+        return parsear(json.loads(doc.contenido.decode("utf-8")))
+    c = CosechaMetro()
+    c.error = " · ".join(errores)
+    return c
 
 
 def cargar(conexion: Any, cosecha: CosechaMetro, momento: datetime) -> int:
@@ -137,7 +157,7 @@ def cargar(conexion: Any, cosecha: CosechaMetro, momento: datetime) -> int:
                 e.lat,
                 e.lon,
                 SOURCE_ID,
-                OVERPASS_URL,
+                OVERPASS_URLS[0],
                 momento,
                 PARSER_VERSION,
                 "data/raw/osm_metro",

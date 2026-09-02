@@ -126,3 +126,21 @@ def test_construccion_con_fecha_vale_menos_que_operativa(con):
     assert abs(v["san-miguel/junto-l7"] - factor) < 1e-9, (
         "pegado a una estacion EN CONSTRUCCION vale el factor E, no 1.0"
     )
+
+
+def test_si_el_endpoint_principal_rechaza_se_usa_el_espejo(tmp_path):
+    """El caso real: overpass-api.de devolvio 406 (cliente sin User-Agent identificable).
+    Con identificacion puesta y espejos de respaldo, un rechazo no mata la recoleccion."""
+    vistos = []
+
+    def responder(req: httpx.Request) -> httpx.Response:
+        vistos.append(req.url.host)
+        assert "FlujoCero" in req.headers["user-agent"], "identificacion honesta, siempre"
+        if req.url.host == "overpass-api.de":
+            return httpx.Response(406, text="Not Acceptable")
+        return httpx.Response(200, json=OVERPASS)
+
+    cliente = httpx.Client(transport=httpx.MockTransport(responder))
+    cosecha = osm_metro.recolectar(cliente, ahora=AHORA, raiz=tmp_path)
+    assert cosecha.error is None and len(cosecha.estaciones) == 4
+    assert vistos == ["overpass-api.de", "overpass.kumi.systems"]
