@@ -70,7 +70,7 @@ try {
 <h1>Flujo Cero &mdash; informe semanal $fecha</h1>
 <h2>Ranking de oportunidades (precio real por unidad)</h2>
 <pre>$(Esc $ranking)</pre>
-<h2>Cambios desde el $corte: bajas de precio, desaparecidos, nuevos</h2>
+<h2>Cambios desde el ${corte}: bajas de precio, desaparecidos, nuevos</h2>
 <pre>$(Esc $cambios)</pre>
 </body></html>
 "@
