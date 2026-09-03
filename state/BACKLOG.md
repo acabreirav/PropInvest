@@ -1546,3 +1546,20 @@ criterio_de_aceptacion:
   - evaluar si las 12 'efe operativa' (Nos/San Bernardo, fuera del alcance util)
     deben catalizar como Metro pleno o quedar fuera de la red objetivo
 gate: make gates
+
+## T-931c · Geo-referenciar los 217 proyectos nuevos sin coordenadas
+estado: pendiente
+agente: geo-microzonas
+fase: 2
+depende_de: [T-931b]
+contexto: la seccion "nuevas evaluadas al desde" del informe descarta sin_geo=217 de
+  ~300 proyectos (solo Fundamenta publica GeoCoordinates). Es la palanca mas grande
+  para que la oferta nueva compita de verdad en el informe.
+criterio_de_aceptacion:
+  - extraer direccion del proyecto desde el REST/HTML de cada inmobiliaria (muchos
+    la publican como texto) y geocodificarla con Nominatim de OSM (json_publico,
+    respetar 1 req/s y User-Agent identificable) o contra los ejes viales del INE
+  - lat/lon a dim_proyecto con procedencia (la fuente es la pagina del proyecto +
+    el geocodificador, ambos citados)
+  - sin_geo baja de 217 a <80; ninguna coordenada inventada — direccion ambigua = ND
+gate: make gates
