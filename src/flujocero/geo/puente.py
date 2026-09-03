@@ -190,10 +190,10 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
     from flujocero.config import cargar as cargar_config
 
     filas = conexion.execute(
-        "SELECT estacion_id, linea, estado, lat, lon, anio_apertura FROM dim_estacion_metro"
+        "SELECT estacion_id, linea, estado, lat, lon, anio_apertura, red FROM dim_estacion_metro"
     ).fetchall()
     if not filas:
-        return {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0}
+        return {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0, "excluidas_efe": 0}
 
     fechas = {
         str(e["linea"]).lower(): e["fecha_apertura"]
@@ -206,7 +206,13 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
 
     elegibles: list[tuple[float, float, float]] = []  # (lat, lon, factor)
     construccion_sin_fecha = 0
-    for _eid, linea, estado, lat, lon, anio_apertura in filas:
+    excluidas_efe = 0
+    for _eid, linea, estado, lat, lon, anio_apertura, red in filas:
+        if red == "efe":
+            # el §12 dice "Metro operativo o en construccion" (+ Biotren en el alcance de
+            # fase 3); un tren de cercania EFE no es eso — se conserva en la dim, no puntua
+            excluidas_efe += 1
+            continue
         if estado == "operativa":
             elegibles.append((float(lat), float(lon), 1.0))
             continue
@@ -232,7 +238,12 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
     if not elegibles:
         # hay estaciones cargadas pero ninguna elegible: eso es "no se pudo medir",
         # no "medimos y no hay Metro" — escribir 0.0 aca afirmaria lo segundo
-        return {"microzonas": 0, "construccion_sin_fecha": construccion_sin_fecha, "elegibles": 0}
+        return {
+            "microzonas": 0,
+            "construccion_sin_fecha": construccion_sin_fecha,
+            "elegibles": 0,
+            "excluidas_efe": excluidas_efe,
+        }
 
     centros = conexion.execute(
         "SELECT microzona_id, centro_lat, centro_lon FROM dim_microzona "
@@ -273,4 +284,5 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
         "microzonas": n,
         "construccion_sin_fecha": construccion_sin_fecha,
         "elegibles": len(elegibles),
+        "excluidas_efe": excluidas_efe,
     }

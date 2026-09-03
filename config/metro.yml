@@ -8,7 +8,14 @@
 lineas_en_construccion:
   - linea: "l7"
     fecha_apertura: 2028-12-31
-    fuente: "docs/00-hallazgos.md · eje L7 2028 (Recoleta, mayor alza RM +9,6% a/a)"
+    fuente: >-
+      metro.cl/nuevos-proyectos/linea-7 (fuente primaria, citada en el tag `source` y
+      `start_date`=2028 de los nodos OSM de L7 — blob crudo osm_metro 03-sep-2026,
+      sonda_l7b) · corrobora docs/00-hallazgos.md (eje L7 2028)
   - linea: "l6"
     fecha_apertura: 2027-12-31
-    fuente: "docs/00-hallazgos.md · extension L6 a Lo Errazuriz, 46% de avance, apertura 2027"
+    fuente: >-
+      metro.cl/nuevos-proyectos/extension-linea-6 (fuente primaria, citada en el tag
+      `source` y `start_date`=2027 de los nodos "Lo Errazuriz" en OSM — blob crudo
+      osm_metro 03-sep-2026, sonda_l7b; el way "Extension Linea 6" declara
+      opening_date=2027) · corrobora docs/00-hallazgos.md (46% de avance, apertura 2027)

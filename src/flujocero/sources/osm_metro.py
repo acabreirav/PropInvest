@@ -156,14 +156,23 @@ def _es_de_red_objetivo(tags: dict[str, str]) -> bool:
     return "metro de santiago" in red or "biotr" in red
 
 
-def parsear(cuerpo: dict[str, Any], ahora: datetime) -> CosechaMetro:
+def parsear(
+    cuerpo: dict[str, Any], ahora: datetime, lineas_en_obra: frozenset[str] = frozenset()
+) -> CosechaMetro:
     """Elementos Overpass -> estaciones. Puro: `ahora` entra por argumento (§11) y es
     OBLIGATORIO — sin fecha de referencia no se puede saber si una apertura declarada
     ya ocurrio, y el default "operativa" seria el lado inseguro (verificador 03-sep).
 
     `ahora` clasifica como NO operativa toda estacion con apertura declarada en el
     futuro (las 5 del tren Alameda-Melipilla venian tageadas railway=station con
-    start_date 2027-2029 y se contaban como abiertas — medido en sonda_l7, 03-sep)."""
+    start_date 2027-2029 y se contaban como abiertas — medido en sonda_l7, 03-sep).
+
+    `lineas_en_obra` (las claves de config/metro.yml, dato curado con fuente) resuelve
+    la incoherencia T-922d: OSM tagea las paradas de la L7 como `proposed` aunque la
+    linea este fisicamente en obra, y el resumen mostraba 0 en construccion mientras
+    el catalizador si las contaba. Una `propuesta` cuya linea esta curada como en obra
+    Y que declara su propia fecha se guarda como `construccion`; sin fecha propia sigue
+    siendo propuesta (los miembros de la "Propuesta de Extension L7" no se cuelan)."""
     cosecha = CosechaMetro()
     vistos: set[tuple[str, int]] = set()
     indices: dict[tuple[str, str, str | None, str], int] = {}
@@ -233,13 +242,17 @@ def parsear(cuerpo: dict[str, Any], ahora: datetime) -> CosechaMetro:
         else:
             estado = "operativa"
         red_txt = (tags.get("network") or "").lower()
+        linea = _linea_de(tags)
+        if estado == "propuesta" and linea in lineas_en_obra and anio is not None:
+            # la linea esta curada como EN OBRA (metro.yml, con fuente) y el nodo declara
+            # su apertura: el tag proposed de OSM va atras de la realidad fisica
+            estado = "construccion"
         if "biotr" in red_txt:
             red = "biotren"
         elif tags.get("train") == "yes" or "melipilla" in red_txt:
             red = "efe"  # tren de cercania EFE colado por un station=subway ajeno
         else:
             red = "metro-santiago"
-        linea = _linea_de(tags)
         estacion = Estacion(
             estacion_id=(f"osm-{el['id']}" if tipo == "node" else f"osm-{tipo}-{el['id']}"),
             nombre=nombre,
@@ -293,7 +306,15 @@ def recolectar(
             raiz=raiz,
             parser_version=PARSER_VERSION,
         )
-        return parsear(json.loads(doc.contenido.decode("utf-8")), ahora=momento)
+        from flujocero.config import cargar as cargar_config
+
+        lineas = frozenset(
+            str(e["linea"]).lower()
+            for e in (cargar_config("metro").crudo("lineas_en_construccion") or [])
+        )
+        return parsear(
+            json.loads(doc.contenido.decode("utf-8")), ahora=momento, lineas_en_obra=lineas
+        )
     c = CosechaMetro()
     c.error = " · ".join(errores)
     return c

@@ -2242,6 +2242,11 @@ def puente_censo() -> None:
                 f"\n✓ catalizador Metro: {cat['microzonas']} microzonas medidas contra "
                 f"{cat['elegibles']} estaciones elegibles."
             )
+            if cat.get("excluidas_efe"):
+                typer.echo(
+                    f"  {cat['excluidas_efe']} estaciones EFE fuera del catalizador: el §12 "
+                    "pide Metro/Biotren."
+                )
             if cat["construccion_sin_fecha"]:
                 typer.echo(
                     f"  {cat['construccion_sin_fecha']} estaciones en obra o propuestas quedaron"

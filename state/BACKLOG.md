@@ -1528,7 +1528,11 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-922d · Deuda del verificador sobre el catalizador Metro
-estado: pendiente
+estado: hecha  # 03-sep: fuentes primarias metro.cl en metro.yml (via tags source de OSM);
+  # propuesta fechada de linea curada en obra -> estado 'construccion' (resumen y
+  # catalizador dicen lo mismo); estaciones EFE excluidas del catalizador (§12) con
+  # contador propio; (a) medida en sonda_l7b (L6 start_date=2027); (b)-(e) las corre
+  # scripts/verificar_t922d.py en la maquina local
 agente: geo-microzonas
 fase: 2
 depende_de: [T-922b]

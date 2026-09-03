@@ -254,9 +254,12 @@ def test_recolectar_guarda_crudo_y_parsea(tmp_path):
     assert por_id["osm-8"].estado == "propuesta" and por_id["osm-8"].linea == "l9"
     # una obra mapeada como way entra con la geometria del `center`
     assert por_id["osm-way-9"].estado == "construccion" and por_id["osm-way-9"].lat == -33.415
-    # la parada de L7: network manda sobre ref (que es el numero de parada, no la linea)
+    # la parada de L7: network manda sobre ref (que es el numero de parada, no la linea).
+    # recolectar() pasa las lineas curadas de metro.yml, asi que la propuesta fechada de
+    # una linea EN OBRA se guarda como construccion (T-922d): el resumen y el catalizador
+    # dicen lo mismo
     assert por_id["osm-10"].linea == "l7" and por_id["osm-10"].anio_apertura == 2028
-    assert por_id["osm-10"].estado == "propuesta"
+    assert por_id["osm-10"].estado == "construccion"
     # el tren EFE con apertura futura NO es operativa ni metro-santiago
     assert por_id["osm-11"].estado == "propuesta" and por_id["osm-11"].red == "efe"
     assert por_id["osm-11"].linea is None
@@ -299,9 +302,10 @@ def test_catalizador_por_distancia_y_fecha(con, tmp_path):
     # Huelén, Obra Way L7, Obra Relation L7 y Radal (l7 con fecha curada 2028) y
     # Lo Errázuriz (obra l6: la fecha creible es la CURADA, no exige start_date OSM).
     # Fuera y contadas: "Misteriosa" (obra sin linea), "Bajos de Mena" (l9 sin fecha
-    # curada), "Malloco" (EFE sin linea) y "Extensión Cerro Navia" (propuesta que dice
-    # l7 pero sin fecha propia: no hereda el 2028 de la L7 real).
-    assert res["elegibles"] == 9 and res["construccion_sin_fecha"] == 4
+    # curada) y "Extensión Cerro Navia" (propuesta que dice l7 pero sin fecha propia:
+    # no hereda el 2028 de la L7 real). "Malloco" es EFE: el §12 pide Metro/Biotren.
+    assert res["elegibles"] == 9 and res["construccion_sin_fecha"] == 3
+    assert res["excluidas_efe"] == 1
 
     valores = dict(
         con.execute("SELECT microzona_id, catalizador FROM agg_riesgo_microzona").fetchall()
@@ -312,7 +316,12 @@ def test_catalizador_por_distancia_y_fecha(con, tmp_path):
 
 def test_sin_estaciones_no_se_escribe_nada(con):
     res = puente.calcular_catalizador(con, cargar("params"), AHORA)
-    assert res == {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0}
+    assert res == {
+        "microzonas": 0,
+        "construccion_sin_fecha": 0,
+        "elegibles": 0,
+        "excluidas_efe": 0,
+    }
     assert con.execute("SELECT count(*) FROM agg_riesgo_microzona").fetchone()[0] == 0, (
         "catalizador NULL = sin medir; un 0 escrito diria 'medimos y no hay Metro'"
     )
@@ -386,6 +395,20 @@ def test_dedupe_prefiere_el_gemelo_con_fecha_y_respeta_homonimas_lejanas():
     }
     cosecha = osm_metro.parsear(cuerpo, ahora=AHORA)
     assert len(cosecha.estaciones) == 2 and cosecha.duplicadas == 0
+
+
+def test_linea_curada_en_obra_reclasifica_la_propuesta_fechada_a_construccion():
+    """T-922d: OSM tagea las paradas de L7 como proposed aunque la linea este en obra.
+    Con la linea curada en metro.yml Y fecha propia del nodo → construccion; sin fecha
+    propia sigue propuesta (la "Propuesta de Extension L7" no se cuela)."""
+    con_fecha = _nodo(1, -33.44, -70.70, **L7_STOP, start_date="2028")
+    sin_fecha = _nodo(2, -33.42, -70.75, **{**L7_STOP, "name": "Extensión Cerro Navia"})
+    cosecha = osm_metro.parsear(
+        {"elements": [con_fecha, sin_fecha]}, ahora=AHORA, lineas_en_obra=frozenset({"l7"})
+    )
+    por_nombre = {e.nombre: e for e in cosecha.estaciones}
+    assert por_nombre["Radal"].estado == "construccion"
+    assert por_nombre["Extensión Cerro Navia"].estado == "propuesta"
 
 
 def test_apertura_con_fecha_completa_del_mismo_anio_no_es_operativa():

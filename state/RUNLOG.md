@@ -2606,3 +2606,20 @@ gates: VERDE
   Concepción, Coquimbo comuna, y Recoleta/Independencia/Macul/Cerrillos en la RM —
   esas necesitan fuente nueva (TocToc/Colliers comunal), queda anotado en el doc.
 - gates: VERDE.
+
+
+## 2026-09-03 · T-922d cerrada — deuda del verificador sobre el catalizador
+
+- metro.yml: fechas de L6/L7 ahora citan la fuente PRIMARIA (metro.cl/nuevos-proyectos/
+  extension-linea-6 y /linea-7), relevada por los tags `source` + `start_date` de los
+  propios nodos OSM medidos en sonda_l7b y guardada en el blob crudo del 03-sep.
+- Incoherencia de estado resuelta: una `propuesta` cuya linea esta curada como EN OBRA
+  en metro.yml Y que declara fecha propia se guarda como `construccion` (parsear recibe
+  `lineas_en_obra` por argumento, sigue puro). El resumen de recolectar-metro y el
+  catalizador ahora cuentan lo mismo. Sin fecha propia sigue `propuesta` — la guarda
+  contra la "Propuesta de Extension L7" queda intacta.
+- Las estaciones EFE (12 operativas de Alameda-Melipilla/Nos) quedan FUERA del
+  catalizador con contador `excluidas_efe`: el §12 pide Metro/Biotren. Se conservan.
+- (a) ya medida (L6 start_date=2027 en OSM). (b)-(e) quedan en un solo script local:
+  scripts/verificar_t922d.py (blob + base + una consulta a r16358740).
+- gates: VERDE.
