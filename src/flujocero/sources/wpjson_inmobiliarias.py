@@ -305,16 +305,34 @@ def recolectar(
         if rid is None:
             cosecha.errores.append(f"{url_unidad}: sin <link> al registro REST")
             continue
+
+        # Un registro puede responder 200 con HTML en vez de JSON (proyecto en borrador
+        # que redirige a una pagina de error, y follow_redirects la sigue). No es JSON
+        # roto nuestro: se registra con su URL y se sigue con el resto del catalogo.
+        def _json_o_nada(doc: Any) -> Any | None:
+            try:
+                return doc.json()
+            except ValueError:
+                cosecha.errores.append(
+                    f"{doc.url}: HTTP 200 pero el cuerpo no es JSON "
+                    f"(empieza con {doc.contenido[:40]!r})"
+                )
+                return None
+
         doc_rest = pedir(f"{base}/wp-json/wp/v2/proyecto/{rid}", f"{dom}_rest_{rid}")
         if doc_rest is None:
             continue
-        datos = doc_rest.json()
+        datos = _json_o_nada(doc_rest)
+        if datos is None:
+            continue
         padre = int(datos.get("parent") or 0)
         if padre:
             doc_rest = pedir(f"{base}/wp-json/wp/v2/proyecto/{padre}", f"{dom}_rest_{padre}")
             if doc_rest is None:
                 continue
-            datos = doc_rest.json()
+            datos = _json_o_nada(doc_rest)
+            if datos is None:
+                continue
         pid = int(datos.get("id") or 0)
         if pid in proyectos_vistos:
             continue  # dos slugs del sitemap resolvieron al mismo proyecto canónico
