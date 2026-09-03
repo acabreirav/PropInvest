@@ -46,7 +46,7 @@ class FilaTop:
     dividendo_clp: int = 0
     flujo_clp: int = 0  # BTCF mensual: >0 sobra plata, <0 se pone de bolsillo
     pie_clp: int = 0
-    dfl2: bool = False
+    dfl2: str = "no"  # "sí" / "probable*" (supuesto E, verificar en escritura) / "no"
     drivers: list[str] = field(default_factory=list)  # por qué puntúa alto (§12)
 
 
@@ -197,7 +197,7 @@ def render_html(
     <div><span>Flujo mensual</span>{flujo}</div>
     <div><span>Pie ({f.pie_pct:.0%})</span><b>${_f(f.pie_clp)}</b></div>
     <div><span>Pie para flujo cero</span><b>{f.pie_cero}</b></div>
-    <div><span>DFL2</span><b>{"sí" if f.dfl2 else "no"}</b></div>
+    <div><span>DFL2</span><b>{escape(f.dfl2)}</b></div>
   </div>
   <div class="mini">Por qué está arriba: {drivers}</div>
 </div>"""
@@ -303,6 +303,9 @@ def render_html(
 
 <h2>2 · Las 5 mejores oportunidades — stock USADO (precio real por unidad)</h2>
 {"".join(ficha(i, f) for i, f in enumerate(top_filas[:5], 1))}
+<p class='nota'>*DFL2 "probable": el aviso no lo dice, pero la unidad cabe en los 140 m² y
+la gran mayoría de ese stock está acogido (supuesto declarado, decisión 03-sep-2026). Los
+números lo incluyen; <b>verificar en la escritura antes de ofertar</b> es obligatorio.</p>
 
 <h2>3 · El resto del top</h2>
 <table>

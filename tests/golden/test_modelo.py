@@ -6,12 +6,13 @@ from decimal import getcontext
 
 import pytest
 
-from flujocero.config import cargar, ticket_maximo_uf
+from flujocero.config import cargar, con_valor, ticket_maximo_uf
 from flujocero.finance.escenarios import construir_escenarios, escenario_base, evaluar_universo
 from flujocero.finance.modelo import (
     Escenario,
     Unidad,
     contribuciones_anuales_uf,
+    dfl2_aplicable,
     evaluar,
     gastos_de_cierre_uf,
     pie_flujo_cero_real,
@@ -357,20 +358,36 @@ def test_sobre_el_tope_el_subsidio_se_niega_aunque_el_ranking_lo_admitiera(cfg) 
 # ------------------------------------------------ DFL2 tri-estado y ventana (T-917, T-911)
 
 
-def test_un_DFL2_sin_confirmar_compite_pero_no_cobra_el_beneficio(cfg) -> None:
-    """T-917. Medido sobre 5.870 avisos reales: **16 mencionan DFL2, el 0,3%** — y no porque
-    no lo sean, sino porque el aviso no lo dice. Con un booleano, `exigir_dfl2` vaciaba el
-    ranking entero. Un ND tratado como False es imputar en silencio (§3.2).
+def test_un_DFL2_sin_confirmar_bajo_140m2_cobra_el_beneficio_como_SUPUESTO(cfg) -> None:
+    """T-917 reencuadrada el 03-sep-2026 por decision del inversionista. Medido sobre 5.870
+    avisos reales: **16 mencionan DFL2, el 0,3%** — y no porque no lo sean, sino porque el
+    aviso no lo dice. La asimetria conservadora anterior (None = sin beneficio) castigaba
+    el ranking ENTERO con un sesgo igual de falso que el optimista.
 
-    La asimetria es deliberada: compite, pero se evalua SIN el beneficio. Nunca se muestra una
-    oportunidad mejor de lo que se puede probar; si despues resulta DFL2, solo mejora.
+    Regla nueva: `None` + ≤140 m² utiles → se evalua CON DFL2 como supuesto E declarado
+    (`tributacion.dfl2_probable_usadas_bajo_140m2`), y `dfl2_es_supuesto=True` viaja hasta
+    la ficha para mostrarse "probable, verificar en escritura" (§2.5) — nunca un si seco.
     """
     p, inv = cfg
     ev = evaluar(unidad(acogida_dfl2=None), escenario(dfl2=True), p, inv)
     assert not ev.excluido, "compite: el aviso callarselo no prueba que no lo sea"
-    assert not ev.dfl2_aplicado
-    assert "sin confirmar" in ev.motivo_sin_dfl2
-    assert "escritura" in ev.motivo_sin_dfl2, "dice donde se verifica de verdad (§2.5)"
+    assert ev.dfl2_aplicado
+    assert ev.dfl2_es_supuesto, "el beneficio va por supuesto, no por escritura vista"
+
+    # sobre 140 m² el supuesto NO aplica: ahi ni siquiera cabria el DFL2
+    aplica, motivo, supuesto = dfl2_aplicable(
+        unidad(acogida_dfl2=None, m2_utiles=D(150)), escenario(dfl2=True), p
+    )
+    assert not aplica and not supuesto
+    assert "sin confirmar" in motivo and "escritura" in motivo
+
+    # con el parametro en false vuelve la asimetria conservadora anterior, intacta
+    p_conservador = con_valor(
+        p, "tributacion.dfl2_probable_usadas_bajo_140m2", False, "test: supuesto apagado"
+    )
+    ev2 = evaluar(unidad(acogida_dfl2=None), escenario(dfl2=True), p_conservador, inv)
+    assert not ev2.dfl2_aplicado
+    assert "sin confirmar" in ev2.motivo_sin_dfl2
 
 
 def test_solo_se_excluye_lo_que_se_sabe_que_NO_es_DFL2(cfg) -> None:
@@ -379,13 +396,15 @@ def test_solo_se_excluye_lo_que_se_sabe_que_NO_es_DFL2(cfg) -> None:
     assert not evaluar(unidad(acogida_dfl2=None), escenario(), p, inv).excluido
 
 
-def test_un_DFL2_sin_confirmar_nunca_rinde_mas_que_uno_confirmado(cfg) -> None:
-    """El sentido de la asimetria, en plata."""
+def test_un_DFL2_supuesto_rinde_igual_que_uno_confirmado_pero_queda_marcado(cfg) -> None:
+    """En plata el supuesto vale lo mismo que la escritura; la diferencia es la MARCA, que
+    obliga a verificar antes de ofertar. Un confirmado jamas queda marcado como supuesto."""
     p, inv = cfg
     e = escenario(dfl2=True)
     confirmado = evaluar(unidad(acogida_dfl2=True), e, p, inv)
-    dudoso = evaluar(unidad(acogida_dfl2=None), e, p, inv)
-    assert dudoso.noi_uf < confirmado.noi_uf
+    probable = evaluar(unidad(acogida_dfl2=None), e, p, inv)
+    assert probable.noi_uf == confirmado.noi_uf
+    assert probable.dfl2_es_supuesto and not confirmado.dfl2_es_supuesto
 
 
 def test_la_ventana_de_contribuciones_se_agota_con_la_antiguedad(cfg) -> None:
@@ -461,7 +480,10 @@ def test_el_pie_hallado_de_verdad_da_flujo_cero(cfg) -> None:
         m2_utiles=D(58),
         arriendo_mensual_uf=D("13.70"),
         es_vivienda_nueva=False,
-        acogida_dfl2=None,
+        # False, no None: desde el 03-sep-2026 un None <=140 m2 recibe el DFL2 por
+        # supuesto y esta unidad queda con flujo positivo al pie minimo — sin borde
+        # que probar. Con False se evalua sin beneficio y el cruce por cero existe.
+        acogida_dfl2=False,
     )
     pie = pie_flujo_cero_real(u, e, p, inv)
     justo = evaluar(u, replace(e, pie_pct=pie), p, inv, saltar_exclusiones=True)
@@ -493,7 +515,9 @@ def test_el_DFL2_sin_confirmar_es_lo_que_mas_encarece_el_pie(cfg) -> None:
     base = dict(
         precio_uf=D(2110), m2_utiles=D(58), arriendo_mensual_uf=D("13.70"), es_vivienda_nueva=False
     )
-    sin = pie_flujo_cero_real(unidad(**base, acogida_dfl2=None), e, p, inv)
+    # False, no None: None ahora cobra el beneficio por el supuesto del 03-sep-2026,
+    # y este test cuantifica cuanto VALE el DFL2, no la politica ante lo desconocido.
+    sin = pie_flujo_cero_real(unidad(**base, acogida_dfl2=False), e, p, inv)
     con = pie_flujo_cero_real(unidad(**base, acogida_dfl2=True, antiguedad_anios=5), e, p, inv)
     assert sin is not None and con is not None
     assert sin - con > D("0.30"), "verificar el DFL2 vale mas de 30 puntos de pie"

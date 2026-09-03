@@ -1694,7 +1694,7 @@ def informe_semanal(
                 dividendo_clp=int(ev.dividendo_total_uf * uf),
                 flujo_clp=int(ev.btcf_mensual_uf * uf),
                 pie_clp=int(u.precio_uf * ev.pie_efectivo * uf),
-                dfl2=bool(ev.dfl2_aplicado),
+                dfl2=(("probable*" if ev.dfl2_es_supuesto else "sí") if ev.dfl2_aplicado else "no"),
                 drivers=_drivers(ev),
             )
             for u, ev in vivos[:top]

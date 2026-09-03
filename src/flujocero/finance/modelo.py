@@ -94,6 +94,9 @@ class Evaluacion:
     fogaes_aplicado: bool = False
     motivo_sin_fogaes: str | None = None
     dfl2_aplicado: bool = False
+    # True = el beneficio va por el supuesto E de "probable bajo 140 m²", no por escritura
+    # vista: la ficha lo muestra "probable, verificar en escritura" (§2.5), nunca un si seco.
+    dfl2_es_supuesto: bool = False
     motivo_sin_dfl2: str | None = None
     ventana_contribuciones_abierta: bool = True
     pie_minimo_exigido: Decimal = D(0)
@@ -195,21 +198,35 @@ def fogaes_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[bool, str | No
     return True, None
 
 
-def dfl2_aplicable(u: Unidad, e: Escenario) -> tuple[bool, str | None]:
+def dfl2_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[bool, str | None, bool]:
     """¿Se le acreditan a esta unidad los beneficios tributarios del DFL2?
 
-    Solo si el escenario los pide **y** la unidad esta confirmada. Ante un `None` se evalua
-    SIN el beneficio: nunca se muestra una oportunidad mejor de lo que se puede probar. Si
-    despues resulta ser DFL2, los numeros solo mejoran — la asimetria va en esa direccion a
-    proposito.
+    Devuelve `(aplica, motivo_si_no, es_supuesto)`. Solo si el escenario los pide. Ante un
+    `None` (la escritura no se ha visto — el 99,7% del stock del portal calla el dato,
+    T-917) la decision cambio el 03-sep-2026 por instruccion del inversionista: si la
+    unidad cabe en los 140 m² utiles, se evalua CON el beneficio como **supuesto E
+    declarado** (`tributacion.dfl2_probable_usadas_bajo_140m2`) — la gran mayoria del
+    stock habitacional ≤140 m² esta acogido, y evaluar todo sin DFL2 castigaba el ranking
+    entero con un sesgo igual de falso que el optimista. El tercer valor viaja hasta la
+    ficha: un DFL2 supuesto se muestra "probable, verificar en escritura" (§2.5), nunca
+    como un si seco.
     """
     if not e.dfl2:
-        return False, None
+        return False, None, False
     if u.acogida_dfl2 is None:
-        return False, "DFL2 sin confirmar: se evalua sin el beneficio hasta ver la escritura"
+        probable = bool(
+            (p.crudo("tributacion").get("dfl2_probable_usadas_bajo_140m2") or {}).get("v")
+        )
+        if probable and u.m2_utiles <= p.d("tributacion.dfl2_max_m2_utiles"):
+            return True, None, True
+        return (
+            False,
+            "DFL2 sin confirmar: se evalua sin el beneficio hasta ver la escritura",
+            False,
+        )
     if not u.acogida_dfl2:
-        return False, "no acogida a DFL2"
-    return True, None
+        return False, "no acogida a DFL2", False
+    return True, None, False
 
 
 def ventana_dfl2_abierta(u: Unidad, p: Config) -> bool:
@@ -307,7 +324,7 @@ def construir_opex(u: Unidad, e: Escenario, egi_uf: Decimal, p: Config) -> f.Ope
     regalaba la rebaja a un usado de veinte años.
     """
     uf = p.d("macro.valor_uf_clp")
-    dfl2, _ = dfl2_aplicable(u, e)
+    dfl2, _, _ = dfl2_aplicable(u, e, p)
     contrib = contribuciones_anuales_uf(u.precio_uf, dfl2 and ventana_dfl2_abierta(u, p), p)
     renta = D(0)
     if not dfl2:
@@ -364,7 +381,7 @@ def evaluar(
 
     ev.tasa_aplicada, ev.subsidio_aplicado, ev.motivo_sin_subsidio = tasa_aplicable(u, e, p)
     ev.fogaes_aplicado, ev.motivo_sin_fogaes = fogaes_aplicable(u, e, p)
-    ev.dfl2_aplicado, ev.motivo_sin_dfl2 = dfl2_aplicable(u, e)
+    ev.dfl2_aplicado, ev.motivo_sin_dfl2, ev.dfl2_es_supuesto = dfl2_aplicable(u, e, p)
     ev.ventana_contribuciones_abierta = ventana_dfl2_abierta(u, p)
     ev.pie_minimo_exigido = pie_minimo_exigido(ev.fogaes_aplicado, p)
 
