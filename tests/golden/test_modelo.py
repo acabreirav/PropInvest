@@ -636,3 +636,22 @@ def test_el_limite_de_140_m2_es_UNO_en_las_tres_declaraciones(cfg) -> None:
     assert p.d("tributacion.dfl2_max_m2_utiles") == D(140)
     assert D(str(p.crudo("score.exclusiones_duras")["m2_utiles_max"])) == D(140)
     assert D(str(inv.crudo("estrategia_dfl2")["max_m2_utiles"])) == D(140)
+
+
+# ------------------------------------------- verificador §7.6 (03-sep) · F3 del cambio TIR
+
+
+def test_una_evaluacion_no_excluida_siempre_trae_tir_completa(cfg) -> None:
+    """El modo interno `calcular_tir=False` existe para las bisecciones y produce
+    `tir_real == {}` SIN marca. Este test fija el contrato: el camino publicado (default)
+    trae TODOS los horizontes de params.yml, y los consumidores (`puntuar`, la tabla del
+    cli) indexan directo — si el modo interno se filtrara, revientan en vez de imputar
+    un 0% o la peor TIR en silencio (§3.2)."""
+    p, inv = cfg
+    ev = evaluar(unidad(), escenario(), p, inv)
+    assert not ev.excluido
+    horizontes = {int(n) for n in p.crudo("indicadores_objetivo.horizontes_tir_anios")}
+    assert set(ev.tir_real) == horizontes
+
+    interna = evaluar(unidad(), escenario(), p, inv, saltar_exclusiones=True, calcular_tir=False)
+    assert interna.tir_real == {}  # y por eso puntuar() la haria reventar, no rankear

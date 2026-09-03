@@ -44,7 +44,7 @@ from flujocero.sources.base import escribir_crudo
 from flujocero.sources.portal_comun import slug, tipologia_de
 
 SOURCE_ID = "wpjson_inmobiliarias"
-PARSER_VERSION = "wpjson_inmobiliarias/0.1.0"
+PARSER_VERSION = "wpjson_inmobiliarias/0.2.0"  # 0.2.0: captura streetAddress (T-931c)
 LEGAL_TIER = "html_permitido"
 UA = "FlujoCero-ResearchBot/1.0"
 # Cortesía por defecto; si robots.txt declara Crawl-delay mayor, manda robots.
@@ -71,6 +71,7 @@ class ProyectoWp:
     robots_snapshot_sha: str
     lat: float | None = None  # Fundamenta publica GeoCoordinates en su JSON-LD
     lon: float | None = None
+    direccion: str | None = None  # streetAddress del JSON-LD; insumo del geocodificador
 
 
 @dataclass(frozen=True)
@@ -292,6 +293,7 @@ def proyecto_de_ld(html: str) -> dict[str, Any]:
     salida: dict[str, Any] = {
         "nombre": None,
         "comuna": None,
+        "direccion": None,
         "lat": None,
         "lon": None,
         "precio_ld": None,
@@ -309,6 +311,7 @@ def proyecto_de_ld(html: str) -> dict[str, Any]:
                 salida["nombre"] = nodo.get("name") or salida["nombre"]
                 direccion = nodo.get("address") or {}
                 salida["comuna"] = direccion.get("addressLocality") or salida["comuna"]
+                salida["direccion"] = direccion.get("streetAddress") or salida["direccion"]
                 geo = nodo.get("geo") or {}
                 try:
                     salida["lat"] = float(geo["latitude"])
@@ -405,6 +408,7 @@ def proyecto_de_ld_rvc(html: str) -> dict[str, Any]:
     salida: dict[str, Any] = {
         "nombre": None,
         "comuna": None,
+        "direccion": None,
         "lat": None,
         "lon": None,
         "estado": None,
@@ -423,6 +427,9 @@ def proyecto_de_ld_rvc(html: str) -> dict[str, Any]:
                 salida["nombre"] = nodo.get("name") or salida["nombre"]
                 salida["comuna"] = (nodo.get("address") or {}).get("addressLocality") or salida[
                     "comuna"
+                ]
+                salida["direccion"] = (nodo.get("address") or {}).get("streetAddress") or salida[
+                    "direccion"
                 ]
                 geo = nodo.get("geo") or {}
                 try:
@@ -464,7 +471,13 @@ def proyecto_de_ld_rvc(html: str) -> dict[str, Any]:
 def proyecto_de_ld_ingevec(html: str) -> dict[str, Any]:
     """El JSON-LD de Ingevec: `RealEstateListing` con about.Apartment (nombre, comuna)
     y offers.price en CLF — un "desde" por proyecto, sin desglose por planta."""
-    salida: dict[str, Any] = {"nombre": None, "comuna": None, "estado": None, "precio": None}
+    salida: dict[str, Any] = {
+        "nombre": None,
+        "comuna": None,
+        "direccion": None,
+        "estado": None,
+        "precio": None,
+    }
     for bloque in RE_BLOQUE_LD.findall(html):
         try:
             ld = json.loads(bloque)
@@ -477,6 +490,9 @@ def proyecto_de_ld_ingevec(html: str) -> dict[str, Any]:
             salida["nombre"] = depto.get("name") or nodo.get("name") or salida["nombre"]
             salida["comuna"] = (depto.get("address") or {}).get("addressLocality") or salida[
                 "comuna"
+            ]
+            salida["direccion"] = (depto.get("address") or {}).get("streetAddress") or salida[
+                "direccion"
             ]
             oferta = nodo.get("offers") or {}
             if oferta.get("priceCurrency") in ("UF", "CLF"):
@@ -659,6 +675,7 @@ def recolectar(
                         tipo_bien=None,  # RVC tambien lista oficinas/locales: no se afirma (ND)
                         lat=info["lat"],
                         lon=info["lon"],
+                        direccion=info["direccion"],
                         **procedencia,
                     )
                 )
@@ -701,6 +718,7 @@ def recolectar(
                         comuna_slug=_slug_comuna(info["comuna"]),
                         estado=slug(info["estado"]) if info["estado"] else None,
                         tipo_bien=None,
+                        direccion=info["direccion"],
                         **procedencia,
                     )
                 )
@@ -728,6 +746,7 @@ def recolectar(
                         tipo_bien=meta_rest.get("tipo_bien"),
                         lat=info["lat"],
                         lon=info["lon"],
+                        direccion=info["direccion"],
                         **procedencia,
                     )
                 )
@@ -932,6 +951,28 @@ def cargar(conexion: Any, cosecha: Cosecha) -> dict[str, int]:
                 (p.comuna_slug, p.comuna_slug.replace("-", " ").title()),
             )
         proyecto_id = f"wpjson-{p.dominio}-{p.proyecto_slug}"
+        if p.direccion:
+            # La direccion va a su tabla propia (upsert): dim_proyecto queda congelada
+            # por la FK apenas hay facts, y la direccion es el insumo del geocodificador
+            # (T-931c) — no puede depender de que el proyecto sea nuevo.
+            conexion.execute(
+                "INSERT INTO proyecto_direccion (proyecto_id, direccion, source_id, "
+                "source_url, fetched_at, parser_version, raw_blob_path, "
+                "robots_snapshot_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (proyecto_id) DO UPDATE SET direccion=excluded.direccion, "
+                "source_url=excluded.source_url, fetched_at=excluded.fetched_at, "
+                "raw_blob_path=excluded.raw_blob_path",
+                (
+                    proyecto_id,
+                    p.direccion,
+                    SOURCE_ID,
+                    p.url,
+                    p.fetched_at,
+                    PARSER_VERSION,
+                    p.raw_blob_path,
+                    p.robots_snapshot_sha,
+                ),
+            )
         existe = conexion.execute(
             "SELECT 1 FROM dim_proyecto WHERE proyecto_id = ?", (proyecto_id,)
         ).fetchone()

@@ -57,11 +57,16 @@ def _plano(texto: str) -> str:
     return "".join(c for c in sin if not unicodedata.combining(c)).lower()
 
 
-def construir_consulta(nombre: str, direccion: str | None, comuna_nombre: str) -> str:
-    """La dirección publicada manda; sin ella, el nombre del proyecto + comuna resuelve
-    la mayoría de los edificios (Nominatim indexa nombres de edificios OSM)."""
-    base = (direccion or "").strip() or (nombre or "").strip()
-    return f"{base}, {comuna_nombre}, Chile"
+def construir_consultas(nombre: str, direccion: str | None, comuna_nombre: str) -> list[str]:
+    """Los intentos, en orden: la dirección de calle publicada (streetAddress del JSON-LD,
+    tabla proyecto_direccion) y después el nombre del proyecto. Medido el 03-sep: por
+    nombre solo, Nominatim resolvió 0 de 34 — los edificios chilenos casi no están
+    indexados por nombre; por dirección sí resuelve."""
+    consultas = []
+    for base in ((direccion or "").strip(), (nombre or "").strip()):
+        if base and f"{base}, {comuna_nombre}, Chile" not in consultas:
+            consultas.append(f"{base}, {comuna_nombre}, Chile")
+    return consultas
 
 
 def parsear(cuerpo: list[dict[str, Any]], comuna_nombre: str) -> tuple[float, float, str] | None:
@@ -86,17 +91,21 @@ def geocodificar(
     limite: int = 0,
     pausa_s: float = PAUSA_S,
     raiz: Path | None = None,
+    verbose: bool = False,
 ) -> ResumenGeocode:
     """Resuelve lat/lon para los proyectos de OFERTA NUEVA sin geo (ni publicada ni ya
     geocodificada). Solo oferta nueva: geocodificar todo dim_proyecto a 1 req/s tardaría
-    horas y las usadas no pasan por la microzona del proyecto."""
+    horas y las usadas no pasan por la microzona del proyecto. Hasta dos intentos por
+    proyecto (dirección publicada, luego nombre); `verbose` imprime cada consulta y su
+    resultado para diagnosticar la tasa de acierto en vivo."""
     momento = ahora or datetime.now(UTC)
     resumen = ResumenGeocode()
     pendientes = conexion.execute(
         """
-        SELECT p.proyecto_id, p.nombre, p.direccion, c.nombre
+        SELECT p.proyecto_id, p.nombre, COALESCE(d.direccion, p.direccion), c.nombre
         FROM dim_proyecto p
         JOIN dim_comuna c USING (comuna_id)
+        LEFT JOIN proyecto_direccion d USING (proyecto_id)
         LEFT JOIN geo_proyecto g USING (proyecto_id)
         WHERE p.lat IS NULL AND g.proyecto_id IS NULL
           AND EXISTS (
@@ -110,42 +119,55 @@ def geocodificar(
     if limite:
         pendientes = pendientes[:limite]
 
-    for i, (pid, nombre, direccion, comuna_nombre) in enumerate(pendientes):
-        if i:
-            time.sleep(pausa_s)
+    primera_request = True
+    for pid, nombre, direccion, comuna_nombre in pendientes:
         resumen.consultados += 1
-        consulta = construir_consulta(nombre, direccion, comuna_nombre)
-        try:
-            r = cliente.get(
-                URL,
-                params={
-                    "q": consulta,
-                    "format": "jsonv2",
-                    "limit": 1,
-                    "countrycodes": "cl",
-                },
-                headers=CABECERAS,
+        res, consulta, hubo_respuesta, hubo_error = None, "", False, False
+        for consulta in construir_consultas(nombre, direccion, comuna_nombre):
+            if not primera_request:
+                time.sleep(pausa_s)
+            primera_request = False
+            try:
+                r = cliente.get(
+                    URL,
+                    params={
+                        "q": consulta,
+                        "format": "jsonv2",
+                        "limit": 1,
+                        "countrycodes": "cl",
+                    },
+                    headers=CABECERAS,
+                )
+            except Exception as exc:  # noqa: BLE001 — un proyecto fallido no mata la corrida
+                resumen.errores.append(f"{pid}: {type(exc).__name__}: {exc}")
+                hubo_error = True
+                break
+            if r.status_code != 200:
+                resumen.errores.append(f"{pid}: HTTP {r.status_code}")
+                hubo_error = True
+                break
+            doc = escribir_crudo(
+                SOURCE_ID,
+                str(r.url),
+                r.content,
+                momento,
+                robots_snapshot_sha="api-publica-odbl-politica-1rps",
+                nombre=pid,
+                raiz=raiz,
+                parser_version=PARSER_VERSION,
             )
-        except Exception as exc:  # noqa: BLE001 — un proyecto fallido no mata la corrida
-            resumen.errores.append(f"{pid}: {type(exc).__name__}: {exc}")
+            cuerpo = json.loads(doc.contenido.decode("utf-8"))
+            hubo_respuesta = hubo_respuesta or bool(cuerpo)
+            res = parsear(cuerpo, comuna_nombre)
+            if verbose:
+                estadoq = "OK" if res else ("otra_comuna" if cuerpo else "vacio")
+                print(f"    {pid}: {consulta!r} -> {estadoq}")
+            if res is not None:
+                break
+        if hubo_error:
             continue
-        if r.status_code != 200:
-            resumen.errores.append(f"{pid}: HTTP {r.status_code}")
-            continue
-        doc = escribir_crudo(
-            SOURCE_ID,
-            str(r.url),
-            r.content,
-            momento,
-            robots_snapshot_sha="api-publica-odbl-politica-1rps",
-            nombre=pid,
-            raiz=raiz,
-            parser_version=PARSER_VERSION,
-        )
-        cuerpo = json.loads(doc.contenido.decode("utf-8"))
-        res = parsear(cuerpo, comuna_nombre)
         if res is None:
-            if cuerpo:
+            if hubo_respuesta:
                 resumen.comuna_no_coincide += 1
             else:
                 resumen.sin_resultado += 1

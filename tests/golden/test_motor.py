@@ -59,6 +59,19 @@ def test_tir_neutra() -> None:
     assert abs(f.tir(flujos)) < D("1e-9")
 
 
+# 5b · anclas de FORMA CERRADA para la TIR (verificador §7.6, 03-sep, F4): la neutra
+# de arriba tiene raiz 0 y no distingue un off-by-one en el descuento — estas si.
+def test_tir_anclas_de_forma_cerrada() -> None:
+    # -100 hoy, 110 en un anio: TIR = 10% exacto
+    assert abs(f.tir([D(-100), D(110)]) - D("0.10")) < D("1e-9")
+    # -100 hoy, 121 en DOS anios (121 = 100·1,1²): TIR = 10% exacto. Un descuento
+    # corrido en un periodo daria otra raiz y este test lo caza.
+    assert abs(f.tir([D(-100), D(0), D(121)]) - D("0.10")) < D("1e-9")
+    # sin cambio de signo no hay TIR: fallo ruidoso, jamas un numero inventado
+    with pytest.raises(ValueError):
+        f.tir([D(-100), D(-10)])
+
+
 # 6 · el saldo insoluto llega a cero al final del plazo
 def test_saldo_insoluto_final() -> None:
     s = f.saldo_insoluto(D(4500), D("0.034"), 30, 360)

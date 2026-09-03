@@ -167,6 +167,16 @@ CREATE TABLE IF NOT EXISTS dim_estacion_metro (
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );
 
+-- T-931c · direccion de calle del proyecto (streetAddress del JSON-LD), en tabla propia
+-- y upserteable: dim_proyecto queda congelada por la FK apenas hay facts, y la direccion
+-- es el insumo del geocodificador — no puede depender de que el proyecto sea nuevo.
+CREATE TABLE IF NOT EXISTS proyecto_direccion (
+  proyecto_id     VARCHAR PRIMARY KEY,
+  direccion       VARCHAR NOT NULL,
+  source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
+  parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
+);
+
 -- T-931c · coordenadas geocodificadas (Nominatim/OSM) para proyectos de oferta nueva
 -- que no publican geo. Tabla propia con upsert, NO un UPDATE de dim_proyecto: la FK de
 -- DuckDB veta el UPDATE de una fila referenciada por facts. El informe hace COALESCE.

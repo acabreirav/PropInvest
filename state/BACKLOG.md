@@ -1574,3 +1574,17 @@ criterio_de_aceptacion:
     el geocodificador, ambos citados)
   - sin_geo baja de 217 a <80; ninguna coordenada inventada — direccion ambigua = ND
 gate: make gates
+
+## T-943 · TIR con mas de un cambio de signo se reporta como -100%
+estado: pendiente
+agente: motor-financiero
+fase: 3
+contexto: verificador §7.6 (03-sep, F5). [-100, 230, -132] tiene raices en 10% y 20%
+  pero el VAN es negativo en ambos extremos del bracket -> ValueError -> tir_real=-1
+  (la peor TIR posible, 20% del score). INALCANZABLE hoy: los flujos de evaluar()
+  tienen exactamente un cambio de signo. Se vuelve real si el modelo agrega capex a
+  mitad de horizonte o refinanciamiento.
+criterio_de_aceptacion:
+  - detectar multiples cambios de signo y reportar ND explicito (no -1) o la TIR
+    modificada (MIRR) con la decision escrita en un ADR
+gate: make gates

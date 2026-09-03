@@ -227,12 +227,14 @@ def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 30
 
     Para compararla con un depósito a plazo nominal, súmale la inflación esperada.
 
-    Dos decisiones de costo, medidas el 03-sep-2026 (la TIR era el 97% del informe):
-    el VAN interno descuenta multiplicando el factor en vez de elevar `(1+r)**t` por
-    término, y el signo del extremo bajo se calcula UNA vez y se arrastra — la versión
-    anterior recalculaba `van(lo)` en cada iteración. La bisección corta cuando el
-    intervalo de tasa baja de 1e-12 (≪ el 1e-9 que exige el golden §7.2) o cuando el
-    VAN cae bajo `tol`, lo que llegue primero. Mismo resultado, ~40 iteraciones y no 300.
+    Dos decisiones de costo, medidas el 03-sep-2026 y CORREGIDAS por el verificador
+    §7.6 del mismo día: el VAN interno descuenta multiplicando el factor en vez de
+    elevar `(1+r)**t` por término, y el signo del extremo bajo se calcula UNA vez y se
+    arrastra — la versión anterior llamaba `van()` DOS veces por iteración (el
+    `van(lo)` recalculado). Sobre los flujos reales del modelo la bisección converge en
+    ~48 iteraciones por el corte `|v| < tol` — nunca llegó a las 300 del tope, y el
+    ahorro viene de las dos decisiones de arriba, no del conteo. El resultado es
+    bit-idéntico a la versión anterior (verificado campo a campo sobre 2.000 unidades).
     """
     lista = list(flujos)
 
@@ -252,7 +254,7 @@ def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 30
     for _ in range(max_iter):
         mid = (lo + hi) / D(2)
         v = van(mid)
-        if abs(v) < tol or hi - lo < D("1e-12"):
+        if abs(v) < tol:
             return mid
         if v_lo * v < 0:
             hi = mid

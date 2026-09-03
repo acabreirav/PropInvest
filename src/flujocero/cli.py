@@ -271,7 +271,7 @@ def demo() -> None:
             f"{u.unidad_key:<10}{u.precio_uf:>7.0f}{u.arriendo_mensual_uf:>8.1f}"
             f"{ev.rentabilidad_bruta:>8.2%}{ev.dividendo_total_uf:>9.2f}"
             f"{ev.btcf_mensual_uf:>10.2f} UF{ev.pie_minimo_flujo_cero:>9.1%}"
-            f"{ev.tir_real.get(10, D(0)):>9.2%}{ev.score:>7.1f}"
+            f"{ev.tir_real[10]:>9.2%}{ev.score:>7.1f}"
         )
     uf = p.d("macro.valor_uf_clp")
     vivos = [e for e in evals if not e.excluido]
@@ -2136,6 +2136,7 @@ def probar_wpjson(
 @app.command()
 def geocodificar_proyectos(
     limite: int = typer.Option(0, help="máximo de proyectos a consultar; 0 = todos"),
+    verbose: bool = typer.Option(False, help="imprime cada consulta y qué respondió Nominatim"),
 ) -> None:
     """T-931c · lat/lon vía Nominatim (OSM) para proyectos de oferta nueva sin geo.
 
@@ -2153,7 +2154,7 @@ def geocodificar_proyectos(
     try:
         typer.echo("  consultando Nominatim a 1 req/s (política de uso de OSM)…")
         with httpx.Client(timeout=30) as cliente:
-            r = geo.geocodificar(cliente, con, limite=limite)
+            r = geo.geocodificar(cliente, con, limite=limite, verbose=verbose)
     finally:
         con.close()
     typer.echo(

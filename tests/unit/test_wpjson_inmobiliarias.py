@@ -102,6 +102,8 @@ def test_fundamenta_ld_extrae_comuna_geo_y_prefiere_el_aside() -> None:
     # frente al aside (2.253) — manda el aside
     assert info["precio_ld"] == D("2600")
     assert info["precio_aside"] == D("2253")
+    # T-931c: la direccion de calle es el insumo del geocodificador
+    assert info["direccion"] == "Arauco 500"
 
 
 def test_iarmas_plantas_deduplica_y_lee_uf_pegado() -> None:
@@ -135,6 +137,7 @@ def test_rvc_ld_extrae_plantas_completas() -> None:
     assert p2["dormitorios"] == 2 and p2["banos"] == 2
     assert p6["precio_desde_uf"] == D("2754.78")
     assert p6["banos"] == 1
+    assert info["direccion"] == "Altos de Viña 235 esquina Sendero Norte"  # T-931c
 
 
 def test_ingevec_ld_extrae_proyecto() -> None:
@@ -144,6 +147,7 @@ def test_ingevec_ld_extrae_proyecto() -> None:
     assert wp._slug_comuna(info["comuna"]) == "la-florida"
     assert info["precio"] == D("3439")
     assert info["estado"] == "Entrega inmediata"
+    assert info["direccion"] == "Vicuña Mackenna 7630"  # T-931c
 
 
 def test_selftest_fixture_verde() -> None:

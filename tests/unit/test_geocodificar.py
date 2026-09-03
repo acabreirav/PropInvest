@@ -24,13 +24,13 @@ RESPUESTA_NUNOA = [
 ]
 
 
-def test_construir_consulta_prefiere_la_direccion_publicada() -> None:
-    assert (
-        geo.construir_consulta("Edificio Geo", "Irarrázaval 4400", "Ñuñoa")
-        == "Irarrázaval 4400, Ñuñoa, Chile"
-    )
-    # sin dirección, el nombre del proyecto resuelve (Nominatim indexa edificios)
-    assert geo.construir_consulta("Edificio Geo", None, "Ñuñoa") == "Edificio Geo, Ñuñoa, Chile"
+def test_construir_consultas_direccion_primero_y_nombre_de_respaldo() -> None:
+    assert geo.construir_consultas("Edificio Geo", "Irarrázaval 4400", "Ñuñoa") == [
+        "Irarrázaval 4400, Ñuñoa, Chile",
+        "Edificio Geo, Ñuñoa, Chile",
+    ]
+    # sin dirección publicada queda solo el nombre (medido: por nombre solo, 0 de 34)
+    assert geo.construir_consultas("Edificio Geo", None, "Ñuñoa") == ["Edificio Geo, Ñuñoa, Chile"]
 
 
 def test_parsear_exige_que_la_comuna_coincida_sin_acentos() -> None:
@@ -99,6 +99,32 @@ def test_el_informe_usa_la_geo_geocodificada_via_coalesce(con, tmp_path) -> None
     geo.geocodificar(cliente, con, ahora=AHORA, pausa_s=0, raiz=tmp_path)
     mapa = inf.microzonas_por_geo(con)
     assert mapa == {"wpjson-x-p1": "nunoa/barrio-x"}
+
+
+def test_direccion_de_proyecto_direccion_manda_y_el_nombre_es_respaldo(con, tmp_path) -> None:
+    """El caso real: dim_proyecto.direccion vacia (dim congelada por la FK) pero la
+    direccion capturada del JSON-LD vive en proyecto_direccion. Y si la direccion no
+    resuelve, se intenta el nombre — dos requests, no una."""
+    con.execute("UPDATE dim_proyecto SET direccion = NULL WHERE proyecto_id='wpjson-x-p1'")
+    con.execute(
+        "INSERT INTO proyecto_direccion (proyecto_id, direccion, source_id, source_url, "
+        "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+        "VALUES ('wpjson-x-p1', 'Irarrázaval 4400', 's', 'u', ?, 'v', 'r', 'sha')",
+        (AHORA,),
+    )
+    consultas = []
+
+    def responder(req: httpx.Request) -> httpx.Response:
+        consultas.append(req.url.params["q"])
+        # la direccion no resuelve (lista vacia); el nombre si
+        if "Irarrázaval" in consultas[-1]:
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json=RESPUESTA_NUNOA)
+
+    cliente = httpx.Client(transport=httpx.MockTransport(responder))
+    r = geo.geocodificar(cliente, con, ahora=AHORA, pausa_s=0, raiz=tmp_path)
+    assert consultas == ["Irarrázaval 4400, Ñuñoa, Chile", "Edificio Geo, Ñuñoa, Chile"]
+    assert r.geocodificados == 1
 
 
 def test_comuna_equivocada_no_se_persiste(con, tmp_path) -> None:

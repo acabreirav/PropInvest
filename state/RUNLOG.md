@@ -2701,3 +2701,26 @@ gates: VERDE
 - Medido: 205,4s → 4,1s por 2.000 unidades (50x). Proyectado a las 7.637 del usuario:
   ~13 min → ~16 s de motor. mypy --strict limpio, 67 golden verdes (incluida la doble
   implementación de referencia a 1e-6), gates VERDE.
+
+
+## 2026-09-03 · Verificador §7.6 sobre el cambio de TIR: numeros intactos, titular corregido
+
+- Equivalencia numerica CONFIRMADA campo a campo sobre 2.000 unidades: mismo ranking,
+  0 posiciones movidas, todos los campos bit-identicos salvo la TIR (3E-13, tres mil
+  veces bajo el 1e-9 del §7.2) — y esa desviacion venia solo del corte por intervalo
+  1e-12, que aportaba el 7% del ahorro: ELIMINADO, ahora es bit-identico completo.
+- CORRECCION del registro (§3.2 vale tambien para lo que nos afirmamos): el "50x" del
+  commit anterior comparaba un antes instrumentado con cProfile contra un despues
+  limpio. La cifra honesta, ambos lados sin instrumentar: 29x en evaluar_universo
+  (121,5s → 4,2s por 2.000 unidades) y 84x en arriendo_equilibrio_real. Y la TIR vieja
+  nunca corrio 300 vueltas: convergia en ~48 — el ahorro real es 2 llamadas a van()
+  por iteracion → 1, y descuento incremental en vez de potencia por termino.
+- Blindaje F3: `calcular_tir=False` produce tir_real vacio sin marca; puntuar() y la
+  tabla del cli imputaban en silencio (peor TIR / 0%) si se filtrara → ahora indexan
+  directo (revientan) y un golden fija el contrato del camino publicado.
+- Blindaje F4: la TIR solo tenia un golden degenerado (raiz 0) que no distingue un
+  off-by-one del descuento → anclas de forma cerrada ([-100,110]→10%; [-100,0,121]→10%)
+  y el caso sin cambio de signo (ValueError, no numero inventado).
+- Anotado F5 (preexistente): flujos con dos cambios de signo darian ValueError→-100%;
+  inalcanzable hoy (los flujos del modelo tienen UN cambio de signo), relevante si
+  algun dia entra capex a mitad de horizonte.
