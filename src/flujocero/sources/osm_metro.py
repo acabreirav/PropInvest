@@ -22,7 +22,7 @@ from typing import Any
 from flujocero.sources.base import escribir_crudo
 
 SOURCE_ID = "osm_metro"
-PARSER_VERSION = "0.4.0"
+PARSER_VERSION = "0.5.0"
 # El endpoint principal devolvio HTTP 406 en la maquina real: el frontal de
 # overpass-api.de rechaza clientes sin User-Agent identificable (politica de uso de OSM).
 # Se manda identificacion honesta y, si un servidor igual rechaza, se prueba el siguiente
@@ -45,14 +45,21 @@ CABECERAS = {
 # Fuente: wiki.openstreetmap.org/wiki/Tag:railway=construction y Key:construction:.
 # La cosecha de obras va ancha y el filtro de red se hace en `parsear` (puro, testeable).
 #
-# Medido en la corrida viva del 03-sep-2026 (scripts/diag_metro.py sobre el blob crudo):
-# como NODOS solo existen las PROPUESTAS de L9 (`proposed:railway=station`, linea en
-# `network`="Línea 9", apertura 2030+); las estaciones EN OBRA de L7 estan mapeadas como
-# way/relation — por eso las obras van con `nwr` y `out center` (center da lat/lon a lo
-# que no es nodo).
+# Medido en las corridas vivas del 03-sep-2026 (scripts/diag_metro.py, sonda_l7.py y
+# sonda_l7b.py sobre blobs crudos):
+# - las PROPUESTAS de L9 son nodos `proposed:railway=station`, linea en
+#   `network`="Línea 9", apertura 2030+;
+# - las estaciones de L7 (obra real, 2028) NO existen como estaciones sueltas: son
+#   nodos miembros de las relations de ruta `route=subway` ref=L7 ("Dirección Brasil"
+#   / "Dirección Estoril"), tageados `railway=stop` + `subway=yes` +
+#   `network`="Línea 7" + `start_date`="2028" — por eso se cosechan TAMBIEN los
+#   miembros de toda relation route=subway y se clasifican en `parsear`;
+# - OJO: en esos nodos `ref` es el NUMERO DE PARADA (Radal trae ref="6"), la linea
+#   verdadera va en `network` — `_linea_de` mira network primero.
 CONSULTA = """
-[out:json][timeout:90];
+[out:json][timeout:120];
 area["ISO3166-1"="CL"][admin_level=2]->.cl;
+relation(area.cl)[route=subway]->.rutas;
 (
   node(area.cl)[railway=station][station=subway];
   node(area.cl)[railway=station][network~"Biotr",i];
@@ -61,6 +68,7 @@ area["ISO3166-1"="CL"][admin_level=2]->.cl;
   nwr(area.cl)[railway=proposed][proposed=station];
   nwr(area.cl)["construction:railway"="station"];
   nwr(area.cl)["proposed:railway"="station"];
+  node(r.rutas);
 );
 out center;
 """
@@ -70,36 +78,48 @@ out center;
 class Estacion:
     estacion_id: str
     nombre: str
-    red: str  # 'metro-santiago' | 'biotren'
+    red: str  # 'metro-santiago' | 'biotren' | 'efe'
     linea: str | None  # normalizada en minusculas sin espacios; None si OSM no la trae
     estado: str  # 'operativa' | 'construccion' | 'propuesta'
     lat: float
     lon: float
+    anio_apertura: int | None = None  # opening_date/start_date de OSM; corrobora metro.yml
 
 
 @dataclass
 class CosechaMetro:
     estaciones: list[Estacion] = field(default_factory=list)
     sin_nombre: int = 0
-    fuera_de_red: int = 0  # obras cosechadas que no son Metro ni Biotren (tranvia, EFE…)
+    fuera_de_red: int = 0  # obras cosechadas que no son Metro ni Biotren (tranvia…)
+    omitidas: int = 0  # miembros de ruta sin clasificar (stop_position de linea operativa)
+    duplicadas: int = 0  # mismo (nombre, red, linea, estado): parada + estacion, o 2 sentidos
     error: str | None = None
 
 
 def _linea_de(tags: dict[str, str]) -> str | None:
     """La linea segun OSM, si la declara. 'L7', 'Línea 7' y '7' colapsan a 'l7'.
 
-    Las propuestas de L9 no traen `ref`: declaran la linea en `network`="Línea 9"
-    (medido en el blob del 03-sep-2026) — se acepta ese fallback solo cuando el
-    `network` ES una linea, no una red ("Metro de Santiago" no es una linea)."""
-    crudo = tags.get("ref") or tags.get("line") or tags.get("subway_line")
+    `network` manda cuando ES una linea ("Línea 7", "Línea 9"): en los nodos de parada
+    de L7 el `ref` es el NUMERO DE PARADA (Radal trae ref="6"), no la linea — leer ref
+    primero inventaria la linea equivocada (medido en sonda_l7b, 03-sep-2026). Una red
+    ("Metro de Santiago") no es una linea, ahi si cae a ref/line/subway_line."""
+    red = (tags.get("network") or "").strip()
+    crudo = red if red.lower().startswith(("línea", "linea")) else None
     if not crudo:
-        red = (tags.get("network") or "").strip()
-        if red.lower().startswith(("línea", "linea")):
-            crudo = red
+        crudo = tags.get("ref") or tags.get("line") or tags.get("subway_line")
     if not crudo:
         return None
     limpio = crudo.strip().lower().replace("línea", "l").replace("linea", "l").replace(" ", "")
     return limpio if limpio.startswith("l") else f"l{limpio}"
+
+
+def _anio_apertura_de(tags: dict[str, str]) -> int | None:
+    """El anio que OSM declara en opening_date/start_date, si es parseable."""
+    for clave in ("opening_date", "start_date"):
+        v = (tags.get(clave) or "").strip()[:4]
+        if v.isdigit():
+            return int(v)
+    return None
 
 
 def _es_de_red_objetivo(tags: dict[str, str]) -> bool:
@@ -119,14 +139,39 @@ def _es_de_red_objetivo(tags: dict[str, str]) -> bool:
     return "metro de santiago" in red or "biotr" in red
 
 
-def parsear(cuerpo: dict[str, Any]) -> CosechaMetro:
-    """Elementos Overpass -> estaciones. Puro: testeable contra fixture."""
+def parsear(cuerpo: dict[str, Any], ahora: datetime | None = None) -> CosechaMetro:
+    """Elementos Overpass -> estaciones. Puro: `ahora` entra por argumento (§11).
+
+    `ahora` clasifica como NO operativa toda estacion con apertura declarada en el
+    futuro (las 5 del tren Alameda-Melipilla venian tageadas railway=station con
+    start_date 2027-2029 y se contaban como abiertas — medido en sonda_l7, 03-sep)."""
     cosecha = CosechaMetro()
+    vistos: set[tuple[str, int]] = set()
+    claves: set[tuple[str, str, str | None, str]] = set()
     for el in cuerpo.get("elements", []):
+        tipo = el.get("type", "node")
+        if tipo == "relation":
+            continue  # las relations de ruta solo aportan sus nodos miembros
+        if (tipo, el["id"]) in vistos:
+            continue
+        vistos.add((tipo, el["id"]))
         tags = el.get("tags", {})
         if not _es_de_red_objetivo(tags):
             # la cosecha de obras va ancha (sin exigir subway); el filtro de red vive aca
             cosecha.fuera_de_red += 1
+            continue
+        anio = _anio_apertura_de(tags)
+        hay_construction = tags.get("railway") == "construction" or any(
+            k == "construction" or k.startswith("construction:") for k in tags
+        )
+        hay_proposed = tags.get("railway") == "proposed" or any(
+            k == "proposed" or k.startswith("proposed:") for k in tags
+        )
+        es_estacion_hoy = tags.get("railway") == "station" or tags.get("station") == "subway"
+        if not (es_estacion_hoy or hay_construction or hay_proposed or anio is not None):
+            # miembro de ruta sin nada que lo clasifique (p.ej. stop_position de una
+            # linea operativa, cuya estacion ya entro por su propio nodo): fuera, contado
+            cosecha.omitidas += 1
             continue
         nombre = tags.get("name")
         if not nombre:
@@ -139,29 +184,41 @@ def parsear(cuerpo: dict[str, Any]) -> CosechaMetro:
         if lat is None or lon is None:
             cosecha.sin_nombre += 1
             continue
-        # una PROPUESTA (L9, apertura 2030+) no es una obra: se distingue para que el
-        # catalizador y la UI no vendan como "en construccion" algo que es un plan
-        en_construccion = (
-            tags.get("railway") == "construction" or tags.get("construction:railway") == "station"
-        )
-        es_propuesta = (
-            tags.get("railway") == "proposed" or tags.get("proposed:railway") == "station"
-        )
-        estado = (
-            "construccion" if en_construccion else ("propuesta" if es_propuesta else "operativa")
-        )
-        red = "biotren" if "biotr" in (tags.get("network") or "").lower() else "metro-santiago"
-        tipo = el.get("type", "node")
+        # una PROPUESTA (L9, apertura 2030+) no es una obra, y una estacion con apertura
+        # FUTURA no es operativa aunque diga railway=station: nada sin abrir se vende
+        # como abierto
+        es_futura = anio is not None and ahora is not None and anio > ahora.year
+        if hay_construction:
+            estado = "construccion"
+        elif hay_proposed or es_futura:
+            estado = "propuesta"
+        else:
+            estado = "operativa"
+        red_txt = (tags.get("network") or "").lower()
+        if "biotr" in red_txt:
+            red = "biotren"
+        elif tags.get("train") == "yes" or "melipilla" in red_txt:
+            red = "efe"  # tren de cercania EFE colado por un station=subway ajeno
+        else:
+            red = "metro-santiago"
+        linea = _linea_de(tags)
+        clave = (nombre, red, linea, estado)
+        if clave in claves:
+            # la misma estacion como parada por sentido, o parada + etiqueta: una basta
+            cosecha.duplicadas += 1
+            continue
+        claves.add(clave)
         eid = f"osm-{el['id']}" if tipo == "node" else f"osm-{tipo}-{el['id']}"
         cosecha.estaciones.append(
             Estacion(
                 estacion_id=eid,
                 nombre=nombre,
                 red=red,
-                linea=_linea_de(tags),
+                linea=linea,
                 estado=estado,
                 lat=float(lat),
                 lon=float(lon),
+                anio_apertura=anio,
             )
         )
     return cosecha
@@ -192,7 +249,7 @@ def recolectar(
             raiz=raiz,
             parser_version=PARSER_VERSION,
         )
-        return parsear(json.loads(doc.contenido.decode("utf-8")))
+        return parsear(json.loads(doc.contenido.decode("utf-8")), ahora=momento)
     c = CosechaMetro()
     c.error = " · ".join(errores)
     return c
@@ -200,12 +257,17 @@ def recolectar(
 
 def cargar(conexion: Any, cosecha: CosechaMetro, momento: datetime) -> int:
     """Reemplaza `dim_estacion_metro` entero: es un derivado del ultimo blob."""
+    # bases creadas antes del parser 0.5.0 no traen la columna; migracion en el sitio
+    conexion.execute(
+        "ALTER TABLE dim_estacion_metro ADD COLUMN IF NOT EXISTS anio_apertura INTEGER"
+    )
     conexion.execute("DELETE FROM dim_estacion_metro")
     for e in cosecha.estaciones:
         conexion.execute(
             "INSERT INTO dim_estacion_metro (estacion_id, nombre, red, linea, estado, lat, "
-            "lon, source_id, source_url, fetched_at, parser_version, raw_blob_path, "
-            "robots_snapshot_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "lon, anio_apertura, source_id, source_url, fetched_at, parser_version, "
+            "raw_blob_path, robots_snapshot_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+            "?, ?, ?)",
             (
                 e.estacion_id,
                 e.nombre,
@@ -214,6 +276,7 @@ def cargar(conexion: Any, cosecha: CosechaMetro, momento: datetime) -> int:
                 e.estado,
                 e.lat,
                 e.lon,
+                e.anio_apertura,
                 SOURCE_ID,
                 OVERPASS_URLS[0],
                 momento,

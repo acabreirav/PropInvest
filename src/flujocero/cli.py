@@ -2171,8 +2171,15 @@ def recolectar_metro() -> None:
         typer.echo(f"  {cosecha.sin_nombre} nodos sin nombre quedaron fuera (no auditables).")
     if cosecha.fuera_de_red:
         typer.echo(
-            f"  {cosecha.fuera_de_red} obras que no son Metro ni Biotren descartadas (tranvia/EFE)."
+            f"  {cosecha.fuera_de_red} obras que no son Metro ni Biotren descartadas (tranvia)."
         )
+    if cosecha.omitidas:
+        typer.echo(
+            f"  {cosecha.omitidas} miembros de ruta sin clasificar omitidos "
+            "(paradas de lineas operativas ya cubiertas por su estacion)."
+        )
+    if cosecha.duplicadas:
+        typer.echo(f"  {cosecha.duplicadas} duplicados (parada por sentido) colapsados.")
     typer.echo("\n  Ahora corre `puente-censo`: el catalizador se calcula ahi.")
 
 

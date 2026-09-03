@@ -2512,3 +2512,21 @@ Si no corrio nada a mano, hay que buscar que lo movio.
   el puente lo trata igual (solo cataliza con fecha curada en metro.yml, que no tiene).
   parser 0.4.0. Confirmación pendiente: `recolectar-metro` local debe traer L7 en obra.
 - gates: VERDE.
+
+
+## 2026-09-03 · T-922b rondas 3-4 — la cosecha definitiva de L7 (parser 0.5.0)
+
+- sonda_l7 + sonda_l7b sobre blobs crudos resolvieron el misterio: las estaciones de
+  L7 NO existen como estaciones en OSM — son nodos de PARADA (`railway=stop` +
+  `subway=yes` + `start_date=2028`) miembros de las relations de ruta `route=subway`
+  ref=L7. La consulta ahora cosecha también los miembros de toda relation route=subway.
+- Dos trampas neutralizadas: (1) en esos nodos `ref` es el NUMERO de parada (Radal trae
+  ref="6") → `_linea_de` lee `network`="Línea 7" primero; (2) existe la relation
+  "Propuesta de Extensión Línea 7" cuyos miembros dirían l7 → elegibilidad con DOBLE
+  llave: fecha curada en metro.yml Y apertura declarada por el nodo dentro del horizonte
+  (columna nueva `anio_apertura`, migración in situ en cargar()).
+- Bug colateral corregido: 5 estaciones del tren EFE Alameda-Melipilla (abren 2027-2029)
+  venían como "operativas" — parsear ahora recibe `ahora` y nada con apertura futura se
+  clasifica operativa; red nueva 'efe'. Dedupe por (nombre, red, linea, estado) colapsa
+  la parada por sentido; contadores `omitidas` y `duplicadas` en el CLI.
+- gates: VERDE. Confirmación en vivo pendiente (recolectar-metro + puente-censo).

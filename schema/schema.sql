@@ -162,6 +162,7 @@ CREATE TABLE IF NOT EXISTS dim_estacion_metro (
   linea           VARCHAR,               -- si OSM la declara; NULL si no
   estado          VARCHAR,               -- 'operativa' | 'construccion' | 'propuesta'
   lat DOUBLE, lon DOUBLE,
+  anio_apertura   INTEGER,               -- opening_date/start_date de OSM; corrobora metro.yml
   source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );

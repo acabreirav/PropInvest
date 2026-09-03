@@ -190,7 +190,7 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
     from flujocero.config import cargar as cargar_config
 
     filas = conexion.execute(
-        "SELECT estacion_id, linea, estado, lat, lon FROM dim_estacion_metro"
+        "SELECT estacion_id, linea, estado, lat, lon, anio_apertura FROM dim_estacion_metro"
     ).fetchall()
     if not filas:
         return {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0}
@@ -206,7 +206,7 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
 
     elegibles: list[tuple[float, float, float]] = []  # (lat, lon, factor)
     construccion_sin_fecha = 0
-    for _eid, linea, estado, lat, lon in filas:
+    for _eid, linea, estado, lat, lon, anio_apertura in filas:
         if estado == "operativa":
             elegibles.append((float(lat), float(lon), 1.0))
             continue
@@ -214,9 +214,13 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
         if fecha is None:
             construccion_sin_fecha += 1
             continue
-        # date del YAML; el horizonte corre desde `ahora` (que entra por argumento, §11)
+        # DOBLE llave para lo no operativo: la fecha curada del YAML manda, pero el nodo
+        # ademas debe declarar su propia apertura dentro del horizonte. Sin eso, los
+        # miembros de la relation "Propuesta de Extension Linea 7" (sin fecha, pura
+        # propuesta) heredarian la fecha 2028 de la L7 real y catalizarian un plan.
         anios = (fecha - ahora.date()).days / 365.25
-        if 0 <= anios <= horizonte_anios:
+        nodo_ok = anio_apertura is not None and int(anio_apertura) <= ahora.year + horizonte_anios
+        if 0 <= anios <= horizonte_anios and nodo_ok:
             elegibles.append((float(lat), float(lon), factor_constr))
         else:
             construccion_sin_fecha += 1
