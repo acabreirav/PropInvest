@@ -22,7 +22,7 @@ from typing import Any
 from flujocero.sources.base import escribir_crudo
 
 SOURCE_ID = "osm_metro"
-PARSER_VERSION = "0.3.0"
+PARSER_VERSION = "0.4.0"
 # El endpoint principal devolvio HTTP 406 en la maquina real: el frontal de
 # overpass-api.de rechaza clientes sin User-Agent identificable (politica de uso de OSM).
 # Se manda identificacion honesta y, si un servidor igual rechaza, se prueba el siguiente
@@ -44,19 +44,25 @@ CABECERAS = {
 # de subway se muda a `construction:station` — exigir `station=subway` ahi cosechaba 0.
 # Fuente: wiki.openstreetmap.org/wiki/Tag:railway=construction y Key:construction:.
 # La cosecha de obras va ancha y el filtro de red se hace en `parsear` (puro, testeable).
+#
+# Medido en la corrida viva del 03-sep-2026 (scripts/diag_metro.py sobre el blob crudo):
+# como NODOS solo existen las PROPUESTAS de L9 (`proposed:railway=station`, linea en
+# `network`="Línea 9", apertura 2030+); las estaciones EN OBRA de L7 estan mapeadas como
+# way/relation — por eso las obras van con `nwr` y `out center` (center da lat/lon a lo
+# que no es nodo).
 CONSULTA = """
 [out:json][timeout:90];
 area["ISO3166-1"="CL"][admin_level=2]->.cl;
 (
   node(area.cl)[railway=station][station=subway];
   node(area.cl)[railway=station][network~"Biotr",i];
-  node(area.cl)[railway~"^(construction|proposed)$"][station=subway];
-  node(area.cl)[railway=construction][construction=station];
-  node(area.cl)[railway=proposed][proposed=station];
-  node(area.cl)["construction:railway"="station"];
-  node(area.cl)["proposed:railway"="station"];
+  nwr(area.cl)[railway~"^(construction|proposed)$"][station=subway];
+  nwr(area.cl)[railway=construction][construction=station];
+  nwr(area.cl)[railway=proposed][proposed=station];
+  nwr(area.cl)["construction:railway"="station"];
+  nwr(area.cl)["proposed:railway"="station"];
 );
-out body;
+out center;
 """
 
 
@@ -66,7 +72,7 @@ class Estacion:
     nombre: str
     red: str  # 'metro-santiago' | 'biotren'
     linea: str | None  # normalizada en minusculas sin espacios; None si OSM no la trae
-    estado: str  # 'operativa' | 'construccion'
+    estado: str  # 'operativa' | 'construccion' | 'propuesta'
     lat: float
     lon: float
 
@@ -80,8 +86,16 @@ class CosechaMetro:
 
 
 def _linea_de(tags: dict[str, str]) -> str | None:
-    """La linea segun OSM, si la declara. 'L7', 'Línea 7' y '7' colapsan a 'l7'."""
+    """La linea segun OSM, si la declara. 'L7', 'Línea 7' y '7' colapsan a 'l7'.
+
+    Las propuestas de L9 no traen `ref`: declaran la linea en `network`="Línea 9"
+    (medido en el blob del 03-sep-2026) — se acepta ese fallback solo cuando el
+    `network` ES una linea, no una red ("Metro de Santiago" no es una linea)."""
     crudo = tags.get("ref") or tags.get("line") or tags.get("subway_line")
+    if not crudo:
+        red = (tags.get("network") or "").strip()
+        if red.lower().startswith(("línea", "linea")):
+            crudo = red
     if not crudo:
         return None
     limpio = crudo.strip().lower().replace("línea", "l").replace("linea", "l").replace(" ", "")
@@ -119,21 +133,35 @@ def parsear(cuerpo: dict[str, Any]) -> CosechaMetro:
             # un nodo de estacion sin nombre no sirve para auditar; se cuenta, no se inventa
             cosecha.sin_nombre += 1
             continue
+        # ways/relations traen `center` en vez de lat/lon (out center); sin geometria, fuera
+        lat = el.get("lat", (el.get("center") or {}).get("lat"))
+        lon = el.get("lon", (el.get("center") or {}).get("lon"))
+        if lat is None or lon is None:
+            cosecha.sin_nombre += 1
+            continue
+        # una PROPUESTA (L9, apertura 2030+) no es una obra: se distingue para que el
+        # catalizador y la UI no vendan como "en construccion" algo que es un plan
         en_construccion = (
-            tags.get("railway") in ("construction", "proposed")
-            or tags.get("construction:railway") == "station"
-            or tags.get("proposed:railway") == "station"
+            tags.get("railway") == "construction" or tags.get("construction:railway") == "station"
+        )
+        es_propuesta = (
+            tags.get("railway") == "proposed" or tags.get("proposed:railway") == "station"
+        )
+        estado = (
+            "construccion" if en_construccion else ("propuesta" if es_propuesta else "operativa")
         )
         red = "biotren" if "biotr" in (tags.get("network") or "").lower() else "metro-santiago"
+        tipo = el.get("type", "node")
+        eid = f"osm-{el['id']}" if tipo == "node" else f"osm-{tipo}-{el['id']}"
         cosecha.estaciones.append(
             Estacion(
-                estacion_id=f"osm-{el['id']}",
+                estacion_id=eid,
                 nombre=nombre,
                 red=red,
                 linea=_linea_de(tags),
-                estado="construccion" if en_construccion else "operativa",
-                lat=float(el["lat"]),
-                lon=float(el["lon"]),
+                estado=estado,
+                lat=float(lat),
+                lon=float(lon),
             )
         )
     return cosecha

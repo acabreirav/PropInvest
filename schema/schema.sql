@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS dim_estacion_metro (
   nombre          VARCHAR,
   red             VARCHAR,               -- 'metro-santiago' | 'biotren' | otra
   linea           VARCHAR,               -- si OSM la declara; NULL si no
-  estado          VARCHAR,               -- 'operativa' | 'construccion'
+  estado          VARCHAR,               -- 'operativa' | 'construccion' | 'propuesta'
   lat DOUBLE, lon DOUBLE,
   source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR

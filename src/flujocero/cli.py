@@ -2237,8 +2237,9 @@ def puente_censo() -> None:
             )
             if cat["construccion_sin_fecha"]:
                 typer.echo(
-                    f"  {cat['construccion_sin_fecha']} estaciones en construccion quedaron"
-                    "\n  FUERA: sin linea en OSM o sin fecha creible en config/metro.yml."
+                    f"  {cat['construccion_sin_fecha']} estaciones en obra o propuestas quedaron"
+                    "\n  FUERA: sin linea en OSM, sin fecha creible en config/metro.yml, o"
+                    "\n  apertura fuera del horizonte (las propuestas de L9 abren 2030+)."
                     " No se les inventa fecha."
                 )
             arriba = con.execute(

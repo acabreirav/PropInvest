@@ -2497,3 +2497,18 @@ Si no corrio nada a mano, hay que buscar que lo movio.
 - **Deuda D-018**: test golden nuevo que ata los TRES 140 m² (params, modelo, doc) a
   una sola declaración.
 - gates: VERDE (calidad de datos PARCIAL por cobertura, como venía).
+
+
+## 2026-09-03 · T-922b ronda 2 — diagnóstico con el blob real: eran PROPUESTAS de L9
+
+- `scripts/diag_metro.py` sobre el blob vivo: las 38 "obras" cosechadas son nodos
+  `proposed:railway=station` de la Línea 9 (apertura 2030–2033) — su exclusión del
+  catalizador era CORRECTA. Dos hallazgos accionables:
+  (1) la línea vive en `network`="Línea 9" (sin `ref`) → `_linea_de` acepta ese
+  fallback solo cuando network ES una línea; (2) en todo Chile NO existe ningún NODO
+  `railway=construction` — las estaciones en obra de L7 están mapeadas como
+  way/relation → la consulta pasa a `nwr` + `out center` y `parsear` lee `center`.
+- Estado nuevo `propuesta` (≠ construccion) para no vender un plan 2033 como obra;
+  el puente lo trata igual (solo cataliza con fecha curada en metro.yml, que no tiene).
+  parser 0.4.0. Confirmación pendiente: `recolectar-metro` local debe traer L7 en obra.
+- gates: VERDE.
