@@ -36,6 +36,18 @@ class FilaTop:
     pie_pct: float
     pie_cero: str
     score: float
+    # los campos de la FICHA (T-931): con defaults para que los snapshots viejos
+    # sigan cargando — comparar_top solo usa unidad_key y precio_uf
+    precio_clp: int = 0
+    arriendo_clp: int = 0
+    n_comparables: int = 0
+    tasa_pct: float = 0.0
+    con_subsidio: bool = False
+    dividendo_clp: int = 0
+    flujo_clp: int = 0  # BTCF mensual: >0 sobra plata, <0 se pone de bolsillo
+    pie_clp: int = 0
+    dfl2: bool = False
+    drivers: list[str] = field(default_factory=list)  # por qué puntúa alto (§12)
 
 
 @dataclass
@@ -157,11 +169,43 @@ def render_html(
     delta_texto: str,
     notas: list[str],
 ) -> str:
-    def tabla_top() -> str:
+    entrantes = set(cambios.entraron)
+
+    def ficha(i: int, f: FilaTop) -> str:
+        """Una oportunidad que se explica sola: qué es, cuánto cuesta, cuánto rinde."""
+        marca = " <span class='badge'>▲ nueva en el top</span>" if f.unidad_key in entrantes else ""
+        if f.flujo_clp >= 0:
+            flujo = f"<b class='pos'>+${_f(f.flujo_clp)}/mes</b> — se paga sola y sobra"
+        else:
+            flujo = f"<b class='neg'>−${_f(-f.flujo_clp)}/mes</b> de tu bolsillo"
+        tasa = (
+            f"{f.tasa_pct:.2%} <span class='mini'>con subsidio (primera venta)</span>"
+            if f.con_subsidio
+            else f"{f.tasa_pct:.2%} <span class='mini'>sin subsidio (usada)</span>"
+        )
+        drivers = " · ".join(escape(d) for d in f.drivers) or "—"
+        return f"""
+<div class="ficha">
+  <div class="ficha-titulo">#{i} · {escape(f.microzona_id)} · {escape(f.tipologia)} ·
+    {f.m2:.0f} m²{marca} <span class="score">score {f.score:.0f}</span></div>
+  <div class="ficha-grid">
+    <div><span>Precio</span><b>UF {_f(f.precio_uf)}</b> ≈ ${_f(f.precio_clp)}</div>
+    <div><span>Arriendo estimado</span><b>${_f(f.arriendo_clp)}/mes</b>
+      <span class="mini">mediana de {f.n_comparables} arriendos reales en su microzona</span></div>
+    <div><span>Tasa</span><b>{tasa}</b></div>
+    <div><span>Dividendo</span><b>${_f(f.dividendo_clp)}/mes</b></div>
+    <div><span>Flujo mensual</span>{flujo}</div>
+    <div><span>Pie ({f.pie_pct:.0%})</span><b>${_f(f.pie_clp)}</b></div>
+    <div><span>Pie para flujo cero</span><b>{f.pie_cero}</b></div>
+    <div><span>DFL2</span><b>{"sí" if f.dfl2 else "no"}</b></div>
+  </div>
+  <div class="mini">Por qué está arriba: {drivers}</div>
+</div>"""
+
+    def tabla_top(desde: int) -> str:
         filas = ""
-        entrantes = set(cambios.entraron)
-        for i, f in enumerate(top_filas, 1):
-            marca = " ▲ nuevo en el top" if f.unidad_key in entrantes else ""
+        for i, f in enumerate(top_filas[desde:], desde + 1):
+            marca = " ▲" if f.unidad_key in entrantes else ""
             filas += (
                 f"<tr><td>{i}</td><td>{escape(f.unidad_key)}{marca}</td>"
                 f"<td>{escape(f.microzona_id)}</td><td>{escape(f.tipologia)}</td>"
@@ -237,31 +281,48 @@ def render_html(
   td.n {{ text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }}
   .nota {{ color: #666; font-size: 10px; }}
   pre {{ font-family: Consolas, monospace; font-size: 10px; white-space: pre-wrap; }}
+  .ficha {{ border: 1px solid #ddd; border-left: 4px solid #9C5527; border-radius: 4px;
+           padding: 10px 14px; margin: 10px 0; page-break-inside: avoid; }}
+  .ficha-titulo {{ font-weight: 700; font-size: 13px; margin-bottom: 8px; }}
+  .ficha-grid {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 14px;
+                margin-bottom: 6px; }}
+  .ficha-grid div {{ font-size: 11px; }}
+  .ficha-grid span:first-child {{ display: block; color: #888; font-size: 9px;
+                                 text-transform: uppercase; letter-spacing: .05em; }}
+  .mini {{ color: #777; font-size: 9.5px; }}
+  .pos {{ color: #2F7A58; }}
+  .neg {{ color: #A8442C; }}
+  .badge {{ background: #E3EEE6; color: #2F7A58; font-size: 10px; padding: 1px 6px;
+           border-radius: 8px; }}
+  .score {{ float: right; color: #9C5527; }}
 </style></head><body>
 <h1>Flujo Cero — informe semanal {fecha}</h1>
 
 <h2>1 · Cambios desde el informe anterior{f" ({cambios.fecha_anterior})" if cambios.fecha_anterior else ""}</h2>
 {lista_cambios()}
 
-<h2>2 · Top oportunidades — stock USADO (precio real por unidad)</h2>
+<h2>2 · Las 5 mejores oportunidades — stock USADO (precio real por unidad)</h2>
+{"".join(ficha(i, f) for i, f in enumerate(top_filas[:5], 1))}
+
+<h2>3 · El resto del top</h2>
 <table>
 <tr><th>#</th><th>Unidad</th><th>Microzona</th><th>Tipo</th><th>m²</th><th>Precio</th>
 <th>Yield</th><th>Tenencia/mes</th><th>Pie</th><th>Pie flujo 0</th><th>Score</th></tr>
-{tabla_top()}
+{tabla_top(5)}
 </table>
 <p class='nota'>Tenencia/mes = lo que sale de tu bolsillo con el pie del escenario;
 "Pie flujo 0" = el pie con el que la unidad se paga sola. Score = suma ponderada del §12.</p>
 
-<h2>3 · Oferta NUEVA: bajas de "precio desde" esta semana (señal de compra)</h2>
+<h2>4 · Oferta NUEVA: bajas de "precio desde" esta semana (señal de compra)</h2>
 {tabla_bajas_nuevas()}
 
-<h2>4 · Oferta NUEVA: menores "desde" vigentes en comunas del alcance</h2>
+<h2>5 · Oferta NUEVA: menores "desde" vigentes en comunas del alcance</h2>
 <table><tr><th>Proyecto</th><th>Comuna</th><th>Modelo</th><th>Dorm.</th><th>m²</th>
 <th>Desde</th><th>Estado</th></tr>{tabla_nuevas(menores_nuevas)}</table>
 <p class='nota'>"Desde" = el piso del modelo, no el precio de una unidad: estas filas NO
 compiten en el ranking (regla B1); son el radar para pedir cotización dirigida.</p>
 
-<h2>5 · Delta del mercado usado (corte {corte})</h2>
+<h2>6 · Delta del mercado usado (corte {corte})</h2>
 <pre>{escape(delta_texto)}</pre>
 {notas_html}
 </body></html>

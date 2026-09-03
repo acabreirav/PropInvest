@@ -1656,6 +1656,20 @@ def informe_semanal(
         vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
         vivos.sort(key=lambda x: -x[1].score)
         uf = p.d("macro.valor_uf_clp")
+        # nombres legibles para "por qué está arriba" (los 2 componentes §12 que más aportan)
+        nombres_driver = {
+            "deficit_flujo_mensual_uf": "déficit mensual bajo",
+            "pie_minimo_flujo_cero": "pie de flujo cero bajo",
+            "tir_real_apalancada_10a": "TIR real alta",
+            "riesgo_microzona": "microzona de bajo riesgo",
+            "catalizador": "cerca de Metro (operativo o con fecha creíble)",
+            "descuento_vs_microzona": "precio bajo la mediana de su microzona",
+        }
+
+        def _drivers(ev: Any) -> list[str]:
+            pares = sorted(ev.score_desglose.items(), key=lambda kv: -kv[1])
+            return [nombres_driver.get(k, k) for k, _ in pares[:2]]
+
         filas_top = [
             inf.FilaTop(
                 unidad_key=u.unidad_key,
@@ -1672,6 +1686,16 @@ def informe_semanal(
                     else "nunca"
                 ),
                 score=float(ev.score),
+                precio_clp=int(u.precio_uf * uf),
+                arriendo_clp=int(u.arriendo_mensual_uf * uf),
+                n_comparables=int(u.arriendo_n_comparables or 0),
+                tasa_pct=float(ev.tasa_aplicada),
+                con_subsidio=bool(ev.subsidio_aplicado),
+                dividendo_clp=int(ev.dividendo_total_uf * uf),
+                flujo_clp=int(ev.btcf_mensual_uf * uf),
+                pie_clp=int(u.precio_uf * ev.pie_efectivo * uf),
+                dfl2=bool(ev.dfl2_aplicado),
+                drivers=_drivers(ev),
             )
             for u, ev in vivos[:top]
         ]

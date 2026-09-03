@@ -110,16 +110,27 @@ def test_menores_desde_solo_comunas_del_alcance(con) -> None:
 
 
 def test_render_html_es_autocontenido() -> None:
+    ficha = _fila("A")
+    ficha.arriendo_clp = 294000
+    ficha.n_comparables = 12
+    ficha.tasa_pct = 0.0429
+    ficha.flujo_clp = -46730
+    ficha.drivers = ["déficit mensual bajo"]
     html = inf.render_html(
         "2026-09-03",
         "2026-08-27",
-        [_fila("A")],
+        [ficha],
         inf.CambiosTop(entraron=["A"], fecha_anterior="2026-08-27"),
         [],
         [],
         "delta de prueba",
         ["nota"],
     )
-    assert "Flujo Cero" in html and "nuevo en el top" in html
+    assert "Flujo Cero" in html and "nueva en el top" in html
+    # la ficha se explica sola: arriendo con su n, tasa con su caso, flujo con su signo
+    assert "mediana de 12 arriendos reales" in html
+    assert "sin subsidio (usada)" in html
+    assert "−$46.730/mes" in html and "de tu bolsillo" in html
+    assert "Por qué está arriba: déficit mensual bajo" in html
     assert "Sin bajas de precio en la oferta nueva" in html
     assert "delta de prueba" in html
