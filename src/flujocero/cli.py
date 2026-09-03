@@ -1736,6 +1736,44 @@ def _volcar_ld_desde_sitemap(
         typer.echo(f"    endpoints internos mencionados: {len(endpoints)}")
         for e in endpoints[:10]:
             typer.echo(f"      · {e}")
+        # segunda ronda: cada pagina declara su registro REST en <link rel="alternate">
+        # (wp/v2/proyecto/<id>). La coleccion redirige a HTML, pero el registro
+        # individual puede devolver el JSON limpio — la ruta ideal del colector.
+        ids_rest = sorted(
+            {m.group(1) for m in re_mod.finditer(r"wp-json/wp/v2/proyecto/(\d+)", html)}
+        )
+        for pid in ids_rest[:2]:
+            url_json = f"{base}/wp-json/wp/v2/proyecto/{pid}"
+            rj = cliente.get(url_json, headers={"User-Agent": ua, "Accept": "application/json"})
+            tipo = rj.headers.get("content-type", "?")
+            typer.echo(
+                f"    wp/v2/proyecto/{pid}: HTTP {rj.status_code} · {len(rj.content):,} bytes · {tipo}"
+            )
+            if str(rj.url) != url_json:
+                typer.echo(f"      redirigio a: {rj.url}")
+            if rj.status_code == 200 and "json" in tipo:
+                escribir_crudo(
+                    "wpjson_inmobiliarias",
+                    url_json,
+                    rj.content,
+                    momento,
+                    robots_snapshot_sha=sha,
+                    nombre=f"{dominio.replace('.', '_')}_proyecto_{pid}",
+                    parser_version="probe/0.2.0",
+                )
+                try:
+                    dj = json_lib.loads(rj.text)
+                except ValueError:
+                    typer.echo(f"      no parsea como JSON: {rj.text[:200]}")
+                    continue
+                if isinstance(dj, dict):
+                    typer.echo(f"      claves: {sorted(dj)}")
+                volcado = json_lib.dumps(dj, ensure_ascii=False, indent=1)
+                if len(volcado) > 15_000:
+                    volcado = volcado[:15_000] + "\n      …(truncado)"
+                typer.echo(volcado)
+            else:
+                typer.echo(f"      cuerpo: {rj.text[:250]}")
 
     # las URLs del sitemap son de UNIDAD (…/proyecto-slug/casa-123/); el precio puede
     # vivir un nivel arriba, en la pagina del proyecto — se vuelcan ambas.
