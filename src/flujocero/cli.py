@@ -1717,6 +1717,29 @@ def _volcar_ld_desde_sitemap(
             if len(bonito) > 20_000:
                 bonito = bonito[:20_000] + "\n    …(truncado)"
             typer.echo(f"    --- bloque {i + 1} ---\n{bonito}")
+        # cuarta corrida: las tarjetas de modelo completas — el precio "desde" por modelo
+        # vive ahi y el parser necesita saber donde queda el nombre respecto del precio.
+        try:
+            from selectolax.parser import HTMLParser
+
+            arbol = HTMLParser(html)
+            vistos: set[str] = set()
+            for selector in ('[class*="card_datos"]', '[class*="planta_precio"]'):
+                for nodo in arbol.css(selector)[:3]:
+                    contenedor = nodo
+                    for _ in range(2):
+                        padre = contenedor.parent
+                        if padre is None or len(padre.html or "") > 3500:
+                            break
+                        contenedor = padre
+                    frag = " ".join((contenedor.html or "").split())
+                    if frag[:120] in vistos:
+                        continue
+                    vistos.add(frag[:120])
+                    typer.echo(f"    --- tarjeta {selector} ---")
+                    typer.echo(f"    {frag[:2800]}")
+        except ImportError:
+            pass
         # la primera ronda mostro que el JSON-LD de la pagina de unidad no trae precio:
         # se escanea el HTML crudo — atributos data-*, blobs JS y endpoints internos.
         contextos: list[str] = []
@@ -1766,12 +1789,13 @@ def _volcar_ld_desde_sitemap(
                 except ValueError:
                     typer.echo(f"      no parsea como JSON: {rj.text[:200]}")
                     continue
+                # la tercera corrida mostro la estructura completa: acf viene vacio y el
+                # precio no esta en el REST — se imprime solo el resumen util del registro.
                 if isinstance(dj, dict):
-                    typer.echo(f"      claves: {sorted(dj)}")
-                volcado = json_lib.dumps(dj, ensure_ascii=False, indent=1)
-                if len(volcado) > 15_000:
-                    volcado = volcado[:15_000] + "\n      …(truncado)"
-                typer.echo(volcado)
+                    for clave in ("link", "parent", "modified", "acf", "class_list"):
+                        typer.echo(
+                            f"      {clave}: {json_lib.dumps(dj.get(clave), ensure_ascii=False)[:300]}"
+                        )
             else:
                 typer.echo(f"      cuerpo: {rj.text[:250]}")
 
