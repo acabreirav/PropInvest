@@ -2411,3 +2411,19 @@ Si no corrio nada a mano, hay que buscar que lo movio.
 - **habilitacion_inicial_uf: 0 → 25** por decision del inversionista, con la medicion
   previa de que no mueve el ranking (0 entradas/salidas/posiciones). CoC y TIR bajan a su
   nivel honesto: el modelo deja de asumir que amoblar la entrega cuesta $0.
+
+## 2026-09-03 · T-925c en producción — el colector wp-json corre en vivo
+
+- **Corrida completa contra socovesa.cl** (desde la máquina del inversionista): 98 requests,
+  116 URLs de unidad en el sitemap, **16 proyectos y 51 modelos cargados** con precio
+  "desde" (UF 2.330–6.990), todos `precio_es_desde=TRUE` y fuera del ranking por regla.
+  Idempotencia verificada en vivo: segunda corrida = 0 filas nuevas, 9 refrescos.
+- En el alcance del §10 cayeron **Ñuñoa (1), Macul (1) y La Florida (1)**; el resto es
+  Socovesa Sur (Temuco, Puerto Montt, Chillán…) y casas fuera de alcance — consistente
+  con el límite declarado en ADR 011: el valor del piloto es la RUTA, falta sumar dominios.
+- Errores esperables y visibles, no silenciosos: 4× HTTP 401 (registros REST privados,
+  borradores) y 3× "HTTP 200 pero HTML" (redirecciones de borrador). El primero de estos
+  reventaba la corrida completa; el fix 31e1053 los degrada a error-por-proyecto.
+- Dos bugs encontrados por la realidad en esta tarea: el upsert `ON CONFLICT DO UPDATE`
+  sobre dim_proyecto viola la FK de DuckDB (ahora: congelada y CONTADA cuando ya hay fact
+  referenciando), y el REST que responde HTML con 200.
