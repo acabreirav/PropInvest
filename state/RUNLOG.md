@@ -2443,3 +2443,22 @@ Si no corrio nada a mano, hay que buscar que lo movio.
 - T-925c sigue `en_curso`: el criterio de ≥300 unidades/tipologías RM pide más dominios
   WP fuera del grupo Socovesa (candidatos para fuente-scout en la próxima ola), y la
   verificación adversarial (§7.6) queda para el cierre de la tarea.
+
+## 2026-09-03 · Fundamenta e iarmas en producción — censo wp-json con 4 inmobiliarias
+
+- **Corridas completas desde la máquina del inversionista**: Fundamenta 16 proyectos
+  (11 modelos nuevos, 2 URLs del sitemap dan 404 — proyectos retirados, quedan contados),
+  iarmas 10 proyectos y 54 bloques de planta (29 modelos con precio, 10 sin precio
+  publicado — plantas agotadas, ND no imputado).
+- **El censo de oferta nueva queda en 135 modelos vigentes, UF 990–6.990**, de 4
+  inmobiliarias con 3 jerarquías web distintas. Comunas del alcance cubiertas:
+  La Florida 10 proyectos, Santiago 5, Ñuñoa 5, Macul 3, Independencia 2,
+  Estación Central 2, Lampa 2, La Cisterna 1, Cerrillos 1.
+- Fundamenta aporta ademas lat/lon por proyecto (GeoCoordinates del JSON-LD) →
+  dim_proyecto queda lista para el cruce con microzonas.
+- La corrida semanal del domingo censa los cuatro dominios: desde ahora las BAJAS del
+  "precio desde" de la oferta nueva se detectan solas (SCD), que es la señal de
+  inmobiliaria apurada.
+- T-925c sigue en_curso: para las ≥300 unidades/tipologías RM del criterio faltan
+  dominios del scouting (ingevecinmobiliaria, iaconcagua, santolaya por descartar) y
+  la verificación adversarial §7.6 al cierre.
