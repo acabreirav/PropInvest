@@ -374,11 +374,22 @@ def gastos_de_cierre_uf(precio_uf: Decimal, credito_uf: Decimal, p: Config) -> D
 
 
 def evaluar(
-    u: Unidad, e: Escenario, p: Config, inv: Config, saltar_exclusiones: bool = False
+    u: Unidad,
+    e: Escenario,
+    p: Config,
+    inv: Config,
+    saltar_exclusiones: bool = False,
+    calcular_tir: bool = True,
 ) -> Evaluacion:
     """`saltar_exclusiones` existe para la busqueda del pie de flujo cero: el filtro de
     deficit depende del pie, y el pie que se busca depende del flujo. Sin esta puerta la
-    busqueda se muerde la cola."""
+    busqueda se muerde la cola.
+
+    `calcular_tir=False` existe para las bisecciones (`pie_flujo_cero_real`,
+    `arriendo_equilibrio_real`): solo miran `btcf_mensual_uf`, y la TIR/VAN de cada
+    evaluacion intermedia era trabajo botado — medido el 03-sep-2026, la TIR era el 97%
+    del tiempo del informe. La evaluacion FINAL que se muestra siempre la calcula, y el
+    flujo no depende de ella: la coherencia interna de la fila no cambia."""
     ev = Evaluacion(unidad_key=u.unidad_key, escenario_id=e.escenario_id)
 
     motivo = None if saltar_exclusiones else evaluar_exclusiones(u, p, inv)
@@ -462,22 +473,23 @@ def evaluar(
     exencion = p.d("tributacion.ganancia_capital_exencion_uf")
     tasa_gc = p.d("tributacion.ganancia_capital_tasa_unica")
 
-    for n in p.crudo("indicadores_objetivo.horizontes_tir_anios"):
-        n = int(n)
-        flujos = [-ev.capital_invertido_uf] + [ev.atcf_mensual_uf * D(12)] * n
-        venta = u.precio_uf * (D(1) + g) ** n
-        ganancia = max(D(0), venta - u.precio_uf - exencion)
-        flujos[n] += (
-            venta * (D(1) - com_venta)
-            - f.saldo_insoluto(ev.credito_uf, ev.tasa_aplicada, plazo, n * 12)
-            - ganancia * tasa_gc
-        )
-        try:
-            ev.tir_real[n] = f.tir(flujos)
-        except ValueError:
-            ev.tir_real[n] = D("-1")
-        if n == 10:
-            ev.van_uf = f.van(flujos, r)
+    if calcular_tir:
+        for n in p.crudo("indicadores_objetivo.horizontes_tir_anios"):
+            n = int(n)
+            flujos = [-ev.capital_invertido_uf] + [ev.atcf_mensual_uf * D(12)] * n
+            venta = u.precio_uf * (D(1) + g) ** n
+            ganancia = max(D(0), venta - u.precio_uf - exencion)
+            flujos[n] += (
+                venta * (D(1) - com_venta)
+                - f.saldo_insoluto(ev.credito_uf, ev.tasa_aplicada, plazo, n * 12)
+                - ganancia * tasa_gc
+            )
+            try:
+                ev.tir_real[n] = f.tir(flujos)
+            except ValueError:
+                ev.tir_real[n] = D("-1")
+            if n == 10:
+                ev.van_uf = f.van(flujos, r)
 
     # D-012 · filtro de liquidez, DESPUES de calcular: la unidad se excluye del ranking
     # pero conserva todas sus metricas, para que el informe pueda mostrar por que se cayo.
@@ -513,7 +525,9 @@ def pie_flujo_cero_real(
     """
 
     def flujo(pie: Decimal) -> Decimal:
-        return evaluar(u, replace(e, pie_pct=pie), p, inv, saltar_exclusiones=True).btcf_mensual_uf
+        return evaluar(
+            u, replace(e, pie_pct=pie), p, inv, saltar_exclusiones=True, calcular_tir=False
+        ).btcf_mensual_uf
 
     bajo, alto = D(0), D("0.95")
     if flujo(alto) < 0:
@@ -549,7 +563,9 @@ def arriendo_equilibrio_real(
 
     def flujo(arr: Decimal) -> Decimal:
         prueba = replace(u, arriendo_mensual_uf=arr)
-        return evaluar(prueba, e, p, inv, saltar_exclusiones=True).btcf_mensual_uf
+        return evaluar(
+            prueba, e, p, inv, saltar_exclusiones=True, calcular_tir=False
+        ).btcf_mensual_uf
 
     # El piso es la tolerancia y no cero: con arriendo 0 el PGI es 0 y el GRM del modelo
     # divide por el. Un equilibrio bajo 0,01 UF/mes es cero a efectos practicos igual.

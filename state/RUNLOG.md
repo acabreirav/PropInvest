@@ -2685,3 +2685,19 @@ gates: VERDE
   -16,7% (sobre el tope UF 6.000, pero vendedor apurado).
 - "ya no estan" = 3.560 NO es venta: la corrida nueva cubrio 86% de las unidades viejas
   por paginas pedidas. Medir ventas reales requeriria --paginas alto (opcional, anotado).
+
+
+## 2026-09-03 · El informe tardaba minutos: la TIR era el 97% — 50x medido
+
+- Perfilado con cProfile sobre 2.000 unidades sintéticas: 205s, de los cuales 199s en
+  f.tir (185 MILLONES de términos de VAN). Dos causas: (1) las bisecciones de
+  pie_flujo_cero_real y arriendo_equilibrio_real llamaban evaluar() COMPLETO ~14 veces
+  por unidad, calculando 3 TIR por llamada que jamás miraban; (2) tir() recalculaba
+  van(lo) en cada iteración y corría hasta 300 vueltas con (1+r)**t por término.
+- Arreglos sin cambiar ningún número: evaluar(calcular_tir=False) para las bisecciones
+  (la evaluación final mostrada siempre calcula TIR; el flujo no depende de ella);
+  tir() con signo del extremo cacheado, descuento incremental y corte por intervalo
+  de tasa 1e-12 (≪ el 1e-9 del golden §7.2).
+- Medido: 205,4s → 4,1s por 2.000 unidades (50x). Proyectado a las 7.637 del usuario:
+  ~13 min → ~16 s de motor. mypy --strict limpio, 67 golden verdes (incluida la doble
+  implementación de referencia a 1e-6), gates VERDE.

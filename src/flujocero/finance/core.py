@@ -226,23 +226,38 @@ def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 30
     """TIR por bisección sobre [-0,9999; 10]. Flujos en UF => la TIR resultante es REAL.
 
     Para compararla con un depósito a plazo nominal, súmale la inflación esperada.
+
+    Dos decisiones de costo, medidas el 03-sep-2026 (la TIR era el 97% del informe):
+    el VAN interno descuenta multiplicando el factor en vez de elevar `(1+r)**t` por
+    término, y el signo del extremo bajo se calcula UNA vez y se arrastra — la versión
+    anterior recalculaba `van(lo)` en cada iteración. La bisección corta cuando el
+    intervalo de tasa baja de 1e-12 (≪ el 1e-9 que exige el golden §7.2) o cuando el
+    VAN cae bajo `tol`, lo que llegue primero. Mismo resultado, ~40 iteraciones y no 300.
     """
+    lista = list(flujos)
 
     def van(r: Decimal) -> Decimal:
-        return sum((f / (D(1) + r) ** t for t, f in enumerate(flujos)), D(0))
+        uno_mas_r = D(1) + r
+        factor = D(1)
+        total = D(0)
+        for f in lista:
+            total += f / factor
+            factor *= uno_mas_r
+        return total
 
     lo, hi = D("-0.9999"), D(10)
-    if van(lo) * van(hi) > 0:
+    v_lo = van(lo)
+    if v_lo * van(hi) > 0:
         raise ValueError("TIR sin cambio de signo en el intervalo")
     for _ in range(max_iter):
         mid = (lo + hi) / D(2)
         v = van(mid)
-        if abs(v) < tol:
+        if abs(v) < tol or hi - lo < D("1e-12"):
             return mid
-        if van(lo) * v < 0:
+        if v_lo * v < 0:
             hi = mid
         else:
-            lo = mid
+            lo, v_lo = mid, v
     return (lo + hi) / D(2)
 
 
