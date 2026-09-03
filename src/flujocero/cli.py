@@ -1622,6 +1622,99 @@ def probar_planok(
 
 
 @app.command()
+def informe_semanal(
+    carpeta: str = typer.Option("", help="carpeta de salida; vacío = data/informes"),
+    top: int = typer.Option(15, help="cuántas oportunidades en el ranking"),
+    dias_corte: int = typer.Option(7, help="ventana del delta, en días"),
+) -> None:
+    """T-930 · el informe semanal como DOCUMENTO: HTML + snapshot, no consola pegada.
+
+    Ranking top de usadas con cambios vs el informe anterior (entradas, salidas, bajas
+    dentro del top), bajas del "desde" en la oferta nueva, menores "desde" del alcance,
+    y el delta del mercado usado. El top de cada corrida queda en data/informes/ para
+    comparar la próxima. Toda la salida de consola es ASCII: el primer PDF real murió
+    por un ⚠ contra la consola cp1252 de Windows.
+    """
+    from pathlib import Path as _Path
+
+    import duckdb
+
+    from flujocero import informe as inf
+    from flujocero.agg import oportunidades as op
+    from flujocero.finance.escenarios import escenario_base, evaluar_universo
+    from flujocero.quality import delta as dl
+
+    ahora = datetime.now(UTC)
+    hoy = ahora.strftime("%Y-%m-%d")
+    corte = ahora - timedelta(days=dias_corte)
+    p, inv = cargar("params"), cargar("inversionista")
+    alcance = desde_config(cargar("zonas"))
+    con = duckdb.connect(str(db.crear()))
+    try:
+        r = op.emparejar(con, p.crudo("ingresos.rangos_m2"), alcance=alcance, ahora=ahora)
+        evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
+        vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
+        vivos.sort(key=lambda x: -x[1].score)
+        uf = p.d("macro.valor_uf_clp")
+        filas_top = [
+            inf.FilaTop(
+                unidad_key=u.unidad_key,
+                microzona_id=u.microzona_id or "",
+                tipologia=u.tipologia or "",
+                m2=float(u.m2_utiles),
+                precio_uf=float(u.precio_uf),
+                yield_bruto=float(ev.rentabilidad_bruta),
+                tenencia_clp=int(ev.costo_tenencia_mensual_uf * uf),
+                pie_pct=float(ev.pie_efectivo),
+                pie_cero=(
+                    f"{ev.pie_flujo_cero_real:.0%}"
+                    if ev.pie_flujo_cero_real is not None
+                    else "nunca"
+                ),
+                score=float(ev.score),
+            )
+            for u, ev in vivos[:top]
+        ]
+        cambios = inf.comparar_top(inf._carpeta_snapshots(RAIZ), hoy, filas_top)
+        bajas_nuevas = inf.bajas_oferta_nueva(con, corte)
+        menores = inf.menores_desde_en_alcance(con, alcance.comunas)
+        delta_texto = str(dl.comparar(con, corte))
+    finally:
+        con.close()
+
+    notas = []
+    if not filas_top:
+        notas.append("Sin unidades rankeables esta corrida: revisar frescura de la recoleccion.")
+    html = inf.render_html(
+        hoy,
+        corte.strftime("%Y-%m-%d"),
+        filas_top,
+        cambios,
+        bajas_nuevas,
+        menores,
+        delta_texto,
+        notas,
+    )
+    destino = _Path(carpeta).expanduser() if carpeta else RAIZ / "data" / "informes"
+    destino.mkdir(parents=True, exist_ok=True)
+    ruta_html = destino / f"informe-{hoy}.html"
+    ruta_html.write_text(html, encoding="utf-8")
+
+    typer.echo(f"  top usadas: {len(filas_top)} filas")
+    if cambios.fecha_anterior:
+        typer.echo(
+            f"  cambios vs {cambios.fecha_anterior}: {len(cambios.entraron)} entraron, "
+            f"{len(cambios.salieron)} salieron, {len(cambios.bajas_precio)} bajas en el top"
+        )
+    else:
+        typer.echo("  primer snapshot: la proxima corrida compara cambios")
+    typer.echo(
+        f"  oferta nueva: {len(bajas_nuevas)} bajas de 'desde' · {len(menores)} menores en alcance"
+    )
+    typer.echo(f"  informe: {ruta_html}")
+
+
+@app.command()
 def recolectar_wpjson(
     dominio: str = typer.Option("socovesa.cl", help="dominio de la inmobiliaria WordPress"),
     limite: int = typer.Option(0, help="máximo de proyectos a recorrer; 0 = todos"),
