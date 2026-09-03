@@ -55,8 +55,11 @@ try {
               "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe") |
             Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($edge -and (Test-Path $htmlPath)) {
+        # 2>&1 fusiona el stderr de Edge al stream normal: Chromium headless imprime un
+        # aviso interno (crbug 40528867) que PowerShell pintaria como NativeCommandError
+        # dentro del transcript, y no es un error — el PDF se escribe igual.
         & $edge --headless=new --disable-gpu "--print-to-pdf=$pdfPath" `
-            "file:///$($htmlPath -replace '\\','/')" 2>$null | Out-Null
+            "file:///$($htmlPath -replace '\\','/')" 2>&1 | Out-Null
         Start-Sleep -Seconds 3
     }
     $adjunto = if (Test-Path $pdfPath) { $pdfPath } else { $htmlPath }
