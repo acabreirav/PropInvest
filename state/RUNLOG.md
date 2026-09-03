@@ -2594,3 +2594,15 @@ gates: VERDE
   rechazo; anotar benchmarks de Concepción/La Serena/Antofagasta es mejora pendiente.
 - Regla operativa acordada: una sola cosa escribe en la base a la vez; si "archivo en
   uso", revisar primero si es la tarea semanal antes de matar procesos.
+
+
+## 2026-09-03 · Benchmarks de arriendo fase 3 — deuda del gate de reconciliación
+
+- Concepción 0,30 · La Serena 0,31 · Antofagasta 0,39 UF/m², derivados [D] de la tabla
+  AP Capital/Assetplan may-2026 [V] con el método ya establecido en el doc (cap bruto =
+  neto ÷ 0,865; 1D1B ≈ 35 m²). Aritmética completa en docs/00-hallazgos.md §2.
+  Son cifras de 1D1B (sesgo alcista conocido vs mediana comunal); el ±25% lo absorbe.
+- Sin benchmark A PROPÓSITO (sin cifra publicada, no se inventa): satélites del Gran
+  Concepción, Coquimbo comuna, y Recoleta/Independencia/Macul/Cerrillos en la RM —
+  esas necesitan fuente nueva (TocToc/Colliers comunal), queda anotado en el doc.
+- gates: VERDE.

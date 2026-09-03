@@ -72,6 +72,24 @@ es la relevante para nuestro inversionista (arrendador individual, no multifamil
 | La Cisterna | 0,22 | 0,22 |
 | Estación Central | 0,21 | 0,20 |
 
+**Fase 3 — benchmarks derivados `[D]` (03-sep-2026).** Emol/Colliers no cubre las ciudades
+de fase 3; se derivan de la tabla AP Capital/Assetplan del §5 `[V]` con el método que este
+documento ya estableció: `cap bruto = cap neto ÷ 0,865` (§4) y `1D1B ≈ 35 m²` (§4, tarifa BDO).
+Fórmula: `UF/m² = precio_UF × cap_bruto ÷ 12 ÷ 35`. Son cifras de 1D1B, no promedio comunal
+(sesgo alcista conocido: el 1D1B rinde más por m²; el ±25% del gate lo absorbe — verificación
+cruzada: el 2D2B de Concepción por la misma vía da 0,28).
+
+| Ciudad | UF/m² `[D]` | Aritmética |
+|---|---|---|
+| Concepción | 0,30 | 2.761 × (0,040/0,865) ÷ 12 = 10,64 UF/mes ÷ 35 |
+| La Serena | 0,31 | 2.648 × (0,042/0,865) ÷ 12 = 10,71 UF/mes ÷ 35 |
+| Antofagasta | 0,39 | 3.128 × (0,045/0,865) ÷ 12 = 13,56 UF/mes ÷ 35 |
+
+Sin benchmark aún (sin cifra publicada conocida, se dice y no se inventa): las comunas
+satélite del Gran Concepción (Chiguayante, Hualpén, San Pedro de la Paz, Talcahuano —
+la cifra AP Capital es de Concepción ciudad), Coquimbo comuna, y en la RM Recoleta,
+Independencia, Macul y Cerrillos.
+
 ## 3. Venta de departamento nuevo — UF/m²
 
 | Comuna | UF/m² | Fuente / periodo |

@@ -436,10 +436,10 @@ def test_la_reconciliacion_de_arriendo_tambien_nombra_lo_que_no_verifico() -> No
     """Y acá pesa más: el arriendo es el NUMERADOR del yield. Una mediana sin ancla externa
     es la mitad de la cifra que ordena el ranking, sin nadie que la contraste."""
     h = q.reconciliacion_arriendo(
-        {"san-miguel": D("0.222"), "antofagasta": D("0.394")}, q.ARRIENDO_UF_M2_REFERENCIA
+        {"san-miguel": D("0.222"), "coquimbo": D("0.25")}, q.ARRIENDO_UF_M2_REFERENCIA
     )
     assert h.severidad is q.Severidad.ALERTA
-    assert h.detalle == ["antofagasta"]
+    assert h.detalle == ["coquimbo"]
 
 
 # ------------------------------------- el ancla que nunca corrio (T-051)

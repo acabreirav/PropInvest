@@ -55,6 +55,14 @@ ARRIENDO_UF_M2_REFERENCIA: dict[str, Decimal] = {
     "san-miguel": Decimal("0.24"),
     "la-cisterna": Decimal("0.22"),
     "estacion-central": Decimal("0.20"),
+    # Fase 3, derivadas de AP Capital may-2026 (docs/00-hallazgos.md §2, bloque [D]):
+    # precio_UF x (cap_neto/0.865) / 12 / 35 m2. Son cifras de 1D1B, no promedio comunal
+    # (sesgo alcista conocido); el ±25% del gate lo absorbe. Las comunas satelite del
+    # Gran Concepcion y Coquimbo comuna NO tienen cifra publicada: quedan sin ancla
+    # a proposito — sin_verificar es honesto, un numero inventado no (§3.2).
+    "concepcion": Decimal("0.30"),
+    "la-serena": Decimal("0.31"),
+    "antofagasta": Decimal("0.39"),
 }
 
 # El §7.3 pide +-25% para el arriendo y +-20% para la venta. La holgura mayor del arriendo no
