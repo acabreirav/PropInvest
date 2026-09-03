@@ -1495,3 +1495,20 @@ criterio_de_aceptacion:
   - pendiente: `recolectar-wpjson` en vivo desde la maquina local (selftest de muestra
     viva) y sumar dominios WP hasta cubrir oferta nueva RM relevante
 gate: make gates
+
+## T-931b · Evaluar la oferta NUEVA al "precio desde" — que compita en el informe
+estado: pendiente · agente: motor-financiero + geo-microzonas · fase: 2
+depende_de: []
+contexto: el usuario pidio que el informe compare rentabilidad tambien en nuevas. Hoy no
+  se puede honestamente: (a) los proyectos no tienen microzona asignada, y el §2.4 prohibe
+  usar la mediana de la COMUNA como arriendo comparable; (b) el "desde" no es precio de
+  unidad. La pieza que falta es una EVALUACION HIPOTETICA etiquetada.
+criterio_de_aceptacion:
+  - asignar microzona a dim_proyecto por lat/lon (Fundamenta ya trae GeoCoordinates;
+    los demas quedan ND hasta tener direccion georreferenciable)
+  - correr el motor sobre precio_desde con tasa CON subsidio (primera venta) para los
+    proyectos con microzona y celda de arriendo valida (n>=8)
+  - en el informe: seccion "nuevas evaluadas al desde" claramente etiquetada como piso
+    del modelo, NUNCA mezclada en el ranking de usadas (B1)
+  - las que no se pueden evaluar lo dicen con motivo (sin microzona / sin comparables)
+gate: make gates
