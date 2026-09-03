@@ -36,8 +36,9 @@ try {
     uv run python -m flujocero.cli agregar-arriendo
 
     Write-Output "== 4/5 censo wp-json de oferta nueva =="
-    uv run python -m flujocero.cli recolectar-wpjson --dominio socovesa.cl
-    uv run python -m flujocero.cli recolectar-wpjson --dominio pilares.cl
+    foreach ($dominio in @("socovesa.cl", "pilares.cl", "fundamenta.cl", "iarmas.cl")) {
+        uv run python -m flujocero.cli recolectar-wpjson --dominio $dominio
+    }
 
     Write-Output "== 5/5 informe =="
     $ranking = (uv run python -m flujocero.cli oportunidades --top 15 2>&1) -join "`n"
