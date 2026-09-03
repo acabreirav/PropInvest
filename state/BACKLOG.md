@@ -1505,7 +1505,7 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-931b · Evaluar la oferta NUEVA al "precio desde" — que compita en el informe
-estado: hecha  # pendiente de confirmar con la corrida viva local (informe-semanal)
+estado: hecha  # confirmada en vivo 03-sep: 10 nuevas evaluadas en el informe (sin_geo=217 pendiente)
 agente: motor-financiero + geo-microzonas
 fase: 2
 resultado: microzonas_por_geo (equirectangular, misma comuna, tope 2,5 km, en memoria por

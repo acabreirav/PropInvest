@@ -2559,3 +2559,21 @@ la UI; y 5 verificaciones vivas listadas por el verificador.
 Corrida viva del usuario con 0.5.0 pre-arreglos: 185 estaciones, 154 elegibles
 (antes 130) — L7 ya cataliza; los arreglos cambian la clasificación en los bordes.
 gates: VERDE
+
+
+## 2026-09-03 · Confirmación en vivo: metro corregido + T-931b en el informe real
+
+- recolectar-metro (parser 0.5.1 con arreglos del verificador): 176 estaciones —
+  120 metro operativas, 9 en construcción, 31 propuestas, 12 EFE, 4 Biotrén.
+- puente-censo: 155 elegibles (130 antes de T-922b) y solo 21 fuera con motivo.
+  Las paradas de L7 y las obras L6 catalizan; los miembros de la "Propuesta de
+  Extensión L7" ya no entran (el filtro por nombre en la consulta los dejó fuera:
+  40→31 propuestas).
+- oportunidades: 2.076 rankeables; top usadas con yields 7,4–9,1% y pie de
+  equilibrio 0% (flujo positivo al pie mínimo); el motor negó subsidio/FOGAES a
+  las 2.076 (todas usadas) — coherente con D-015.
+- informe-semanal: la sección T-931b salió EN VIVO — 10 proyectos nuevos evaluados
+  al "desde" con tasa con subsidio; descartes con motivo: sin_geo=217 (solo
+  Fundamenta publica coordenadas), sin_m2=12, sin_celda=65, excluida=7.
+- T-922b y T-931b quedan confirmadas. La palanca más grande para la sección de
+  nuevas es geo-referenciar los 217 proyectos sin coordenadas (direccion → lat/lon).
