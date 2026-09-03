@@ -1749,6 +1749,11 @@ def informe_semanal(
     typer.echo(
         f"  oferta nueva: {len(bajas_nuevas)} bajas de 'desde' · {len(menores)} menores en alcance"
     )
+    fuera = ", ".join(f"{k}={v}" for k, v in (desc_nuevas or {}).items() if v)
+    typer.echo(
+        f"  nuevas evaluadas al 'desde' (hipotetico): {len(evaluadas)}"
+        + (f" · fuera: {fuera}" if fuera else "")
+    )
     typer.echo(f"  informe: {ruta_html}")
 
 
