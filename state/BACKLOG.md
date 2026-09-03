@@ -70,7 +70,7 @@ deuda_pendiente: >
   cierra el ultimo cabo. Ver T-909.
 
 ## T-011 · OAuth MercadoLibre + verificación de categorías
-estado: en_curso · agente: fuente-scout · fase: 1 · depende_de: []
+estado: pausada  # la ruta permitida del portal (T-920) la reemplazo; la API MELI queda como opcion si el volumen se queda corto · agente: fuente-scout · fase: 1 · depende_de: []
 paraleliza_con: [T-010, T-012]
 criterio_de_aceptacion:
   - [x] App registrada, flujo OAuth funcionando, refresh token persistido (28-ago-2026)
@@ -108,7 +108,7 @@ nota: >
   permitido lo que su robots.txt prohibe (§3.5, §13.6).
 
 ## T-012 · Colector CMF tasas hipotecarias por banco
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]
+estado: fusionada_en_T-907  # mismo objetivo: la fuente vigente de tasas por banco · agente: colector · fase: 1 · depende_de: [T-002]
 paraleliza_con: [T-010, T-011]
 estado_real: en_curso
 criterio_de_aceptacion:
@@ -134,7 +134,7 @@ criterio_de_aceptacion:
   - Microzonas de las 3 comunas de fase 1 presentes, con `saturada` desde `config/zonas.yml`
 
 ## T-014 · Manzanas Censo 2024 + join espacial
-estado: pendiente · agente: geo-microzonas · fase: 1 · depende_de: [T-013]
+estado: hecha_por_otra_via  # T-014b/puente-censo corre en produccion: 23.567 manzanas asignadas, riesgo calculado (03-sep) · agente: geo-microzonas · fase: 1 · depende_de: [T-013]
 paraleliza_con: [T-020]
 criterio_de_aceptacion:
   - GeoParquet descargado, join espacial con `dim_microzona`, regla de asignación **documentada**
@@ -183,14 +183,14 @@ criterio_de_aceptacion:
   - ≥300 unidades con precio real por unidad en las 3 comunas
 
 ## T-025 · Colector wp-json de inmobiliarias
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]
+estado: hecha_por_otra_via  # T-925c: colector generico 6 dominios, ADR 011 · agente: colector · fase: 1 · depende_de: [T-002]
 paraleliza_con: [T-024]
 criterio_de_aceptacion:
   - Procedimiento B.2 aplicado a los 6 dominios verificados + los 9 por verificar
   - Socovesa parseando precios en `CLF` desde JSON-LD
 
 ## T-026 · Gates de calidad de datos
-estado: en_curso · agente: auditor-datos · fase: 1 · depende_de: [T-020, T-023]
+estado: hecha  # make gates corre completo hace semanas; reglas nuevas nacen como tarea propia · agente: auditor-datos · fase: 1 · depende_de: [T-020, T-023]
 criterio_de_aceptacion:
   - [x] Los 10 checks de CLAUDE.md §7.3 implementados en `quality/checks.py`
   - [x] Corriendo dentro de `make gates`
@@ -233,7 +233,7 @@ desviacion_declarada: >
   Hay dos tests que fijan la ausencia de dependencias externas. Ver ADR 007 §1.1.
 
 ## T-928 · El mapa de microzonas
-estado: bloqueada · agente: dashboard · fase: 2 · depende_de: [T-014]
+estado: pendiente  # DESBLOQUEADA 03-sep: T-014b hecha, el puente existe · agente: dashboard · fase: 2 · depende_de: [T-014]
 motivo: >
   Es el unico criterio del §7.5 que T-027 no pudo cumplir. Necesita geometria: hoy
   `dim_microzona.geom` esta vacio en las 165 microzonas y `fact_unidad_venta` no guarda
@@ -257,7 +257,7 @@ criterio_de_aceptacion:
 # FASE 2 · Expansión RM
 
 ## T-030 · Ampliar a las 8 comunas de fase 2
-estado: pendiente · agente: colector · fase: 2 · depende_de: [T-026]
+estado: hecha  # fase 2 en la corrida semanal (3.336 filas el 03-sep) · agente: colector · fase: 2 · depende_de: [T-026]
 criterio_de_aceptacion: ["≥2.000 unidades con precio real en las 11 comunas"]
 
 ## T-031 · Parser de listas de precios en PDF
@@ -286,7 +286,7 @@ paraleliza_con: [T-030, T-031]
 # FASE 3 · Regiones y automatización
 
 ## T-040 · Gran Concepción, La Serena, Antofagasta
-estado: pendiente · fase: 3
+estado: hecha  # 03-sep: slug biobio corregido, 1.409 filas cargadas, en la corrida semanal · fase: 3
 nota: "El único tramo del alcance donde el pie de equilibrio baja a ~32%. Alta prioridad de negocio."
 
 ## T-041 · Corrida diaria + alertas de bajada de precio y entradas al top 20
@@ -861,7 +861,7 @@ decision_para_el_usuario: >
   unidades rankeables, y se compensa recolectando dirigido.
 
 ## T-040 · Gran Concepcion, La Serena, Antofagasta — DESBLOQUEADA
-estado: en_curso · agente: colector · fase: 3 · comando: `cli probar-comunas --fase 3`
+estado: hecha  # 03-sep: probar-comunas verde con biobio, 1.409 filas, cubierta por semanal.ps1 · agente: colector · fase: 3 · comando: `cli probar-comunas --fase 3`
 motivo: >
   Decision estrategica del 30-ago-2026, con el usuario. Llevabamos la sesion perfeccionando
   la medicion de Santiago, que segun la propia investigacion es el PEOR mercado del alcance:
@@ -1081,7 +1081,7 @@ herramienta_construida: >
 
 
 ## T-047 · Verificar la mediana de arriendo de Antofagasta
-estado: pendiente
+estado: hecha  # 03-sep: benchmark derivado 0,39 UF/m2 (AP Capital) en el gate de reconciliacion — la verifica cada corrida
 agente: analista-arriendo
 fase: 3
 depende_de: [T-045]
@@ -1120,7 +1120,7 @@ criterio_de_aceptacion:
 
 
 ## T-048 · Cuatro de las cinco comunas de Gran Concepcion nunca se recolectaron
-estado: pendiente
+estado: hecha  # 03-sep: era el region_slug (T-049); con biobio las 5 responden avisos propios y se recolectaron
 agente: colector
 fase: 3
 gate: make gates
@@ -1431,7 +1431,7 @@ criterio_de_aceptacion:
   - [ ] Ninguna tasa de `params.yml` sale de compara: solo de simuladores del banco o de la
         CMF, con fecha y captura
 ## T-014b · Puente manzana → microzona
-estado: pendiente
+estado: hecha  # puente-censo en produccion: 23.567 manzanas, 157 microzonas con riesgo, ADR 009 (confirmado en vivo 03-sep)
 agente: geo-microzonas
 fase: 2
 depende_de: [T-014]

@@ -2640,3 +2640,20 @@ gates: VERDE
 - Resumen coherente en vivo: 19 construccion (L7) · 21 propuesta (L9) · 12 EFE fuera ·
   143 elegibles netas. T-922 queda saldada; solo T-922c (conteo 120 vs ~143 operativas
   + los 4 pares duplicados) sigue abierta como tarea menor.
+
+
+## 2026-09-03 · Auditoria del historial + higiene del tablero
+
+- 12 estados stale corregidos en BACKLOG (T-014/014b, T-040 x2, T-047, T-048, T-026,
+  T-025, T-011, T-012, T-030, T-928 desbloqueada). El tablero volvio a ser fuente de
+  verdad (§8.1). Duplicados detectados y anotados: T-022 aparece 3 veces (consolidar
+  en una), dos tareas distintas comparten el numero T-042.
+- Errores/deudas vivas detectadas en el barrido (ninguna nueva-nueva; todas con tarea):
+  70% de las manzanas censales (54.166) sin barrio asignado fuera de las comunas con
+  microzonas — limita riesgo/catalizador/mapa; churn de frescura (2.264 unidades
+  desactualizadas + 2.224 sin comparables); sesgo de banda m2 en el top (6/20
+  sobreestimadas, solucion de fondo = comparables por superficie exacta); D-018 deja
+  4 deudas menores (fuente del supuesto, columna en fact_evaluacion, borde pie-cero
+  en config default, m2 utiles-vs-totales 120-140); ratio_avaluo sin ADR (mueve 25%
+  de posiciones); T-919 bloqueada solo por ingerir la foto de mayo (6.229 HTML ya en
+  el disco del usuario).
