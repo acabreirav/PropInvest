@@ -2427,3 +2427,19 @@ Si no corrio nada a mano, hay que buscar que lo movio.
 - Dos bugs encontrados por la realidad en esta tarea: el upsert `ON CONFLICT DO UPDATE`
   sobre dim_proyecto viola la FK de DuckDB (ahora: congelada y CONTADA cuando ya hay fact
   referenciando), y el REST que responde HTML con 200.
+
+## 2026-09-03 · Pilares en producción — el censo del grupo Socovesa completo
+
+- **Corrida completa contra pilares.cl**: 126 requests, 99 URLs de unidad, 11 proyectos y
+  21 modelos procesados (12 nuevos, 3 refrescos, 6 sin precio publicado — contados, no
+  imputados). Con Socovesa, el censo wpjson queda en **66 modelos vigentes, UF 1.790–6.990**.
+- **La RM del alcance por fin tiene oferta nueva censada**: La Florida 5 proyectos,
+  Ñuñoa 2, Independencia 2, Santiago 2, Macul 1, La Cisterna 1, Estación Central 1.
+  Pilares es exactamente el segmento del subsidio (deptos desde UF 1.790).
+- Errores esperables: 12× HTTP 401 (registros REST privados — Pilares tiene más borradores
+  que Socovesa) y la página de oficinas sin REST (uso comercial, irrelevante).
+- Almagro descartado con dato (fuentes.yml + ADR 011 adenda): desde UF 10.590–16.790,
+  todo sobre el tope UF 6.000.
+- T-925c sigue `en_curso`: el criterio de ≥300 unidades/tipologías RM pide más dominios
+  WP fuera del grupo Socovesa (candidatos para fuente-scout en la próxima ola), y la
+  verificación adversarial (§7.6) queda para el cierre de la tarea.
