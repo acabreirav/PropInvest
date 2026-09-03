@@ -271,9 +271,15 @@ fuentes:
     capa: 3
     legal_tier: html_permitido
     enabled: true
-    dominios: [socovesa.cl, pilares.cl, fundamenta.cl, iarmas.cl]   # perfiles en sources/wpjson_inmobiliarias.PERFILES
+    dominios: [socovesa.cl, pilares.cl, fundamenta.cl, iarmas.cl, rvc.cl, ingevecinmobiliaria.cl]   # perfiles en sources/wpjson_inmobiliarias.PERFILES
+    sondeados_en_pausa:
+      py.cl: "WP con REST deshabilitado (401); precio en HTML y comuna en el slug — perfil pendiente, overlap: Hualpen (Gran Concepcion)"
+      imagina.cl: "WP pero el catalogo de proyectos se carga por JS (admin-ajax): el sitemap solo lista paginas indice"
+      exxacon.cl: "WP/Elementor; solo paginas por comuna en el sitemap y media cartera sobre el tope UF 6.000"
+      iaconcagua.com: "robots permite pero el sitemap responde 403 (WAF) — buscar otra enumeracion"
     descartado_por_ahora:
       almagro.cl: "sondeado 03-sep-2026: precios desde UF 10.590–16.790, sobre el tope UF 6.000 del subsidio — ningún proyecto puede rankear"
+      santolaya.cl: "sondeado 03-sep-2026: sitemap 404, sin wp-json — Laravel/CodeIgniter, no WordPress. Seria un scraper HTML nuevo (otra decision)"
     cadencia: semanal
     modulo: "src/flujocero/sources/wpjson_inmobiliarias.py"
     adr: "docs/adr/011-wpjson-inmobiliarias.md"

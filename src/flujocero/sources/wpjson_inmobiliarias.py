@@ -318,7 +318,7 @@ def proyecto_de_ld(html: str) -> dict[str, Any]:
             if nodo.get("@type") == "Product":
                 oferta = nodo.get("offers") or {}
                 if oferta.get("priceCurrency") in ("UF", "CLF"):
-                    salida["precio_ld"] = uf_de(str(oferta.get("lowPrice", "")))
+                    salida["precio_ld"] = _decimal_ld(oferta.get("lowPrice"))
     arbol = HTMLParser(html)
     aside = arbol.css_first("p.project-description-aside__price")
     if aside is not None:
@@ -382,6 +382,111 @@ def modelos_de_html_iarmas(html: str, url_pagina: str) -> list[dict[str, Any]]:
     return salida
 
 
+def _decimal_ld(valor: object) -> Decimal | None:
+    """Numeros del JSON-LD: formato MAQUINA (punto decimal), no es-CL. '2754.78' son
+    centesimas de UF — pasarlo por uf_de() lo dejaba en 2754 (lo cazo el fixture de RVC).
+    Solo si no parsea como numero se intenta el formato de texto chileno."""
+    if valor is None or valor == "":
+        return None
+    try:
+        return Decimal(str(valor))
+    except InvalidOperation:
+        return uf_de(str(valor))
+
+
+def proyecto_de_ld_rvc(html: str) -> dict[str, Any]:
+    """El JSON-LD de RVC: la fuente más rica vista — `ApartmentComplex` con comuna, geo y
+    estado, y `containsPlace` con CADA PLANTA: precioDesde (CLF), dormitorios, baños y m².
+
+    La página repite plantas idénticas con otro nombre ("Planta Tipo 2/3" con los mismos
+    números): se conservan todas — el nombre es el id del modelo y el precio puede
+    divergir después.
+    """
+    salida: dict[str, Any] = {
+        "nombre": None,
+        "comuna": None,
+        "lat": None,
+        "lon": None,
+        "estado": None,
+        "low_price": None,
+        "plantas": [],
+    }
+    for bloque in RE_BLOQUE_LD.findall(html):
+        try:
+            ld = json.loads(bloque)
+        except ValueError:
+            continue
+        for nodo in ld.get("@graph", [ld]):
+            if not isinstance(nodo, dict):
+                continue
+            if nodo.get("@type") == "ApartmentComplex":
+                salida["nombre"] = nodo.get("name") or salida["nombre"]
+                salida["comuna"] = (nodo.get("address") or {}).get("addressLocality") or salida[
+                    "comuna"
+                ]
+                geo = nodo.get("geo") or {}
+                try:
+                    salida["lat"] = float(geo["latitude"])
+                    salida["lon"] = float(geo["longitude"])
+                except (KeyError, TypeError, ValueError):
+                    pass
+                extra = nodo.get("additionalProperty") or {}
+                if isinstance(extra, dict) and extra.get("name") == "estadoProyecto":
+                    salida["estado"] = extra.get("value")
+                for depto in nodo.get("containsPlace") or []:
+                    if not isinstance(depto, dict) or depto.get("@type") != "Apartment":
+                        continue
+                    precio = None
+                    for prop in depto.get("additionalProperty") or []:
+                        if isinstance(prop, dict) and prop.get("name") == "precioDesde":
+                            precio = _decimal_ld(prop.get("value"))
+                    m2 = None
+                    try:
+                        m2 = Decimal(str((depto.get("floorSize") or {}).get("value")))
+                    except (InvalidOperation, TypeError):
+                        pass
+                    salida["plantas"].append(
+                        {
+                            "modelo_slug": slug(depto.get("name") or "") or "planta",
+                            "precio_desde_uf": precio,
+                            "m2_totales": m2,
+                            "dormitorios": depto.get("numberOfRooms"),
+                            "banos": depto.get("numberOfBathroomsTotal"),
+                        }
+                    )
+            if nodo.get("@type") == "RealEstateListing":
+                oferta = nodo.get("offers") or {}
+                if oferta.get("priceCurrency") in ("UF", "CLF"):
+                    salida["low_price"] = _decimal_ld(oferta.get("lowPrice"))
+    return salida
+
+
+def proyecto_de_ld_ingevec(html: str) -> dict[str, Any]:
+    """El JSON-LD de Ingevec: `RealEstateListing` con about.Apartment (nombre, comuna)
+    y offers.price en CLF — un "desde" por proyecto, sin desglose por planta."""
+    salida: dict[str, Any] = {"nombre": None, "comuna": None, "estado": None, "precio": None}
+    for bloque in RE_BLOQUE_LD.findall(html):
+        try:
+            ld = json.loads(bloque)
+        except ValueError:
+            continue
+        for nodo in ld.get("@graph", [ld]):
+            if not isinstance(nodo, dict) or nodo.get("@type") != "RealEstateListing":
+                continue
+            depto = nodo.get("about") or {}
+            salida["nombre"] = depto.get("name") or nodo.get("name") or salida["nombre"]
+            salida["comuna"] = (depto.get("address") or {}).get("addressLocality") or salida[
+                "comuna"
+            ]
+            oferta = nodo.get("offers") or {}
+            if oferta.get("priceCurrency") in ("UF", "CLF"):
+                salida["precio"] = _decimal_ld(oferta.get("price"))
+            extra = nodo.get("additionalProperty") or {}
+            if isinstance(extra, dict) and extra.get("name") == "Estado de entrega":
+                salida["estado"] = extra.get("value")
+    return salida
+
+
 # Perfil por dominio. Dos modos:
 #   cadena  → el sitemap lista UNIDADES; se escala la cadena REST parent hasta el
 #             proyecto raíz, y precio_en dice qué página parsear (Socovesa/Pilares).
@@ -396,6 +501,15 @@ PERFILES: dict[str, dict[str, Any]] = {
     "pilares.cl": {"modo": "cadena", "precio_en": "modelo", "filtro": r"/nuestros-proyectos/.+/.+"},
     "fundamenta.cl": {"modo": "directo", "parser": "fundamenta", "filtro": r"/proyecto/[^/]+/?$"},
     "iarmas.cl": {"modo": "directo", "parser": "iarmas", "filtro": r"/proyectos/[^/]+/?$"},
+    # RVC: el LD mas rico visto — ApartmentComplex con comuna/geo/estado y containsPlace
+    # con cada planta (precioDesde CLF, dorms, banos, m2). Estacion Central desde UF 1.827.
+    "rvc.cl": {"modo": "directo", "parser": "rvc", "filtro": r"/proyecto/[^/]+/?$"},
+    # Ingevec: RealEstateListing con precio CLF, comuna y estado; un "desde" por proyecto.
+    "ingevecinmobiliaria.cl": {
+        "modo": "directo",
+        "parser": "ingevec",
+        "filtro": r"/proyecto-[^/]+/?$",
+    },
 }
 
 
@@ -530,7 +644,79 @@ def recolectar(
                 "raw_blob_path": str(doc_html.ruta),
                 "robots_snapshot_sha": doc_html.robots_snapshot_sha,
             }
-            if perfil["parser"] == "fundamenta":
+            if perfil["parser"] == "rvc":
+                info = proyecto_de_ld_rvc(html_pagina)
+                if info["nombre"] is None:
+                    cosecha.errores.append(f"{url}: sin ApartmentComplex en el JSON-LD")
+                    continue
+                cosecha.proyectos.append(
+                    ProyectoWp(
+                        dominio=dominio,
+                        proyecto_slug=slug_p,
+                        nombre=info["nombre"],
+                        comuna_slug=_slug_comuna(info["comuna"]),
+                        estado=slug(info["estado"]) if info["estado"] else None,
+                        tipo_bien=None,  # RVC tambien lista oficinas/locales: no se afirma (ND)
+                        lat=info["lat"],
+                        lon=info["lon"],
+                        **procedencia,
+                    )
+                )
+                plantas = info["plantas"] or (
+                    [
+                        {
+                            "modelo_slug": "desde",
+                            "precio_desde_uf": info["low_price"],
+                            "m2_totales": None,
+                            "dormitorios": None,
+                            "banos": None,
+                        }
+                    ]
+                    if info["low_price"] is not None
+                    else []
+                )
+                for m in plantas:
+                    cosecha.modelos.append(
+                        ModeloWp(
+                            dominio=dominio,
+                            proyecto_slug=slug_p,
+                            modelo_slug=m["modelo_slug"],
+                            precio_desde_uf=m["precio_desde_uf"],
+                            m2_totales=m["m2_totales"],
+                            dormitorios=m["dormitorios"],
+                            banos=m["banos"],
+                            **procedencia,
+                        )
+                    )
+            elif perfil["parser"] == "ingevec":
+                info = proyecto_de_ld_ingevec(html_pagina)
+                if info["nombre"] is None:
+                    cosecha.errores.append(f"{url}: sin RealEstateListing en el JSON-LD")
+                    continue
+                cosecha.proyectos.append(
+                    ProyectoWp(
+                        dominio=dominio,
+                        proyecto_slug=slug_p,
+                        nombre=info["nombre"],
+                        comuna_slug=_slug_comuna(info["comuna"]),
+                        estado=slug(info["estado"]) if info["estado"] else None,
+                        tipo_bien=None,
+                        **procedencia,
+                    )
+                )
+                cosecha.modelos.append(
+                    ModeloWp(
+                        dominio=dominio,
+                        proyecto_slug=slug_p,
+                        modelo_slug="desde",
+                        precio_desde_uf=info["precio"],
+                        m2_totales=None,
+                        dormitorios=None,
+                        banos=None,
+                        **procedencia,
+                    )
+                )
+            elif perfil["parser"] == "fundamenta":
                 info = proyecto_de_ld(html_pagina)
                 cosecha.proyectos.append(
                     ProyectoWp(

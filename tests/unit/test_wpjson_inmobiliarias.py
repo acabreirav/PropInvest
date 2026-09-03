@@ -119,6 +119,33 @@ def test_iarmas_plantas_deduplica_y_lee_uf_pegado() -> None:
     assert all(m["m2_totales"] is None for m in modelos)  # iarmas no publica m²: ND
 
 
+def test_rvc_ld_extrae_plantas_completas() -> None:
+    html = (FIXTURES / "rvc_proyecto.html").read_text(encoding="utf-8")
+    info = wp.proyecto_de_ld_rvc(html)
+    assert info["nombre"] == "Cond. Parque Marañón Edificio A"
+    assert wp._slug_comuna(info["comuna"]) == "vina-del-mar"
+    assert info["lat"] == pytest.approx(-33.039646)
+    assert info["estado"] == "Entrega inmediata"
+    assert info["low_price"] == D("2754.78")
+    assert len(info["plantas"]) == 2
+    p2, p6 = info["plantas"]
+    assert p2["modelo_slug"] == "planta-tipo-2-2d-2b"
+    assert p2["precio_desde_uf"] == D("2800")
+    assert p2["m2_totales"] == D("56.16")
+    assert p2["dormitorios"] == 2 and p2["banos"] == 2
+    assert p6["precio_desde_uf"] == D("2754.78")
+    assert p6["banos"] == 1
+
+
+def test_ingevec_ld_extrae_proyecto() -> None:
+    html = (FIXTURES / "ingevec_proyecto.html").read_text(encoding="utf-8")
+    info = wp.proyecto_de_ld_ingevec(html)
+    assert info["nombre"] == "Proyecto Vespucio Capital"
+    assert wp._slug_comuna(info["comuna"]) == "la-florida"
+    assert info["precio"] == D("3439")
+    assert info["estado"] == "Entrega inmediata"
+
+
 def test_selftest_fixture_verde() -> None:
     ok, fallas = wp.selftest_fixture(FIXTURES)
     assert ok, fallas

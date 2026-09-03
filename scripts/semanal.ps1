@@ -38,7 +38,8 @@ try {
     uv run python -m flujocero.cli agregar-arriendo
 
     Write-Output "== 4/5 censo wp-json de oferta nueva =="
-    foreach ($dominio in @("socovesa.cl", "pilares.cl", "fundamenta.cl", "iarmas.cl")) {
+    foreach ($dominio in @("socovesa.cl", "pilares.cl", "fundamenta.cl", "iarmas.cl",
+                           "rvc.cl", "ingevecinmobiliaria.cl")) {
         uv run python -m flujocero.cli recolectar-wpjson --dominio $dominio
     }
 
