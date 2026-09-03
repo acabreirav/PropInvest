@@ -2736,3 +2736,16 @@ gates: VERDE
   luego nombre) y gano `--verbose` para diagnosticar que responde Nominatim en vivo.
 - Para que la direccion exista hay que RE-CENSAR los dominios wp-json una vez
   (recolectar-wpjson por dominio) y despues geocodificar-proyectos.
+
+
+## 2026-09-03 · T-931c confirmada en vivo — 18 de 34 geocodificados + fix del guión
+
+- Plan B funcionó: los 18 proyectos de Ingevec con streetAddress resolvieron todos en
+  Nominatim. El --verbose destapó un bug propio: dim_comuna guarda algunos nombres como
+  slug ('la-cisterna') y la validación rechazaba 4 aciertos ("La Cisterna" de Nominatim)
+  como "otra comuna" por el guión → _plano normaliza guiones. Recuperables: RVC Santa
+  Corina y Pilares Conde del Maule (con m² por planta — esos SÍ evaluarán).
+- Nuevo cuello medido: sin_geo 204→189 pero sin_m2 20→35 — el LD de Ingevec no publica
+  m². T-931d abierta (m² del HTML de Ingevec + direcciones de Socovesa/Pilares).
+- 12 sin_resultado son proyectos sin dirección publicada (mayoría fuera del alcance:
+  Temuco, Valdivia, Chillán…). gates: VERDE.

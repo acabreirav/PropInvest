@@ -41,6 +41,21 @@ def test_parsear_exige_que_la_comuna_coincida_sin_acentos() -> None:
     assert geo.parsear([], "Ñuñoa") is None
 
 
+def test_la_comuna_como_slug_con_guion_tambien_coincide() -> None:
+    """Bug vivo del 03-sep: dim_comuna guarda algunos nombres como slug
+    ('la-cisterna') y la respuesta de Nominatim dice 'La Cisterna' — el guión
+    rechazaba 4 aciertos como 'otra comuna'."""
+    respuesta = [
+        {
+            "lat": "-33.532",
+            "lon": "-70.665",
+            "display_name": "Esmeralda 6548, La Cisterna, Provincia de Santiago, Chile",
+        }
+    ]
+    assert geo.parsear(respuesta, "la-cisterna") is not None
+    assert geo.parsear(respuesta, "estacion-central") is None  # otra comuna sigue fuera
+
+
 @pytest.fixture
 def con():
     c = duckdb.connect(":memory:")

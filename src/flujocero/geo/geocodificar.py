@@ -52,9 +52,12 @@ class ResumenGeocode:
 
 
 def _plano(texto: str) -> str:
-    """minúsculas y sin acentos: 'Ñuñoa' y 'Nunoa' deben coincidir."""
+    """minúsculas, sin acentos y guiones como espacios: 'Ñuñoa'≡'Nunoa' y
+    'la-cisterna'≡'La Cisterna'. El guión importó en vivo (03-sep): dim_comuna guarda
+    algunos nombres como slug y la validación rechazaba 4 aciertos de Nominatim como
+    "otra comuna" por un guión."""
     sin = unicodedata.normalize("NFKD", texto)
-    return "".join(c for c in sin if not unicodedata.combining(c)).lower()
+    return "".join(c for c in sin if not unicodedata.combining(c)).lower().replace("-", " ")
 
 
 def construir_consultas(nombre: str, direccion: str | None, comuna_nombre: str) -> list[str]:

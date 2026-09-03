@@ -1588,3 +1588,19 @@ criterio_de_aceptacion:
   - detectar multiples cambios de signo y reportar ND explicito (no -1) o la TIR
     modificada (MIRR) con la decision escrita en un ADR
 gate: make gates
+
+## T-931d · m² de Ingevec y direcciones faltantes: que las geocodificadas EVALUEN
+estado: pendiente
+agente: colector
+fase: 2
+depende_de: [T-931c]
+contexto: corrida viva 03-sep — el plan B geocodificó 18 de 34 (Ingevec entero por
+  streetAddress) + 4 recuperados por el fix del guión. Pero sin_m2 subió 20→35: el
+  JSON-LD de Ingevec no publica m² y sin m² no hay celda de arriendo. Y 12 quedaron
+  sin_resultado: Socovesa/Pilares/Fundamenta no publican dirección en lo que parseamos.
+criterio_de_aceptacion:
+  - extraer m² por tipología del HTML de Ingevec (las páginas los muestran; el LD no)
+  - buscar dirección en otra superficie de Socovesa/Pilares (ficha del proyecto,
+    texto "Ubicación") — o documentar que no existe
+  - las nuevas evaluadas del informe suben de 10 de forma medible
+gate: make gates
