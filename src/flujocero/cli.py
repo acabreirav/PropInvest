@@ -2134,6 +2134,48 @@ def probar_wpjson(
 
 
 @app.command()
+def micro_unidades() -> None:
+    """T-924 · ¿las micro-unidades son de verdad peores? Medición por tramo de m².
+
+    Tres proxies con datos propios: edad del aviso de arriendo activo (colocación),
+    gastos comunes por m² (el portal los publica por aviso — dato V), y % de la foto
+    de mayo que ya no se volvió a ver (salida; solo vale la comparación ENTRE tramos).
+    La decisión de tocar el score con esto es §8.4: se toma mirando estos números.
+    """
+    import duckdb
+
+    from flujocero.agg import micro_riesgo as mr
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        arriendo = mr.medir_arriendo(con)
+        venta = mr.medir_venta(con, datetime.now(UTC))
+    finally:
+        con.close()
+
+    typer.echo("  ARRIENDO · avisos activos (sin amoblados ni sospechosos):")
+    typer.echo(f"    {'tramo':<8}{'n':>6}{'edad med.':>11}{'UF/m²':>8}{'GGCC/m²':>10}{'n ggcc':>8}")
+    for f in arriendo:
+        edad = f"{f.edad_mediana_dias:.0f} d" if f.edad_mediana_dias is not None else "ND"
+        ufm2 = f"{f.uf_m2_mediana:.3f}" if f.uf_m2_mediana is not None else "ND"
+        ggcc = f"${f.ggcc_m2_mediana_clp:,.0f}" if f.ggcc_m2_mediana_clp is not None else "ND"
+        typer.echo(f"    {f.tramo:<8}{f.n:>6}{edad:>11}{ufm2:>8}{ggcc:>10}{f.n_con_ggcc:>8}")
+
+    typer.echo("\n  VENTA · foto de mayo vs hoy (proxy de salida — comparar ENTRE tramos,")
+    typer.echo("  el nivel absoluto esta contaminado por cobertura de paginas):")
+    typer.echo(f"    {'tramo':<8}{'n mayo':>8}{'% no vistas':>13}{'% bajaron':>11}")
+    for v in venta:
+        typer.echo(
+            f"    {v.tramo:<8}{v.n_mayo:>8}{v.pct_no_vistas:>12.1%}{v.pct_bajaron_precio:>11.1%}"
+        )
+    typer.echo(
+        "\n  Si la edad de arriendo y el GGCC/m² empeoran claramente bajo 35 m², el"
+        "\n  siguiente paso es un componente de riesgo por tamaño (peso en params.yml,"
+        "\n  decision §8.4 contigo). Si no empeoran, se retira la advertencia del top."
+    )
+
+
+@app.command()
 def geocodificar_proyectos(
     limite: int = typer.Option(0, help="máximo de proyectos a consultar; 0 = todos"),
     verbose: bool = typer.Option(False, help="imprime cada consulta y qué respondió Nominatim"),

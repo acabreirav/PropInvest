@@ -2749,3 +2749,20 @@ gates: VERDE
   m². T-931d abierta (m² del HTML de Ingevec + direcciones de Socovesa/Pilares).
 - 12 sin_resultado son proyectos sin dirección publicada (mayoría fuera del alcance:
   Temuco, Valdivia, Chillán…). gates: VERDE.
+
+
+## 2026-09-04 · T-924 y T-931d en marcha + banco real de la compra
+
+- T-054b medido EN VIVO por el usuario: Falabella no presta a no-clientes y casi todos
+  los bancos exigen credito > UF 1.100 → Santander unica opcion confirmada para la
+  compra Arturo Prat (CAE 5,28%, margen ~$94.600/mes, sigue positivo). Sondear
+  BancoEstado/Coopeuch. Artifact de la compra actualizado.
+- T-924: `cli micro-unidades` — medicion por tramo de m2 con datos propios: edad del
+  aviso de arriendo activo (colocacion), GGCC/m2 por aviso (V, el portal lo publica) y
+  % no-vistas de la foto de mayo (salida; solo comparacion relativa entre tramos).
+  En el contenedor ya se ve el premio de renta: <25 m2 = 0,513 UF/m2 vs 70+ = 0,381.
+  La decision de tocar el score espera la corrida sobre la base real (§8.4).
+- T-931d: scripts/sonda_t931d.py escanea los blobs crudos locales — patrones de m2 en
+  Ingevec y de direccion en Socovesa/Pilares — para escribir el parser contra dato
+  medido, no adivinado.
+- gates: VERDE.

@@ -609,7 +609,10 @@ nota: >
   sesgada. Correccion entregada.
 
 ## T-924 · El ranking premia micro-unidades y no mide su riesgo
-estado: pendiente · agente: motor-financiero · fase: 2 · depende_de: [T-014]
+estado: en_curso  # 04-sep: medicion construida (cli micro-unidades) — edad de aviso de
+  # arriendo, GGCC/m2 por aviso (dato V del portal) y % no-vistas de la foto de mayo,
+  # todo por tramo de m2. Falta correrla sobre la base real y decidir (§8.4)
+agente: motor-financiero · fase: 2 · depende_de: [T-014]
 hallazgo: >
   Un tercio del top esta bajo 35 m2 (mediana 40 m2 en el top 15). El §13.3 advierte exactamente
   de esto: los retornos de dos digitos del mercado chileno son stock usado, chico y barato.
@@ -1351,7 +1354,10 @@ Falabella hipotecario resulto ser solo para clientes del banco, asi que el banco
 del credito aun no existe.
 
 ## T-054b · Factibilidad bancaria del monto y matriz de simulaciones
-estado: pendiente · agente: - (accion del usuario, con apoyo del sistema) · fase: 2
+estado: en_curso  # medido en vivo 04-sep por el usuario: Falabella NO presta a no-clientes;
+  # casi todos los bancos exigen credito > UF 1.100 (el suyo es UF 880) → Santander es la
+  # unica opcion confirmada (tasa 4,65%, CAE 5,28%). Falta: BancoEstado (historicamente
+  # sin minimo alto), Coopeuch, y preguntar en Santander si mejora tasa por venir aprobable · agente: - (accion del usuario, con apoyo del sistema) · fase: 2
 depende_de: []
 contexto: dos hallazgos del usuario al simular: (a) Falabella exige ser cliente para su
   hipotecario; (b) varios bancos no cursan creditos hipotecarios de montos bajos
@@ -1590,7 +1596,9 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-931d · m² de Ingevec y direcciones faltantes: que las geocodificadas EVALUEN
-estado: pendiente
+estado: en_curso  # 04-sep: sonda escrita (scripts/sonda_t931d.py) — escanea los blobs
+  # crudos locales buscando patrones de m2 (Ingevec) y direccion (Socovesa/Pilares);
+  # el parser se escribe contra lo que la sonda mida
 agente: colector
 fase: 2
 depende_de: [T-931c]
