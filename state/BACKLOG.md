@@ -1442,7 +1442,7 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-922b · Estaciones EN CONSTRUCCION ausentes de la cosecha OSM
-estado: hecha  # pendiente de confirmar con la corrida viva local (recolectar-metro)
+estado: hecha  # confirmada en vivo 03-sep: 38 en construccion, 14 fuera_de_red descartadas
 agente: colector
 fase: 2
 depende_de: [T-922]
