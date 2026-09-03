@@ -5,3 +5,4 @@ __pycache__/
 .env
 state/outreach/contacts.json
 state/outreach/queue.jsonl
+secrets/smtp.json

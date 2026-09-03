@@ -1339,6 +1339,29 @@ modelo muestra cada oportunidad PEOR de lo que es.
 como se reparte entre desgravamen e incendio — que dependen de cosas distintas (edad del
 deudor y saldo insoluto el primero, tasacion el segundo).
 
+Actualizacion 03-sep-2026: ya hay DOS cotizaciones con desglose sobre la misma unidad —
+Falabella (desgravamen UF 0,1104 + incendio UF 0,0925/mes, CAE 4,36%) y Santander
+(desgravamen $2.664 + incendio $11.233/mes, CAE 5,28%). Los desgloses se CRUZAN entre
+bancos (Falabella carga el desgravamen, Santander el incendio), lo que confirma que un
+solo banco no calibra nada. En pausa por decision del usuario hasta resolver T-054b:
+Falabella hipotecario resulto ser solo para clientes del banco, asi que el banco real
+del credito aun no existe.
+
+## T-054b · Factibilidad bancaria del monto y matriz de simulaciones
+estado: pendiente · agente: - (accion del usuario, con apoyo del sistema) · fase: 2
+depende_de: []
+contexto: dos hallazgos del usuario al simular: (a) Falabella exige ser cliente para su
+  hipotecario; (b) varios bancos no cursan creditos hipotecarios de montos bajos
+  (UF 880 ≈ $36M puede estar bajo el minimo de algunos). Esto es un RIESGO del plan
+  completo de tickets chicos, no solo de esta compra: si el universo de bancos que
+  presta UF 880 es chico, el costo de fondos real del segmento sube.
+criterio_de_aceptacion:
+  - tabla con >=4 bancos: ¿cursa UF 880? (si/no/minimo declarado), tasa, CAE, cuota
+    con seguros, desglose desgravamen/incendio, gastos operacionales
+  - con esa tabla: elegir banco para la compra Arturo Prat y recien ahi calibrar T-054
+    (params.yml + sensibilidad, regla del 10% del §8.4)
+  - registrar en docs/00-hallazgos.md el minimo de monto por banco como dato del mercado
+
 ### Ampliado con 13 cotizaciones (compara.cl, 31-ago-2026)
 
 El usuario trajo el mismo credito cotizado en 13 productos. Descompuesto contra la anualidad
