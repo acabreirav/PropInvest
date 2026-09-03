@@ -682,3 +682,55 @@ del §7.3 no cambia: se marca y se conserva, se excluye de medianas, jamás se b
 
 **Se revierte** restaurando `limites_outlier` a percentiles — pero antes hay que responder
 por qué dos extremos por zona serían outliers.
+
+## D-018 · DFL2 "probable" para viviendas ≤140 m² sin escritura vista
+
+**Fecha:** 03-sep-2026 · **Decisor:** el inversionista (instrucción directa) · **Commits:** eda9be5 + correcciones del verificador
+
+**Decisión.** Una unidad con `acogida_dfl2 = None` (la escritura no se ha visto — el 99,7%
+del stock del portal calla el dato, T-917) y ≤140 m² útiles se evalúa **CON** los beneficios
+DFL2, vía el supuesto `E` declarado `tributacion.dfl2_probable_usadas_bajo_140m2`
+(rango `[false, true]`; con `false` vuelve la asimetría conservadora anterior). El beneficio
+va **marcado**: `Evaluacion.dfl2_es_supuesto` viaja al informe ("DFL2: probable*") y al
+dashboard ("DFL2 probable (supuesto E)"). La verificación en escritura/certificado municipal
+(§2.5) sigue siendo obligatoria antes de ofertar: el supuesto ordena el radar, no reemplaza
+la evidencia.
+
+**Medición §8.4 (de la revisión adversarial, sobre la base real del 03-sep, `alcance=None`):**
+el supuesto no reordena el ranking — **lo crea**: 0 → 4 unidades vivas. El mecanismo es la
+exclusión dura de liquidez D-012 (la exención de renta saca ~4,3 UF/mes de opex y cruza el
+tope de $400.000; la #1 entra por $7.278/mes de margen). Cap rate de las 4: 2,2–2,5% →
+3,2–3,6%. El inversionista instruyó el cambio conociendo la dirección del efecto; la
+magnitud queda registrada aquí.
+
+**Hallazgos del verificador corregidos en el mismo pase:**
+1. El dashboard mostraba los números inflados sin marca (API no emitía `dfl2_es_supuesto`;
+   la ficha web callaba el caso positivo) → ambos corregidos.
+2. `api/servicio.py` era el único consumidor de `emparejar` sin `ahora=`: el dashboard
+   servía precios de mayo sin el gate de frescura §7.3 → corregido.
+3. Apilamiento de supuestos: `ventana_dfl2_abierta` asumía abierta la rebaja de
+   contribuciones ante antigüedad NULL (docstring afirmaba "82% declara antigüedad";
+   medido: **0%**, 2.696/2.696 filas NULL) → con DFL2 **supuesto**, la ventana ya no se
+   asume: usado de edad desconocida = cerrada (hasta UF 7,98/año de regalo evitado en la
+   banda UF 6.000). Con DFL2 confirmado se mantiene T-911 (invariante D-015 intacto).
+4. `cli sensibilidad` reventaba con parámetros booleanos (`float("false")`) → acepta
+   true/false.
+5. La nota del parámetro afirmaba un hecho de mercado sin fuente → reescrita como lo que
+   es: supuesto del inversionista sin medición propia, con la advertencia de que crea el
+   ranking.
+6. Lectura del parámetro endurecida: un typo revienta, no degrada en silencio.
+
+**Deuda registrada (no bloquea, queda en el backlog):**
+- Fuente primaria o acotamiento del supuesto por banda de precio/m² (hoy es creencia).
+- Advertir en el informe que la exención aplica a máx. 2 viviendas por persona
+  (`viviendas_dfl2_actuales: 0` — hoy nadie lee ese campo).
+- El 140 está declarado 3 veces (params ×2 + inversionista.yml) sin test de coherencia.
+- `fact_evaluacion` no tiene columna para la marca cuando `make score` persista.
+- El borde del pie de flujo cero ya no se prueba en la configuración por defecto (los
+  golden lo prueban con `acogida_dfl2=False`).
+- `m2_utiles` del portal mezcla "útiles" y "totales" en el 0,19% de las tarjetas; en la
+  banda 120–140 m² (195 filas) útil≈construida es falso por 8–15%.
+- Preexistente: `ratio_avaluo_fiscal_sobre_mercado` mueve 25% de las posiciones en su
+  rango y no tiene ADR.
+
+**Se revierte** con `tributacion.dfl2_probable_usadas_bajo_140m2: false`.

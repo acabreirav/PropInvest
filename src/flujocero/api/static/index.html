@@ -353,6 +353,8 @@ async function abrirFicha(key) {
     !f.subsidio_aplicado && f.motivo_sin_subsidio ? ["Sin subsidio a la tasa", f.motivo_sin_subsidio] : null,
     !f.fogaes_aplicado && f.motivo_sin_fogaes ? ["Sin FOGAES", f.motivo_sin_fogaes] : null,
     !f.dfl2_aplicado && f.motivo_sin_dfl2 ? ["Sin DFL2", f.motivo_sin_dfl2] : null,
+    f.dfl2_aplicado && f.dfl2_es_supuesto ? ["DFL2 probable (supuesto E)", "los numeros lo incluyen; verificar en la escritura antes de ofertar (§2.5)"] : null,
+    f.dfl2_aplicado && !f.dfl2_es_supuesto ? ["DFL2 confirmado", "renta exenta y rebaja de contribuciones segun ventana"] : null,
   ].filter(Boolean);
 
   const desglose = Object.entries(f.score_desglose || {});

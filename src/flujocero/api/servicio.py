@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -264,8 +265,13 @@ class Servicio:
         try:
             real = uf_desde_la_base(con)
             capacidades = _capacidades(con)
+            # ahora= activa el gate de frescura §7.3 — sin el, el dashboard servia
+            # precios de mayo como si fueran de hoy (hallazgo del verificador, D-018)
             emp = op.emparejar(
-                con, p.crudo("ingresos.rangos_m2"), alcance=desde_config(cargar("zonas"))
+                con,
+                p.crudo("ingresos.rangos_m2"),
+                alcance=desde_config(cargar("zonas")),
+                ahora=datetime.now(UTC),
             )
         finally:
             con.close()

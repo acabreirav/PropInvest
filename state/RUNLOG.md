@@ -2462,3 +2462,17 @@ Si no corrio nada a mano, hay que buscar que lo movio.
 - T-925c sigue en_curso: para las ≥300 unidades/tipologías RM del criterio faltan
   dominios del scouting (ingevecinmobiliaria, iaconcagua, santolaya por descartar) y
   la verificación adversarial §7.6 al cierre.
+
+
+## 2026-09-03 · D-018 (DFL2 probable) + revisión adversarial §7.6
+
+- Instrucción del inversionista: evaluar CON DFL2 las usadas ≤140 m² sin escritura vista.
+  Implementado como supuesto E declarado y MARCADO en toda superficie ("probable*").
+- El verificador (§7.6) encontró 4 hallazgos materiales; todos corregidos en el mismo pase
+  (detalle completo en docs/05-decisiones.md D-018): la marca faltaba en API y dashboard;
+  el dashboard no aplicaba el gate de frescura (servía precios de mayo); la ventana de
+  contribuciones se apilaba como segundo supuesto (docstring afirmaba 82% de antigüedad
+  declarada — medido: 0%); cli sensibilidad no aceptaba booleanos; la nota del parámetro
+  afirmaba mercado sin fuente.
+- Medición §8.4 registrada: el supuesto CREA el ranking actual (0 → 4 unidades vivas; la
+  #1 entra por $7.278/mes de margen contra el tope de liquidez). Deuda anotada en D-018.

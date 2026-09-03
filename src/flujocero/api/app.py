@@ -123,6 +123,7 @@ def _fila_json(f: Fila) -> dict[str, Any]:
         "fogaes_aplicado": ev.fogaes_aplicado,
         "motivo_sin_fogaes": ev.motivo_sin_fogaes,
         "dfl2_aplicado": ev.dfl2_aplicado,
+        "dfl2_es_supuesto": ev.dfl2_es_supuesto,
         "motivo_sin_dfl2": ev.motivo_sin_dfl2,
         "procedencia_arriendo": (
             {

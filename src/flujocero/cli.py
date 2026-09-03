@@ -3221,10 +3221,16 @@ def sensibilidad(
         partes = parametro.split(".")
         for k in partes[:-1]:
             nodo = nodo[k]
-        if isinstance(nodo[partes[-1]], dict):
-            nodo[partes[-1]] = {**nodo[partes[-1]], "v": float(valor)}
+        # el primer E booleano de params.yml (dfl2_probable...) revelo que float()
+        # reventaba con "true"/"false": los supuestos tambien pueden ser interruptores
+        if valor.strip().lower() in ("true", "false"):
+            convertido: Any = valor.strip().lower() == "true"
         else:
-            nodo[partes[-1]] = float(valor)
+            convertido = float(valor)
+        if isinstance(nodo[partes[-1]], dict):
+            nodo[partes[-1]] = {**nodo[partes[-1]], "v": convertido}
+        else:
+            nodo[partes[-1]] = convertido
         aplicados.append((parametro, actual, valor))
     from flujocero.config import Config
 

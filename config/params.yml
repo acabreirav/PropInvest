@@ -199,12 +199,16 @@ tributacion:
     evidence: E
     rango: [false, true]   # false = la asimetría conservadora anterior (None = sin beneficio)
     nota: >
-      Decisión del inversionista (03-sep-2026): una vivienda con DFL2 sin confirmar y
-      ≤140 m² útiles se evalúa CON el beneficio como supuesto declarado — la gran mayoría
-      del stock habitacional ≤140 m² (posterior a 1959) está acogido, y evaluar todo sin
-      DFL2 castigaba el ranking entero. Toda ficha lo marca "probable, verificar en
-      escritura": la verificación del §2.5 sigue siendo obligatoria antes de ofertar.
-      Con `false` vuelve la asimetría conservadora anterior (None = sin beneficio).
+      SUPUESTO del inversionista, no un hecho medido (D-018, 03-sep-2026): una vivienda
+      con DFL2 sin confirmar y ≤140 m² útiles se evalúa CON el beneficio. No tenemos
+      medición propia de qué fracción del stock ≤140 m² está acogida; la creencia del
+      inversionista es que es la gran mayoría, y decidió operar con ella. Por eso toda
+      superficie lo marca "probable" y la verificación en escritura/certificado municipal
+      (§2.5) es obligatoria ANTES de ofertar — el supuesto ordena el radar, no reemplaza
+      la evidencia. Efecto medido en la revisión adversarial: con la base del 03-sep el
+      supuesto no reordena el ranking, LO CREA (0 → 4 unidades vivas). La rebaja de
+      contribuciones NO viene incluida gratis: la ventana exige antigüedad conocida
+      (ver ventana_dfl2_abierta). Con `false` vuelve la asimetría conservadora.
   impuesto_renta_arriendo_dfl2: {v: 0.0, evidence: V}
   iva_arriendo_amoblado: {v: 0.19, evidence: V, nota: "EVITAR AMOBLAR"}
   igc_tramo_exento_clp: {v: 11270000, evidence: V}

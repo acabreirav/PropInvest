@@ -437,10 +437,27 @@ def test_la_ventana_dura_mas_mientras_mas_chica_la_vivienda(cfg, m2, antiguedad,
     assert ventana_dfl2_abierta(u, p) is abierta
 
 
-def test_sin_dato_de_antiguedad_la_ventana_se_asume_abierta(cfg) -> None:
-    """Es donde falta el dato —obra nueva— y es tambien donde la ventana recien empieza."""
+def test_sin_dato_de_antiguedad_la_ventana_depende_de_como_llego_el_dfl2(cfg) -> None:
+    """Regla D-018: los supuestos no se apilan. Con DFL2 CONFIRMADO en escritura, la
+    ventana sin dato de antiguedad se asume abierta (T-911 original — y "ser usado" no
+    cambia nada por si solo, invariante D-015). Con DFL2 por SUPUESTO, un usado de edad
+    desconocida NO recibe ademas la ventana: la revision adversarial midio que el 100%
+    del stock vigente es usado con antiguedad NULL y el apilamiento regalaba hasta
+    UF 7,98/año de contribuciones en la banda alta."""
     p, _ = cfg
     assert ventana_dfl2_abierta(unidad(antiguedad_anios=None), p) is True
+    assert (
+        ventana_dfl2_abierta(
+            unidad(antiguedad_anios=None, es_vivienda_nueva=False), p, dfl2_es_supuesto=True
+        )
+        is False
+    )
+    assert (
+        ventana_dfl2_abierta(
+            unidad(antiguedad_anios=None, es_vivienda_nueva=True), p, dfl2_es_supuesto=True
+        )
+        is True
+    )
 
 
 # ----------------------------------------------- el pie de flujo cero REAL vs la forma cerrada

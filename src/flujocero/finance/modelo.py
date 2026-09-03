@@ -214,9 +214,9 @@ def dfl2_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[bool, str | None
     if not e.dfl2:
         return False, None, False
     if u.acogida_dfl2 is None:
-        probable = bool(
-            (p.crudo("tributacion").get("dfl2_probable_usadas_bajo_140m2") or {}).get("v")
-        )
+        # lectura ESTRICTA: un typo o borrar el bloque debe reventar, no revertir la
+        # politica en silencio (§3.2 / config.py "nunca se degrada en silencio")
+        probable = bool(p.crudo("tributacion")["dfl2_probable_usadas_bajo_140m2"]["v"])
         if probable and u.m2_utiles <= p.d("tributacion.dfl2_max_m2_utiles"):
             return True, None, True
         return (
@@ -229,18 +229,26 @@ def dfl2_aplicable(u: Unidad, e: Escenario, p: Config) -> tuple[bool, str | None
     return True, None, False
 
 
-def ventana_dfl2_abierta(u: Unidad, p: Config) -> bool:
-    """¿Sigue vigente la rebaja de contribuciones? (T-911)
+def ventana_dfl2_abierta(u: Unidad, p: Config, dfl2_es_supuesto: bool = False) -> bool:
+    """¿Sigue vigente la rebaja de contribuciones? (T-911, ajustada por D-018)
 
     No es perpetua: corre desde la recepcion municipal y dura mas mientras mas chica sea la
     vivienda. Un usado de 15 anos puede tenerla consumida, y el motor la aplicaba a todos —
     un supuesto optimista justo sobre el beneficio que el §2.5 declara de mayor valor presente.
 
-    Sin dato de antiguedad se asume ABIERTA, y se dice por que: la obra nueva es el caso donde
-    falta el dato y es tambien donde la ventana esta recien empezando. Para el stock usado el
-    portal declara antiguedad en el 82% de los avisos.
+    Sin dato de antiguedad la regla depende de COMO llego el DFL2:
+    - DFL2 confirmado en escritura → abierta por defecto (comportamiento T-911 original,
+      y asi "ser usado" no cambia nada por si solo — invariante D-015).
+    - DFL2 por SUPUESTO (D-018) → NO se apilan dos supuestos optimistas: abierta solo si
+      la unidad es obra nueva confirmada (la ventana recien empieza); para un usado de
+      edad desconocida se asume CERRADA — puede tener 30 años y la ventana consumida.
+      La revision adversarial midio que el 100% del stock vigente es usado con antiguedad
+      NULL (no el 82% que este docstring afirmaba antes) y que el apilamiento regalaba
+      hasta UF 7,98/año de contribuciones en la banda UF 6.000.
     """
     if u.antiguedad_anios is None:
+        if dfl2_es_supuesto:
+            return bool(u.es_vivienda_nueva)
         return True
     v = p.crudo("gastos_operativos.ventana_dfl2_contribuciones_anios")
     if u.m2_utiles <= D(70):
@@ -324,8 +332,10 @@ def construir_opex(u: Unidad, e: Escenario, egi_uf: Decimal, p: Config) -> f.Ope
     regalaba la rebaja a un usado de veinte años.
     """
     uf = p.d("macro.valor_uf_clp")
-    dfl2, _, _ = dfl2_aplicable(u, e, p)
-    contrib = contribuciones_anuales_uf(u.precio_uf, dfl2 and ventana_dfl2_abierta(u, p), p)
+    dfl2, _, dfl2_supuesto = dfl2_aplicable(u, e, p)
+    contrib = contribuciones_anuales_uf(
+        u.precio_uf, dfl2 and ventana_dfl2_abierta(u, p, dfl2_supuesto), p
+    )
     renta = D(0)
     if not dfl2:
         # Sobre el EGI, no el PGI: el IGC grava la renta efectivamente percibida, y el mes
@@ -382,7 +392,7 @@ def evaluar(
     ev.tasa_aplicada, ev.subsidio_aplicado, ev.motivo_sin_subsidio = tasa_aplicable(u, e, p)
     ev.fogaes_aplicado, ev.motivo_sin_fogaes = fogaes_aplicable(u, e, p)
     ev.dfl2_aplicado, ev.motivo_sin_dfl2, ev.dfl2_es_supuesto = dfl2_aplicable(u, e, p)
-    ev.ventana_contribuciones_abierta = ventana_dfl2_abierta(u, p)
+    ev.ventana_contribuciones_abierta = ventana_dfl2_abierta(u, p, ev.dfl2_es_supuesto)
     ev.pie_minimo_exigido = pie_minimo_exigido(ev.fogaes_aplicado, p)
 
     # El pie del escenario es lo que el inversionista QUIERE poner; el minimo exigido es lo

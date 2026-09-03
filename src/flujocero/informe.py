@@ -303,9 +303,11 @@ def render_html(
 
 <h2>2 · Las 5 mejores oportunidades — stock USADO (precio real por unidad)</h2>
 {"".join(ficha(i, f) for i, f in enumerate(top_filas[:5], 1))}
-<p class='nota'>*DFL2 "probable": el aviso no lo dice, pero la unidad cabe en los 140 m² y
-la gran mayoría de ese stock está acogido (supuesto declarado, decisión 03-sep-2026). Los
-números lo incluyen; <b>verificar en la escritura antes de ofertar</b> es obligatorio.</p>
+<p class='nota'>*DFL2 "probable": el aviso no lo dice, pero la unidad cabe en los 140 m² y se
+aplica el supuesto declarado D-018. Los números de TODO el top (fichas y tabla) lo incluyen;
+<b>verificar en la escritura antes de ofertar</b> es obligatorio. Recuerda además que la
+renta exenta aplica a un máximo de <b>2 viviendas por persona</b> (tienes tus 2 cupos
+libres): a partir de la tercera, estos flujos ya no son los tuyos.</p>
 
 <h2>3 · El resto del top</h2>
 <table>

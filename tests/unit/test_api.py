@@ -252,6 +252,7 @@ CLAVES_NO_NUMERICAS = {
     "fogaes_aplicado",
     "motivo_sin_fogaes",
     "dfl2_aplicado",
+    "dfl2_es_supuesto",  # bandera D-018, no un numero de mercado
     "motivo_sin_dfl2",
     "procedencia_arriendo",
     "procedencia",
