@@ -28,8 +28,10 @@ $log = Join-Path $Destino "semanal-$fecha.log"
 
 Start-Transcript -Path $log -Force
 try {
-    Write-Output "== 1/5 recolectar-portal (venta + arriendo, alcance de zonas.yml) =="
+    Write-Output "== 1/5 recolectar-portal (venta + arriendo, las tres fases del alcance) =="
     uv run python -m flujocero.cli recolectar-portal --paginas 4
+    uv run python -m flujocero.cli recolectar-portal --fase 2 --paginas 4
+    uv run python -m flujocero.cli recolectar-portal --fase 3 --paginas 4
 
     Write-Output "== 2/5 recoleccion dirigida de arriendo =="
     uv run python -m flujocero.cli recolectar-portal --dirigida 6
