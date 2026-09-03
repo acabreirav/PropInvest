@@ -34,6 +34,9 @@ COLUMNAS_AGREGADAS: tuple[tuple[str, str, str], ...] = (
     # T-922: catalizador Metro sobre la misma tabla de riesgo por microzona.
     ("agg_riesgo_microzona", "dist_metro_m", "DOUBLE"),
     ("agg_riesgo_microzona", "catalizador", "DOUBLE"),
+    # T-922b: apertura declarada por el nodo OSM; la lee puente.calcular_catalizador,
+    # que puede correr ANTES que el colector — la migracion vive aca, no en cargar().
+    ("dim_estacion_metro", "anio_apertura", "INTEGER"),
 )
 
 

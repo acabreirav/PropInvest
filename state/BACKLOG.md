@@ -1526,3 +1526,23 @@ criterio_de_aceptacion:
     del modelo, NUNCA mezclada en el ranking de usadas (B1)
   - las que no se pueden evaluar lo dicen con motivo (sin microzona / sin comparables)
 gate: make gates
+
+## T-922d · Deuda del verificador sobre el catalizador Metro
+estado: pendiente
+agente: geo-microzonas
+fase: 2
+depende_de: [T-922b]
+criterio_de_aceptacion:
+  - fecha de la extension L6 en config/metro.yml con fuente PRIMARIA (metro.cl o
+    Diario Oficial), no el digest de docs/00-hallazgos.md — es el unico parametro
+    que enciende el catalizador de Cerrillos (§10)
+  - decidir si las paradas de L7 (obra real tageada proposed en OSM) deben mostrarse
+    'construccion' en la UI aunque el tag diga propuesta — hoy `recolectar-metro`
+    muestra 0 en construccion mientras el catalizador si las cuenta
+  - verificar en vivo: (a) start_date en las obras de L6; (b) cuantas operativas
+    traen tags proposed:*/construction:*; (c) estaciones mapeadas como relation;
+    (d) homonimas colapsadas y su distancia; (e) si los miembros de la relation
+    "Propuesta de Extension L7" (r16358740) traen fecha copiada
+  - evaluar si las 12 'efe operativa' (Nos/San Bernardo, fuera del alcance util)
+    deben catalizar como Metro pleno o quedar fuera de la red objetivo
+gate: make gates

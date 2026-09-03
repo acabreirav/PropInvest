@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -59,7 +59,7 @@ CABECERAS = {
 CONSULTA = """
 [out:json][timeout:120];
 area["ISO3166-1"="CL"][admin_level=2]->.cl;
-relation(area.cl)[route=subway]->.rutas;
+relation(area.cl)[route=subway][name!~"Propuesta|Proyectada",i]->.rutas;
 (
   node(area.cl)[railway=station][station=subway];
   node(area.cl)[railway=station][network~"Biotr",i];
@@ -122,6 +122,23 @@ def _anio_apertura_de(tags: dict[str, str]) -> int | None:
     return None
 
 
+def _es_apertura_futura(tags: dict[str, str], ahora: datetime) -> bool:
+    """Apertura declarada posterior a `ahora`. Fecha completa cuando OSM la da
+    (2026-12-20 evaluado en sep-2026 ES futura); solo con el anio pelado se compara
+    por anio y el empate se resuelve como abierta."""
+    for clave in ("opening_date", "start_date"):
+        v = (tags.get(clave) or "").strip()
+        if not v:
+            continue
+        try:
+            return date.fromisoformat(v) > ahora.date()
+        except ValueError:
+            pass
+        if v[:4].isdigit():
+            return int(v[:4]) > ahora.year
+    return False
+
+
 def _es_de_red_objetivo(tags: dict[str, str]) -> bool:
     """Metro (subway) o Biotren. Las obras declaran subway en el tag con prefijo de ciclo
     de vida (`construction:station=subway`), no en `station` — por eso se miran los tres."""
@@ -139,36 +156,55 @@ def _es_de_red_objetivo(tags: dict[str, str]) -> bool:
     return "metro de santiago" in red or "biotr" in red
 
 
-def parsear(cuerpo: dict[str, Any], ahora: datetime | None = None) -> CosechaMetro:
-    """Elementos Overpass -> estaciones. Puro: `ahora` entra por argumento (§11).
+def parsear(cuerpo: dict[str, Any], ahora: datetime) -> CosechaMetro:
+    """Elementos Overpass -> estaciones. Puro: `ahora` entra por argumento (§11) y es
+    OBLIGATORIO — sin fecha de referencia no se puede saber si una apertura declarada
+    ya ocurrio, y el default "operativa" seria el lado inseguro (verificador 03-sep).
 
     `ahora` clasifica como NO operativa toda estacion con apertura declarada en el
     futuro (las 5 del tren Alameda-Melipilla venian tageadas railway=station con
     start_date 2027-2029 y se contaban como abiertas — medido en sonda_l7, 03-sep)."""
     cosecha = CosechaMetro()
     vistos: set[tuple[str, int]] = set()
-    claves: set[tuple[str, str, str | None, str]] = set()
+    indices: dict[tuple[str, str, str | None, str], int] = {}
     for el in cuerpo.get("elements", []):
         tipo = el.get("type", "node")
-        if tipo == "relation":
-            continue  # las relations de ruta solo aportan sus nodos miembros
+        tags = el.get("tags", {})
+        if tipo == "relation" and tags.get("route"):
+            continue  # relation de RUTA: solo aporta sus miembros. Una relation que ES
+            # una estacion (construction=station sin route) sigue de largo y se procesa.
         if (tipo, el["id"]) in vistos:
             continue
         vistos.add((tipo, el["id"]))
-        tags = el.get("tags", {})
         if not _es_de_red_objetivo(tags):
             # la cosecha de obras va ancha (sin exigir subway); el filtro de red vive aca
             cosecha.fuera_de_red += 1
             continue
         anio = _anio_apertura_de(tags)
-        hay_construction = tags.get("railway") == "construction" or any(
-            k == "construction" or k.startswith("construction:") for k in tags
+        es_futura = _es_apertura_futura(tags, ahora)
+        # SOLO tags estructurales de ciclo de vida: un `construction:platform` en una
+        # estacion en servicio no la degrada (hallazgo 3 del verificador, 03-sep)
+        hay_construction = (
+            tags.get("railway") == "construction"
+            or tags.get("construction") == "station"
+            or "construction:railway" in tags
+            or "construction:station" in tags
         )
-        hay_proposed = tags.get("railway") == "proposed" or any(
-            k == "proposed" or k.startswith("proposed:") for k in tags
+        hay_proposed = (
+            tags.get("railway") == "proposed"
+            or tags.get("proposed") == "station"
+            or "proposed:railway" in tags
+            or "proposed:station" in tags
+            or "proposed:public_transport" in tags
         )
-        es_estacion_hoy = tags.get("railway") == "station" or tags.get("station") == "subway"
-        if not (es_estacion_hoy or hay_construction or hay_proposed or anio is not None):
+        es_estacion_hoy = tags.get("railway") == "station"
+        if not (
+            es_estacion_hoy
+            or tags.get("station") == "subway"
+            or hay_construction
+            or hay_proposed
+            or anio is not None
+        ):
             # miembro de ruta sin nada que lo clasifique (p.ej. stop_position de una
             # linea operativa, cuya estacion ya entro por su propio nodo): fuera, contado
             cosecha.omitidas += 1
@@ -184,11 +220,13 @@ def parsear(cuerpo: dict[str, Any], ahora: datetime | None = None) -> CosechaMet
         if lat is None or lon is None:
             cosecha.sin_nombre += 1
             continue
-        # una PROPUESTA (L9, apertura 2030+) no es una obra, y una estacion con apertura
-        # FUTURA no es operativa aunque diga railway=station: nada sin abrir se vende
-        # como abierto
-        es_futura = anio is not None and ahora is not None and anio > ahora.year
-        if hay_construction:
+        lat, lon = float(lat), float(lon)
+        # una estacion EN SERVICIO (railway=station, sin apertura futura) es operativa
+        # aunque arrastre tags de ciclo de vida de una obra vecina; lo demas se clasifica
+        # por sus tags, y nada con apertura futura se vende como abierto
+        if es_estacion_hoy and not es_futura:
+            estado = "operativa"
+        elif hay_construction:
             estado = "construccion"
         elif hay_proposed or es_futura:
             estado = "propuesta"
@@ -202,25 +240,31 @@ def parsear(cuerpo: dict[str, Any], ahora: datetime | None = None) -> CosechaMet
         else:
             red = "metro-santiago"
         linea = _linea_de(tags)
-        clave = (nombre, red, linea, estado)
-        if clave in claves:
-            # la misma estacion como parada por sentido, o parada + etiqueta: una basta
-            cosecha.duplicadas += 1
-            continue
-        claves.add(clave)
-        eid = f"osm-{el['id']}" if tipo == "node" else f"osm-{tipo}-{el['id']}"
-        cosecha.estaciones.append(
-            Estacion(
-                estacion_id=eid,
-                nombre=nombre,
-                red=red,
-                linea=linea,
-                estado=estado,
-                lat=float(lat),
-                lon=float(lon),
-                anio_apertura=anio,
-            )
+        estacion = Estacion(
+            estacion_id=(f"osm-{el['id']}" if tipo == "node" else f"osm-{tipo}-{el['id']}"),
+            nombre=nombre,
+            red=red,
+            linea=linea,
+            estado=estado,
+            lat=lat,
+            lon=lon,
+            anio_apertura=anio,
         )
+        clave = (nombre, red, linea, estado)
+        idx = indices.get(clave)
+        if idx is not None:
+            previa = cosecha.estaciones[idx]
+            # colapsa SOLO si ademas estan pegadas (~300 m): dos estaciones distintas
+            # con el mismo nombre en puntas opuestas no son la misma parada
+            if abs(previa.lat - lat) < 0.003 and abs(previa.lon - lon) < 0.003:
+                cosecha.duplicadas += 1
+                if previa.anio_apertura is None and anio is not None:
+                    # se prefiere el gemelo QUE declara fecha: es el que decide
+                    # elegibilidad, y el orden de Overpass no es determinista
+                    cosecha.estaciones[idx] = estacion
+                continue
+        indices[clave] = len(cosecha.estaciones)
+        cosecha.estaciones.append(estacion)
     return cosecha
 
 
@@ -256,11 +300,10 @@ def recolectar(
 
 
 def cargar(conexion: Any, cosecha: CosechaMetro, momento: datetime) -> int:
-    """Reemplaza `dim_estacion_metro` entero: es un derivado del ultimo blob."""
-    # bases creadas antes del parser 0.5.0 no traen la columna; migracion en el sitio
-    conexion.execute(
-        "ALTER TABLE dim_estacion_metro ADD COLUMN IF NOT EXISTS anio_apertura INTEGER"
-    )
+    """Reemplaza `dim_estacion_metro` entero: es un derivado del ultimo blob.
+
+    La migracion de `anio_apertura` NO vive aca: esta en `db.COLUMNAS_AGREGADAS`,
+    porque `puente-censo` lee la columna y puede correr antes que este colector."""
     conexion.execute("DELETE FROM dim_estacion_metro")
     for e in cosecha.estaciones:
         conexion.execute(

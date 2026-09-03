@@ -2530,3 +2530,32 @@ Si no corrio nada a mano, hay que buscar que lo movio.
   clasifica operativa; red nueva 'efe'. Dedupe por (nombre, red, linea, estado) colapsa
   la parada por sentido; contadores `omitidas` y `duplicadas` en el CLI.
 - gates: VERDE. Confirmación en vivo pendiente (recolectar-metro + puente-censo).
+
+
+## 2026-09-03 · T-922b — verificador §7.6: 6 hallazgos materiales, todos corregidos
+
+Reporte adversarial sobre el parser 0.5.0 (detalle en el propio reporte; resumen):
+1. La migración de `anio_apertura` vivía en cargar() y puente-censo podía leer la
+   columna antes → movida a db.COLUMNAS_AGREGADAS (el mecanismo del incidente 30-ago).
+2. `if tipo=="relation": continue` botaba en silencio estaciones mapeadas como
+   relation → ahora solo se salta la relation DE RUTA (tags con `route`).
+3. Un tag de ciclo de vida no estructural (`construction:platform`) degradaba una
+   estación en servicio a construccion y le quitaba el 1.0 → los flags miran solo
+   claves estructurales y railway=station sin apertura futura es operativa.
+4. La doble llave exigía start_date OSM a las obras físicas: la extensión L6
+   (el catalizador de Cerrillos) habría quedado en 0 si el mapper no puso fecha →
+   una obra (construccion) con fecha CURADA no necesita fecha del nodo; solo la
+   PROPUESTA exige fecha propia (guarda contra "Propuesta de Extensión L7"), y una
+   fecha del nodo fuera del horizonte excluye siempre (contradicción explícita).
+5. El dedupe podía quedarse con el gemelo sin fecha según el orden de Overpass y
+   colapsaba homónimas lejanas → prefiere al que declara fecha y exige ~300 m.
+6. Con estaciones cargadas pero 0 elegibles se escribía catalizador=0.0 a todo el
+   alcance ("medimos y no hay Metro") → ahora no escribe nada ("no se pudo medir").
+Además: `ahora` pasó a ser obligatorio en parsear() (el default era el lado inseguro)
+y la apertura compara la fecha completa cuando OSM la da (2026-12-20 ES futura en sep).
+Deuda registrada (T-922d): fuente primaria para la fecha de la extensión L6 en
+metro.yml; el estado 'propuesta' de las paradas de L7 (obra real) es incoherente con
+la UI; y 5 verificaciones vivas listadas por el verificador.
+Corrida viva del usuario con 0.5.0 pre-arreglos: 185 estaciones, 154 elegibles
+(antes 130) — L7 ya cataliza; los arreglos cambian la clasificación en los bordes.
+gates: VERDE

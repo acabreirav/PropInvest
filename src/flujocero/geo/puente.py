@@ -214,16 +214,25 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
         if fecha is None:
             construccion_sin_fecha += 1
             continue
-        # DOBLE llave para lo no operativo: la fecha curada del YAML manda, pero el nodo
-        # ademas debe declarar su propia apertura dentro del horizonte. Sin eso, los
-        # miembros de la relation "Propuesta de Extension Linea 7" (sin fecha, pura
-        # propuesta) heredarian la fecha 2028 de la L7 real y catalizarian un plan.
+        # La fecha curada del YAML manda, con dos guardas del nodo (verificador 03-sep):
+        # (a) si el nodo declara su PROPIA apertura y cae fuera del horizonte, no
+        #     cataliza aunque su linea tenga fecha curada — contradiccion explicita;
+        # (b) una PROPUESTA sin fecha propia tampoco: asi los miembros de la relation
+        #     "Propuesta de Extension Linea 7" no heredan la fecha 2028 de la L7 real.
+        #     Una obra fisica (estado construccion) con fecha curada no necesita que el
+        #     mapper haya puesto start_date: la fecha creible es la curada (metro.yml).
         anios = (fecha - ahora.date()).days / 365.25
-        nodo_ok = anio_apertura is not None and int(anio_apertura) <= ahora.year + horizonte_anios
-        if 0 <= anios <= horizonte_anios and nodo_ok:
+        contradice = anio_apertura is not None and int(anio_apertura) > ahora.year + horizonte_anios
+        propuesta_sin_fecha_propia = estado == "propuesta" and anio_apertura is None
+        if 0 <= anios <= horizonte_anios and not contradice and not propuesta_sin_fecha_propia:
             elegibles.append((float(lat), float(lon), factor_constr))
         else:
             construccion_sin_fecha += 1
+
+    if not elegibles:
+        # hay estaciones cargadas pero ninguna elegible: eso es "no se pudo medir",
+        # no "medimos y no hay Metro" — escribir 0.0 aca afirmaria lo segundo
+        return {"microzonas": 0, "construccion_sin_fecha": construccion_sin_fecha, "elegibles": 0}
 
     centros = conexion.execute(
         "SELECT microzona_id, centro_lat, centro_lon FROM dim_microzona "
