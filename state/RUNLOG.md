@@ -2657,3 +2657,19 @@ gates: VERDE
   en config default, m2 utiles-vs-totales 120-140); ratio_avaluo sin ADR (mueve 25%
   de posiciones); T-919 bloqueada solo por ingerir la foto de mayo (6.229 HTML ya en
   el disco del usuario).
+
+
+## 2026-09-03 · T-931c — geocodificación Nominatim para la oferta nueva sin geo
+
+- `cli geocodificar-proyectos`: resuelve lat/lon vía Nominatim (OSM, json_publico,
+  ADR 012) SOLO para proyectos de oferta nueva sin geo publicada (~60, ~1 min a 1 req/s
+  según la política de OSM). Consulta = dirección publicada o nombre + comuna + Chile.
+- Guardas: resultado aceptado solo si el display_name menciona la comuna declarada
+  (sin acentos) — comuna distinta = ND contado, no coordenada inventada; raw primero;
+  seis columnas de procedencia en la tabla nueva `geo_proyecto` (upsert; tabla propia
+  porque la FK de DuckDB veta el UPDATE de dim_proyecto).
+- `informe.microzonas_por_geo` hace COALESCE: la coordenada publicada por la
+  inmobiliaria manda sobre la geocodificada. 4 tests nuevos (consulta, validación de
+  comuna, procedencia+idempotencia, integración con el informe).
+- gates: VERDE. Confirmación viva pendiente: correr `geocodificar-proyectos` local y
+  medir cuánto baja sin_geo=217 en el informe siguiente.

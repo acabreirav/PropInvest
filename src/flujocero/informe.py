@@ -158,17 +158,20 @@ def menores_desde_en_alcance(
 def microzonas_por_geo(conexion: Any, max_dist_m: float = 2500.0) -> dict[str, str]:
     """proyecto_id → microzona_id por el centro de barrio más cercano EN LA MISMA comuna.
 
-    Solo los proyectos que publican coordenadas (Fundamenta y RVC las traen en su JSON-LD).
-    No se persiste: la FK de DuckDB veta el UPDATE de dim_proyecto con fact referenciando,
-    y es un derivado barato de recalcular donde se usa. Tope de distancia para no asignar
-    un barrio a un proyecto con geo mala: más lejos que `max_dist_m`, queda sin microzona
-    (ND) y se cuenta.
+    Coordenadas publicadas por la inmobiliaria (Fundamenta y RVC, JSON-LD) o
+    geocodificadas vía Nominatim (T-931c, tabla geo_proyecto); la publicada manda.
+    La asignación no se persiste: la FK de DuckDB veta el UPDATE de dim_proyecto con
+    fact referenciando, y es un derivado barato de recalcular donde se usa. Tope de
+    distancia para no asignar un barrio a un proyecto con geo mala: más lejos que
+    `max_dist_m`, queda sin microzona (ND) y se cuenta.
     """
     import math
 
     proyectos = conexion.execute(
-        "SELECT proyecto_id, comuna_id, lat, lon FROM dim_proyecto "
-        "WHERE lat IS NOT NULL AND lon IS NOT NULL AND comuna_id IS NOT NULL"
+        "SELECT p.proyecto_id, p.comuna_id, COALESCE(p.lat, g.lat), COALESCE(p.lon, g.lon) "
+        "FROM dim_proyecto p LEFT JOIN geo_proyecto g USING (proyecto_id) "
+        "WHERE COALESCE(p.lat, g.lat) IS NOT NULL AND COALESCE(p.lon, g.lon) IS NOT NULL "
+        "AND p.comuna_id IS NOT NULL"
     ).fetchall()
     centros = conexion.execute(
         "SELECT microzona_id, comuna_id, centro_lat, centro_lon FROM dim_microzona "

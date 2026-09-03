@@ -1554,7 +1554,9 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-931c · Geo-referenciar los 217 proyectos nuevos sin coordenadas
-estado: pendiente
+estado: hecha  # 03-sep: cli geocodificar-proyectos (Nominatim, ADR 012); pendiente de
+  # confirmar tasa de acierto en la corrida viva local. Si es baja, extraer streetAddress
+  # de los JSON-LD (deuda anotada en el ADR)
 agente: geo-microzonas
 fase: 2
 depende_de: [T-931b]

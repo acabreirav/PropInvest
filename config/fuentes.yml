@@ -319,3 +319,20 @@ fuentes:
     legal_tier: html_prohibido
     enabled: false
     razon_bloqueo: "robots.txt prohíbe explícitamente /cl/mapa?*"
+
+  - id: nominatim_geocode
+    capa: 2                    # enriquece la microzona del proyecto, no trae precios
+    legal_tier: json_publico
+    enabled: true
+    base: "https://nominatim.openstreetmap.org/search"
+    auth: ninguna
+    rate_limit_duro: "politica OSM: MAXIMO 1 req/s + User-Agent identificable"
+    cadencia: bajo_demanda      # cli geocodificar-proyectos; solo proyectos nuevos sin geo
+    modulo: "src/flujocero/geo/geocodificar.py"
+    adr: "docs/adr/012-nominatim-geocode.md"
+    parser_version: "nominatim_geocode/0.1.0"
+    produce: geo_proyecto
+    notas: >
+      Resultado aceptado SOLO si el display_name menciona la comuna declarada (sin
+      acentos); comuna distinta = ND contado. No es un Source del §7.1 (no trae datos
+      de mercado): es un enriquecedor geo, vive en geo/ y no en sources/.

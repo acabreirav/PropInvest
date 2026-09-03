@@ -167,6 +167,19 @@ CREATE TABLE IF NOT EXISTS dim_estacion_metro (
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );
 
+-- T-931c · coordenadas geocodificadas (Nominatim/OSM) para proyectos de oferta nueva
+-- que no publican geo. Tabla propia con upsert, NO un UPDATE de dim_proyecto: la FK de
+-- DuckDB veta el UPDATE de una fila referenciada por facts. El informe hace COALESCE.
+CREATE TABLE IF NOT EXISTS geo_proyecto (
+  proyecto_id     VARCHAR PRIMARY KEY,
+  lat DOUBLE NOT NULL, lon DOUBLE NOT NULL,
+  consulta        VARCHAR,               -- lo que se le preguntó a Nominatim
+  resultado       VARCHAR,               -- display_name devuelto: audita la coincidencia
+  evidence_level  VARCHAR DEFAULT 'V',
+  source_id VARCHAR, source_url VARCHAR, fetched_at TIMESTAMPTZ,
+  parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
+);
+
 -- T-014b · los insumos de `riesgo_microzona`, agregados sobre las manzanas del puente.
 -- Cada componente es `D` (calculo deterministico sobre el Censo y los avisos); el `riesgo`
 -- final combina con pesos `E` declarados en params.yml (riesgo_microzona.*).

@@ -2134,6 +2134,40 @@ def probar_wpjson(
 
 
 @app.command()
+def geocodificar_proyectos(
+    limite: int = typer.Option(0, help="máximo de proyectos a consultar; 0 = todos"),
+) -> None:
+    """T-931c · lat/lon vía Nominatim (OSM) para proyectos de oferta nueva sin geo.
+
+    Respeta la política de Nominatim (1 request/segundo, User-Agent identificable):
+    ~60 proyectos toman ~1 minuto. El resultado se acepta solo si cae en la comuna
+    declarada; si no, ND. Después re-corre `informe-semanal`: la sección de nuevas
+    evaluadas usa estas coordenadas para asignar microzona.
+    """
+    import duckdb
+    import httpx
+
+    from flujocero.geo import geocodificar as geo
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        typer.echo("  consultando Nominatim a 1 req/s (política de uso de OSM)…")
+        with httpx.Client(timeout=30) as cliente:
+            r = geo.geocodificar(cliente, con, limite=limite)
+    finally:
+        con.close()
+    typer.echo(
+        f"✓ {r.geocodificados} de {r.consultados} proyectos geocodificados"
+        + (f" · {r.comuna_no_coincide} descartados (otra comuna)" if r.comuna_no_coincide else "")
+        + (f" · {r.sin_resultado} sin resultado" if r.sin_resultado else "")
+    )
+    for e in r.errores[:5]:
+        typer.echo(f"  ! {e}")
+    if r.geocodificados:
+        typer.echo("\n  Ahora `informe-semanal`: las nuevas con geo entran a la evaluación.")
+
+
+@app.command()
 def recolectar_metro() -> None:
     """T-922 · estaciones de Metro y Biotren desde OpenStreetMap (una request a Overpass).
 
