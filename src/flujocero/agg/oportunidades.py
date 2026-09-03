@@ -186,7 +186,10 @@ def emparejar(
         "antiguedad_anios, evidence_level, fetched_at, precio_clp, "
         "coalesce(sospechoso, FALSE) FROM fact_unidad_venta "
         "WHERE valid_to IS NULL AND coalesce(precio_uf, precio_clp) IS NOT NULL "
-        "AND evidence_level = 'V'"
+        "AND evidence_level = 'V' "
+        # T-925c: un "Precio desde" por modelo es el piso, no el precio de una unidad —
+        # no puede competir en el ranking contra precios reales (B1).
+        "AND coalesce(precio_es_desde, FALSE) = FALSE"
     ).fetchall()
     # La UF de CADA dia, no la de hoy: un aviso publicado en pesos el 4 de mayo vale lo que
     # valia la UF ese dia. Es la misma conversion que el arriendo ya hacia; lo unico nuevo es

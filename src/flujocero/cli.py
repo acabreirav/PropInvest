@@ -1621,6 +1621,69 @@ def probar_planok(
     )
 
 
+@app.command()
+def recolectar_wpjson(
+    dominio: str = typer.Option("socovesa.cl", help="dominio de la inmobiliaria WordPress"),
+    limite: int = typer.Option(0, help="máximo de proyectos a recorrer; 0 = todos"),
+) -> None:
+    """T-925c · colector wp-json + HTML permitido de inmobiliarias WordPress.
+
+    Sitemap → registro REST de cada proyecto (metadata) → HTML del proyecto (precio
+    "desde" por modelo). Carga dim_proyecto y fact_unidad_venta con precio_es_desde=TRUE:
+    censo de oferta nueva y señal de baja de precio; NO entra al ranking (B1 exige precio
+    real por unidad).
+    """
+    import duckdb
+    import httpx
+
+    from flujocero.sources import wpjson_inmobiliarias as wp
+
+    ok, fallas = wp.selftest_fixture()
+    if not ok:
+        typer.echo("  selftest de fixture ROJO — no se recolecta:")
+        for f in fallas:
+            typer.echo(f"    · {f}")
+        raise typer.Exit(2)
+    typer.echo("  selftest de fixture: verde")
+
+    with httpx.Client(timeout=30, follow_redirects=True) as cliente:
+        cosecha = wp.recolectar(cliente, dominio, limite_proyectos=limite or None)
+
+    typer.echo(
+        f"  {dominio}: {cosecha.requests} requests · {cosecha.urls_unidad} URLs de unidad "
+        f"en el sitemap · {len(cosecha.proyectos)} proyectos · {len(cosecha.modelos)} modelos"
+    )
+    for error in cosecha.errores[:8]:
+        typer.echo(f"    error: {error}")
+    if len(cosecha.errores) > 8:
+        typer.echo(f"    … y {len(cosecha.errores) - 8} errores más")
+    if not cosecha.proyectos:
+        typer.echo("  Sin proyectos: no hay nada que cargar.")
+        raise typer.Exit(1)
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        contadores = wp.cargar(con, cosecha)
+        comunas = con.execute(
+            "SELECT coalesce(comuna_id, '(sin comuna)'), count(*) FROM dim_proyecto "
+            "WHERE proyecto_id LIKE 'wpjson-%' GROUP BY 1 ORDER BY 2 DESC",
+        ).fetchall()
+        rango = con.execute(
+            "SELECT min(precio_uf), max(precio_uf), count(*) FROM fact_unidad_venta "
+            "WHERE unidad_key LIKE 'wpjson-%' AND valid_to IS NULL",
+        ).fetchone()
+    finally:
+        con.close()
+    typer.echo(f"  carga: {contadores}")
+    typer.echo(f"  proyectos wpjson por comuna: {comunas}")
+    if rango and rango[2]:
+        typer.echo(f"  precios desde vigentes: {rango[2]} modelos, UF {rango[0]}–{rango[1]}")
+    typer.echo(
+        "  Recuerda: filas con precio_es_desde=TRUE — censo de oferta nueva y delta de "
+        "precio, excluidas del ranking."
+    )
+
+
 def _volcar_ld_desde_sitemap(
     cliente: "httpx.Client",  # noqa: F821 — httpx se importa en el comando
     base: str,

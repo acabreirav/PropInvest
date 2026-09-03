@@ -114,6 +114,8 @@ SELECT v.microzona_id, v.tipologia, v.m2_utiles, v.fetched_at
 FROM fact_unidad_venta v
 WHERE v.valid_to IS NULL AND v.precio_uf IS NOT NULL AND v.evidence_level = 'V'
   AND v.microzona_id IS NOT NULL AND v.tipologia IS NOT NULL AND v.m2_utiles IS NOT NULL
+  AND coalesce(v.precio_es_desde, FALSE) = FALSE  -- T-925c: los "desde" no rankean
+
 """
 
 

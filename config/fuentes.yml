@@ -267,6 +267,23 @@ fuentes:
     notas: "189 variables por manzana; unidad atómica de la microzonificación"
     cadencia: unica
 
+  - id: wpjson_inmobiliarias
+    capa: 3
+    legal_tier: html_permitido
+    enabled: true
+    dominios: [socovesa.cl]        # piloto; la misma ruta sirve para otras WP inmobiliarias
+    cadencia: semanal
+    modulo: "src/flujocero/sources/wpjson_inmobiliarias.py"
+    adr: "docs/adr/011-wpjson-inmobiliarias.md"
+    parser_version: "wpjson_inmobiliarias/0.1.0"
+    produce: dim_proyecto + fact_unidad_venta (precio_es_desde=TRUE)
+    selftest: "verde contra fixture (03-sep-2026); muestra viva pendiente de la primera corrida local"
+    notas: >
+      Sitemap → REST wp/v2/proyecto/<id> (metadata; la colección redirige a HTML) →
+      HTML del proyecto (precio "desde" POR MODELO en bloques planta). No es precio por
+      unidad: las filas van marcadas precio_es_desde=TRUE y el ranking las excluye.
+      Aporta censo de oferta nueva, comuna/estado por proyecto y señal de baja de precio.
+
   - id: data_inmobiliaria
     capa: 5
     legal_tier: api_oficial

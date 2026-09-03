@@ -94,6 +94,19 @@ def test_un_precio_estimado_no_entra(con) -> None:
     assert op.emparejar(con, RANGOS).total == 0, "ni siquiera se lee"
 
 
+def test_un_precio_desde_no_entra_aunque_sea_V(con) -> None:
+    """T-925c: el "Precio desde" de wp-json es evidencia V del PISO del modelo, no el
+    precio de una unidad. Con evidence V igual queda fuera del ranking."""
+    celda(con)
+    con.execute(
+        "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, m2_utiles, "
+        "precio_uf, es_vivienda_nueva, evidence_level, precio_es_desde, valid_from, "
+        "fetched_at) VALUES ('W1', 'sm/el-llano', '2D2B', 56, ?, TRUE, 'V', TRUE, ?, ?)",
+        (D("3000"), AHORA, AHORA),
+    )
+    assert op.emparejar(con, RANGOS).total == 0, "ni siquiera se lee"
+
+
 def test_sobre_140_m2_queda_fuera_por_el_DFL2(con) -> None:
     celda(con, rango="100-140")
     unidad(con, m2=150)

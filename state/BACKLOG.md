@@ -1457,12 +1457,18 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-925c · Precios de proyectos nuevos via wp-json / JSON-LD de inmobiliarias
-estado: en_curso
+estado: en_curso  # colector construido (ADR 011); falta la corrida viva local y sumar dominios
 agente: colector
 fase: 2
 depende_de: []
 criterio_de_aceptacion:
-  - sonda contra 2-3 inmobiliarias reales (Socovesa primero: publica CLF=UF en JSON-LD)
-  - robots verificado por dominio; raw primero; parser con selftest
-  - >=300 unidades/tipologias nuevas con precio en la RM, evidence V con su URL
+  - sonda contra 2-3 inmobiliarias reales (Socovesa primero) — HECHO: 4 corridas de
+    probar-wpjson fijaron la ruta sitemap → REST wp/v2/proyecto/<id> → HTML del proyecto
+  - robots verificado por dominio; raw primero; parser con selftest — HECHO (ADR 011,
+    sources/wpjson_inmobiliarias.py, fixture del 03-sep-2026)
+  - hallazgo que reencuadra el criterio: Socovesa publica "Precio desde" POR MODELO, no
+    precio por unidad → filas con precio_es_desde=TRUE, EXCLUIDAS del ranking (B1).
+    Aportan censo de oferta nueva + señal de baja de precio, no unidades rankeables.
+  - pendiente: `recolectar-wpjson` en vivo desde la maquina local (selftest de muestra
+    viva) y sumar dominios WP hasta cubrir oferta nueva RM relevante
 gate: make gates

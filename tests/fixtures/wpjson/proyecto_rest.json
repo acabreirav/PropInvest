@@ -1,0 +1,41 @@
+{
+  "id": 854913,
+  "date": "2025-05-07T14:28:47",
+  "modified": "2026-08-25T16:19:43",
+  "slug": "portal-del-libertador-ix",
+  "status": "publish",
+  "type": "proyecto",
+  "link": "https://www.socovesa.cl/nuestros-proyectos/portal-del-libertador-ix/",
+  "title": { "rendered": "Portal del Libertador IX" },
+  "excerpt": {
+    "rendered": "<p>Muy pronto podrás conocer la nueva y renovada etapa de Portal del Libertador. Casas de 62 y 73 m2, en un barrio consolidado Socovesa.</p>\n",
+    "protected": false
+  },
+  "parent": 0,
+  "menu_order": 20,
+  "template": "home2025/proyecto.php",
+  "tipologia": [42],
+  "ciudad": [21],
+  "disponibilidad": [],
+  "estado": [154],
+  "dormitorios": [52],
+  "segmento": [71],
+  "proyecto_modelo": [70],
+  "zona": [98],
+  "class_list": [
+    "post-854913",
+    "proyecto",
+    "type-proyecto",
+    "status-publish",
+    "has-post-thumbnail",
+    "hentry",
+    "tipologia-casa",
+    "ciudad-chillan",
+    "estado-venta-en-blanco",
+    "dormitorios-52",
+    "segmento-medio",
+    "proyecto_modelo-proyecto",
+    "zona-socovesa-sur"
+  ],
+  "acf": []
+}

@@ -75,6 +75,10 @@ CREATE TABLE IF NOT EXISTS fact_unidad_venta (
   precio_bodega_uf DECIMAL(12,2),
   descuento_pct   DOUBLE,
   disponible      BOOLEAN,
+  -- T-925c: "Precio desde" por modelo (wp-json de inmobiliarias). Es el PISO del modelo,
+  -- no el precio de una unidad: el emparejamiento lo excluye del ranking (B1 exige precio
+  -- real), pero la fila queda para el censo de oferta nueva y la señal de baja de precio.
+  precio_es_desde BOOLEAN,
   evidence_level  VARCHAR CHECK (evidence_level IN ('V','D','E','ND')),
   sospechoso      BOOLEAN DEFAULT FALSE,
   valid_from      TIMESTAMPTZ NOT NULL,
@@ -279,3 +283,4 @@ CREATE TABLE IF NOT EXISTS run_log (
 ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS microzona_id      VARCHAR;
 ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS es_vivienda_nueva BOOLEAN;
 ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS antiguedad_anios  INTEGER;
+ALTER TABLE fact_unidad_venta ADD COLUMN IF NOT EXISTS precio_es_desde   BOOLEAN;
