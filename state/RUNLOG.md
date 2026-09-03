@@ -2673,3 +2673,15 @@ gates: VERDE
   comuna, procedencia+idempotencia, integración con el informe).
 - gates: VERDE. Confirmación viva pendiente: correr `geocodificar-proyectos` local y
   medir cuánto baja sin_geo=217 en el informe siguiente.
+
+
+## 2026-09-03 · T-919 cerrada — el delta de 4 meses corrio completo
+
+- La foto de mayo ya estaba en la base (ingerida el 29-ago con T-918); el bloqueo del
+  tablero era stale. `cli delta`: 31 bajas / 11 subidas / 1.939 sin cambio sobre 5.541
+  unidades de la foto vieja, 235 microzonas.
+- Señales de compra relevantes al top actual: san-miguel/lo-vial -9,2% (UF 3.250→2.950),
+  san-miguel/ciudad-del-nino -9,1% (UF 2.200→2.000, 43 UF/m²), santiago/lastarria
+  -16,7% (sobre el tope UF 6.000, pero vendedor apurado).
+- "ya no estan" = 3.560 NO es venta: la corrida nueva cubrio 86% de las unidades viejas
+  por paginas pedidas. Medir ventas reales requeriria --paginas alto (opcional, anotado).

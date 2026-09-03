@@ -492,7 +492,10 @@ bugs_encontrados_y_corregidos:
     solo si el precio cambio, y la vieja se cierra.
 
 ## T-919 · Delta de precios: cuatro meses de senal de compra
-estado: en_curso · agente: colector · fase: 1 · depende_de: [T-918, T-920]
+estado: hecha  # 03-sep: la foto de mayo YA estaba ingerida (T-918, 29-ago) y el cruce
+  # corrio completo — 31 bajas en 4 meses (lo-vial -9,2%, ciudad-del-nino -9,1%,
+  # lastarria -16,7%). "ya no estan"=3560 POCO FIABLE por cobertura de paginas: para
+  # medir ventas reales haria falta una corrida con --paginas alto (opcional) · agente: colector · fase: 1 · depende_de: [T-918, T-920]
 criterio_de_aceptacion:
   - [x] Re-scrapear por la ruta permitida `_Desde_` -> T-920, corrida real 29-ago-2026
   - [x] `quality/delta.py` + `cli delta`: cruza por `unidad_key` sobre las versiones SCD
