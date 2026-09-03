@@ -1464,7 +1464,9 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-922c · 126 estaciones operativas vs ~143 reales del Metro
-estado: pendiente
+estado: pendiente  # 03-sep: hoy son 120 operativas Metro; ademas verificar_t922d hallo
+  # 4 pares duplicados a 3-15 m (Copa Lo Martinez, El Bosque, Hospital El Pino,
+  # Observatorio — extension sur L2, doble mapeo OSM) que inflan el conteo
 agente: colector
 fase: 2
 depende_de: [T-922]

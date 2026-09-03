@@ -2623,3 +2623,20 @@ gates: VERDE
 - (a) ya medida (L6 start_date=2027 en OSM). (b)-(e) quedan en un solo script local:
   scripts/verificar_t922d.py (blob + base + una consulta a r16358740).
 - gates: VERDE.
+
+
+## 2026-09-03 · T-922d verificada en vivo — los 4 chequeos pendientes, medidos
+
+- (b) solo las 5 EFE Melipilla traen tags de ciclo de vida sobre railway=station: el
+  riesgo de degradar operativas de Metro es nulo en el dato real.
+- (c) 0 estaciones way/relation en la base: todas nodos.
+- (d) homonimas legitimas (combinaciones: Baquedano L1/L7 a 138 m, Puente Cal y Canto
+  x4 lineas). 4 pares sospechosos a 3-15 m (Copa Lo Martinez, El Bosque, Hospital El
+  Pino, Observatorio — extension sur L2, probable doble mapeo en OSM): sin efecto en
+  el catalizador, anotado en T-922c porque infla el conteo de operativas.
+- (e) los 2 miembros de r16358740 "Propuesta de Extension L7" NO declaran fecha: la
+  guarda "propuesta sin fecha propia" los bloquea a todos — riesgo residual del
+  hallazgo 6 cerrado con evidencia.
+- Resumen coherente en vivo: 19 construccion (L7) · 21 propuesta (L9) · 12 EFE fuera ·
+  143 elegibles netas. T-922 queda saldada; solo T-922c (conteo 120 vs ~143 operativas
+  + los 4 pares duplicados) sigue abierta como tarea menor.
