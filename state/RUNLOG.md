@@ -2724,3 +2724,15 @@ gates: VERDE
 - Anotado F5 (preexistente): flujos con dos cambios de signo darian ValueError→-100%;
   inalcanzable hoy (los flujos del modelo tienen UN cambio de signo), relevante si
   algun dia entra capex a mitad de horizonte.
+
+
+## 2026-09-03 · T-931c plan B — la direccion de calle, no el nombre
+
+- Corrida viva: Nominatim resolvio 0 de 34 por NOMBRE de edificio (no los indexa).
+  Pero Fundamenta, RVC e Ingevec publican `streetAddress` en su JSON-LD y el parser
+  lo botaba: ahora lo captura (wpjson 0.2.0) y lo guarda en la tabla nueva
+  `proyecto_direccion` (upsert con procedencia — dim_proyecto esta congelada por la FK).
+- El geocodificador intenta hasta 2 consultas por proyecto (direccion publicada,
+  luego nombre) y gano `--verbose` para diagnosticar que responde Nominatim en vivo.
+- Para que la direccion exista hay que RE-CENSAR los dominios wp-json una vez
+  (recolectar-wpjson por dominio) y despues geocodificar-proyectos.
