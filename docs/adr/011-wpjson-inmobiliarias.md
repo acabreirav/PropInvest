@@ -47,6 +47,23 @@ inversionista; todas las respuestas en `data/raw/wpjson_inmobiliarias/`) fijaron
 - El `wp-json` es la API pública estándar de WordPress; el HTML es el mismo que ve
   cualquier visitante.
 
+## Adenda 03-sep-2026 · el grupo Socovesa completo
+
+La sonda contra los otros dominios de Empresas Socovesa (detectados por el
+`almagro_widget` en el HTML) resolvió el siguiente paso:
+
+- **Pilares (`pilares.cl`): INCORPORADO.** Departamentos en la RM (La Florida, Estación
+  Central observadas), tickets UF 1.690–3.990 — justo el rango del subsidio. Jerarquía de
+  TRES niveles (`proyecto → modelo → unidad`, cada uno un post `proyecto` encadenado por
+  `parent`); el precio "desde" vive en la página del MODELO
+  (`p.single__details__dividendo`), y el REST del modelo trae comuna (`comuna-*`), estado,
+  disponibilidad y dormitorios/baños como tags. El colector generaliza: escala la cadena
+  `parent` completa y un `PERFILES[dominio]` dice en qué nivel parsear el precio.
+- **Almagro (`almagro.cl`): DESCARTADO por ahora, con dato.** Precios desde observados
+  UF 10.590–16.790: todo sobre el tope UF 6.000 de la Ley 21.748 — ningún proyecto puede
+  entrar al ranking. Además su theme no expone REST por proyecto (solo `pages/`). Queda
+  anotado en `fuentes.yml`; se revisita solo si el alcance deja de estar atado al subsidio.
+
 ## Límites conocidos
 
 - El catálogo de Socovesa es mayormente **casas** (Huechuraba, Chicureo, Chillán) y varias

@@ -125,24 +125,38 @@ def proyecto_slug_de(url: str) -> str | None:
 
 
 def meta_de_rest(datos: dict[str, Any]) -> dict[str, Any]:
-    """Metadata del registro REST. Todo lo que no venga queda None (ND, §3.2)."""
+    """Metadata del registro REST. Todo lo que no venga queda None (ND, §3.2).
+
+    La comuna viene como `ciudad-<slug>` en Socovesa y `comuna-<slug>` en Pilares;
+    Pilares además publica dormitorios y baños como tags (`tag-2-dormitorio`,
+    `tag-1-bano`). Mismo wp-json, dos vocabularios.
+    """
     clases = datos.get("class_list") or []
     por_prefijo: dict[str, str] = {}
+    dormitorios = banos = None
     for clase in clases:
-        for prefijo in ("ciudad-", "estado-", "tipologia-", "disponibilidad-"):
+        for prefijo in ("ciudad-", "comuna-", "estado-", "tipologia-", "disponibilidad-"):
             if clase.startswith(prefijo):
                 # la primera gana: no se ha visto más de una clase por taxonomía
                 por_prefijo.setdefault(prefijo, clase[len(prefijo) :])
+        m_d = re.match(r"tag-(\d+)-dormitorio", clase)
+        if m_d:
+            dormitorios = int(m_d.group(1))
+        m_b = re.match(r"tag-(\d+)-bano", clase)
+        if m_b:
+            banos = int(m_b.group(1))
     titulo = (datos.get("title") or {}).get("rendered") or ""
     return {
         "slug": datos.get("slug"),
         "nombre": html_mod.unescape(titulo).strip(),
         "link": datos.get("link"),
         "parent": datos.get("parent") or 0,
-        "comuna_slug": por_prefijo.get("ciudad-"),
+        "comuna_slug": por_prefijo.get("ciudad-") or por_prefijo.get("comuna-"),
         "estado": por_prefijo.get("estado-"),
         "tipo_bien": por_prefijo.get("tipologia-"),
         "disponibilidad": por_prefijo.get("disponibilidad-"),
+        "dormitorios": dormitorios,
+        "banos": banos,
     }
 
 
@@ -206,6 +220,49 @@ def modelos_de_html(html: str, url_pagina: str) -> list[dict[str, Any]]:
     return salida
 
 
+def modelo_de_html_pilares(html: str, url_pagina: str) -> dict[str, Any]:
+    """El bloque de modelo del theme de Pilares: la página ES el modelo.
+
+    `h1.planta__title` trae el nombre, `p.single__details__dividendo` el "Desde UF X",
+    y la `planta__minilist` los atributos. Dormitorios/baños vienen además como tags en
+    el REST (meta_de_rest los extrae) — acá son respaldo si la lista los trae.
+    """
+    from selectolax.parser import HTMLParser
+
+    arbol = HTMLParser(html)
+    nodo_precio = arbol.css_first("p.single__details__dividendo")
+    precio = uf_de(nodo_precio.text()) if nodo_precio is not None else None
+    m2 = dormitorios = banos = None
+    lista = arbol.css_first("ul.planta__minilist") or arbol.css_first("ul.single__details")
+    if lista is not None:
+        texto = lista.text(separator=" ")
+        m_m2 = re.search(r"([\d.,]+)\s*m", texto)
+        m2 = uf_de(m_m2.group(1)) if m_m2 else None
+        m_d = re.search(r"(\d+)\s*dormitorio", texto, re.I)
+        dormitorios = int(m_d.group(1)) if m_d else None
+        m_b = re.search(r"(\d+)\s*bañ", texto, re.I)
+        banos = int(m_b.group(1)) if m_b else None
+    return {
+        "precio_desde_uf": precio,
+        "m2_totales": m2,
+        "dormitorios": dormitorios,
+        "banos": banos,
+    }
+
+
+# Perfil por dominio: dónde vive el precio dentro de la jerarquía REST (parent-chain).
+#   raiz   → el precio está en la página del proyecto (Socovesa: bloques planta)
+#   modelo → cada modelo tiene su propia página con el precio (Pilares: 3 niveles
+#            unidad → modelo → proyecto)
+# Un dominio sin perfil NO se recolecta: primero su sonda (probar-wpjson --volcar-ld)
+# y su entrada aquí, con fixture. Almagro queda fuera a propósito: tickets observados
+# UF 10.590–16.790, todos sobre el tope UF 6.000 del subsidio (ADR 011).
+PERFILES: dict[str, dict[str, Any]] = {
+    "socovesa.cl": {"precio_en": "raiz"},
+    "pilares.cl": {"precio_en": "modelo"},
+}
+
+
 # ----------------------------------------------------------------------------- recolección
 
 
@@ -224,6 +281,13 @@ def recolectar(
     """
     momento = ahora or datetime.now(UTC)
     cosecha = Cosecha()
+    perfil = PERFILES.get(dominio)
+    if perfil is None:
+        cosecha.errores.append(
+            f"{dominio}: sin perfil en PERFILES — primero su sonda "
+            "(probar-wpjson --volcar-ld) y su entrada con fixture"
+        )
+        return cosecha
     base = f"https://{dominio}" if dominio.startswith("www.") else f"https://www.{dominio}"
 
     veredicto = robots_check.verificar(
@@ -286,19 +350,48 @@ def recolectar(
         cosecha.errores.append(f"{dominio}: el sitemap no lista páginas de proyecto")
         return cosecha
 
-    # 2 · una unidad representante por slug de proyecto del sitemap
+    # 2 · una unidad representante por RAMA (la URL sin su último segmento). En Socovesa
+    # la rama es el proyecto (…/<proyecto>/<unidad>); en Pilares es el modelo
+    # (…/<proyecto>/<modelo>/<unidad>). Agrupar por rama cubre ambas jerarquías.
     representantes: dict[str, str] = {}
     for u in urls_unidad:
-        s = proyecto_slug_de(u)
-        if s and s not in representantes:
-            representantes[s] = u
+        rama = u.rstrip("/").rsplit("/", 1)[0]
+        # una rama con ≤3 barras es la seccion raiz del sitio (la pagina indice que
+        # algunos sitemaps tambien listan): no es una unidad, se salta
+        if rama.count("/") <= 3:
+            continue
+        representantes.setdefault(rama, u)
     grupos = sorted(representantes.items())
     if limite_proyectos is not None:
         grupos = grupos[:limite_proyectos]
 
-    proyectos_vistos: set[int] = set()
-    for slug_sitemap, url_unidad in grupos:
-        doc_unidad = pedir(url_unidad, f"{dom}_unidad_{slug_sitemap}")
+    # Un registro puede responder 200 con HTML en vez de JSON (proyecto en borrador
+    # que redirige a una pagina de error, y follow_redirects la sigue). No es JSON
+    # roto nuestro: se registra con su URL y se sigue con el resto del catalogo.
+    def _json_o_nada(doc: Any) -> Any | None:
+        try:
+            return doc.json()
+        except ValueError:
+            cosecha.errores.append(
+                f"{doc.url}: HTTP 200 pero el cuerpo no es JSON "
+                f"(empieza con {doc.contenido[:40]!r})"
+            )
+            return None
+
+    def _rest(pid: int) -> tuple[Any, dict[str, Any]] | None:
+        doc = pedir(f"{base}/wp-json/wp/v2/proyecto/{pid}", f"{dom}_rest_{pid}")
+        if doc is None:
+            return None
+        datos = _json_o_nada(doc)
+        return None if datos is None else (doc, datos)
+
+    nodos_vistos: set[int] = set()
+    raices_registradas: set[int] = set()
+    raices: dict[int, tuple[Any, dict[str, Any]]] = {}  # cache: id → registro raíz
+
+    for rama, url_unidad in grupos:
+        etiqueta = rama.rsplit("/", 1)[-1] or "raiz"
+        doc_unidad = pedir(url_unidad, f"{dom}_unidad_{etiqueta}")
         if doc_unidad is None:
             continue
         rid = rest_id_de(doc_unidad.contenido.decode("utf-8", errors="replace"))
@@ -306,77 +399,98 @@ def recolectar(
             cosecha.errores.append(f"{url_unidad}: sin <link> al registro REST")
             continue
 
-        # Un registro puede responder 200 con HTML en vez de JSON (proyecto en borrador
-        # que redirige a una pagina de error, y follow_redirects la sigue). No es JSON
-        # roto nuestro: se registra con su URL y se sigue con el resto del catalogo.
-        def _json_o_nada(doc: Any) -> Any | None:
-            try:
-                return doc.json()
-            except ValueError:
-                cosecha.errores.append(
-                    f"{doc.url}: HTTP 200 pero el cuerpo no es JSON "
-                    f"(empieza con {doc.contenido[:40]!r})"
+        # la cadena parent completa: unidad → (modelo) → proyecto raíz
+        par = _rest(rid)
+        if par is None:
+            continue
+        cadena = [par]
+        while int(cadena[-1][1].get("parent") or 0) and len(cadena) < 4:
+            padre_id = int(cadena[-1][1]["parent"])
+            if padre_id in raices:
+                cadena.append(raices[padre_id])
+                break
+            par = _rest(padre_id)
+            if par is None:
+                break
+            cadena.append(par)
+        doc_raiz, datos_raiz = cadena[-1]
+        if int(datos_raiz.get("parent") or 0):
+            continue  # un fetch de la cadena falló: el motivo ya quedó en errores
+        raices[int(datos_raiz["id"])] = (doc_raiz, datos_raiz)
+
+        # el nodo con precio: la raíz (Socovesa) o el modelo un nivel abajo (Pilares)
+        if perfil["precio_en"] == "modelo" and len(cadena) >= 2:
+            datos_nodo = cadena[-2][1]
+        else:
+            datos_nodo = datos_raiz
+        nid = int(datos_nodo.get("id") or 0)
+        if nid in nodos_vistos:
+            continue  # dos ramas del sitemap resolvieron al mismo nodo canónico
+        nodos_vistos.add(nid)
+
+        meta_raiz = meta_de_rest(datos_raiz)
+        meta_nodo = meta_de_rest(datos_nodo)
+        if not meta_nodo["link"] or not meta_raiz["slug"]:
+            cosecha.errores.append(f"rest {nid}: sin link o slug — se salta")
+            continue
+
+        raiz_id = int(datos_raiz["id"])
+        if raiz_id not in raices_registradas:
+            raices_registradas.add(raiz_id)
+            cosecha.proyectos.append(
+                ProyectoWp(
+                    dominio=dominio,
+                    proyecto_slug=meta_raiz["slug"],
+                    nombre=meta_raiz["nombre"] or meta_raiz["slug"],
+                    comuna_slug=meta_raiz["comuna_slug"] or meta_nodo["comuna_slug"],
+                    estado=meta_raiz["estado"] or meta_nodo["estado"],
+                    tipo_bien=meta_raiz["tipo_bien"] or meta_nodo["tipo_bien"],
+                    url=str(doc_raiz.url),
+                    fetched_at=doc_raiz.fetched_at,
+                    raw_blob_path=str(doc_raiz.ruta),
+                    robots_snapshot_sha=doc_raiz.robots_snapshot_sha,
                 )
-                return None
-
-        doc_rest = pedir(f"{base}/wp-json/wp/v2/proyecto/{rid}", f"{dom}_rest_{rid}")
-        if doc_rest is None:
-            continue
-        datos = _json_o_nada(doc_rest)
-        if datos is None:
-            continue
-        padre = int(datos.get("parent") or 0)
-        if padre:
-            doc_rest = pedir(f"{base}/wp-json/wp/v2/proyecto/{padre}", f"{dom}_rest_{padre}")
-            if doc_rest is None:
-                continue
-            datos = _json_o_nada(doc_rest)
-            if datos is None:
-                continue
-        pid = int(datos.get("id") or 0)
-        if pid in proyectos_vistos:
-            continue  # dos slugs del sitemap resolvieron al mismo proyecto canónico
-        proyectos_vistos.add(pid)
-
-        meta = meta_de_rest(datos)
-        if not meta["link"] or not meta["slug"]:
-            cosecha.errores.append(f"rest {pid}: sin link o slug — se salta")
-            continue
-        cosecha.proyectos.append(
-            ProyectoWp(
-                dominio=dominio,
-                proyecto_slug=meta["slug"],
-                nombre=meta["nombre"] or meta["slug"],
-                comuna_slug=meta["comuna_slug"],
-                estado=meta["estado"],
-                tipo_bien=meta["tipo_bien"],
-                url=str(doc_rest.url),
-                fetched_at=doc_rest.fetched_at,
-                raw_blob_path=str(doc_rest.ruta),
-                robots_snapshot_sha=doc_rest.robots_snapshot_sha,
             )
-        )
-        doc_html = pedir(str(meta["link"]), f"{dom}_proyecto_{meta['slug']}")
+
+        doc_html = pedir(str(meta_nodo["link"]), f"{dom}_pagina_{meta_nodo['slug']}")
         if doc_html is None:
             continue
-        for m in modelos_de_html(
-            doc_html.contenido.decode("utf-8", errors="replace"), str(meta["link"])
-        ):
+        html_pagina = doc_html.contenido.decode("utf-8", errors="replace")
+        link = str(meta_nodo["link"])
+        if perfil["precio_en"] == "modelo":
+            m = modelo_de_html_pilares(html_pagina, link)
             cosecha.modelos.append(
                 ModeloWp(
                     dominio=dominio,
-                    proyecto_slug=meta["slug"],
-                    modelo_slug=m["modelo_slug"],
+                    proyecto_slug=meta_raiz["slug"],
+                    modelo_slug=meta_nodo["slug"] or f"modelo-{nid}",
                     precio_desde_uf=m["precio_desde_uf"],
                     m2_totales=m["m2_totales"],
-                    dormitorios=m["dormitorios"],
-                    banos=m["banos"],
-                    url=str(meta["link"]),
+                    dormitorios=m["dormitorios"] or meta_nodo["dormitorios"],
+                    banos=m["banos"] or meta_nodo["banos"],
+                    url=link,
                     fetched_at=doc_html.fetched_at,
                     raw_blob_path=str(doc_html.ruta),
                     robots_snapshot_sha=doc_html.robots_snapshot_sha,
                 )
             )
+        else:
+            for m in modelos_de_html(html_pagina, link):
+                cosecha.modelos.append(
+                    ModeloWp(
+                        dominio=dominio,
+                        proyecto_slug=meta_raiz["slug"],
+                        modelo_slug=m["modelo_slug"],
+                        precio_desde_uf=m["precio_desde_uf"],
+                        m2_totales=m["m2_totales"],
+                        dormitorios=m["dormitorios"],
+                        banos=m["banos"],
+                        url=link,
+                        fetched_at=doc_html.fetched_at,
+                        raw_blob_path=str(doc_html.ruta),
+                        robots_snapshot_sha=doc_html.robots_snapshot_sha,
+                    )
+                )
     return cosecha
 
 
@@ -571,4 +685,19 @@ def selftest_fixture(carpeta: Path | None = None) -> tuple[bool, list[str]]:
         fallas.append("fixture REST: sin slug o link")
     if meta["comuna_slug"] is None:
         fallas.append("fixture REST: no extrajo la comuna de class_list")
+
+    # perfil "modelo" (Pilares): la pagina ES el modelo, con su REST de tags
+    html_p = (carpeta / "pilares_modelo.html").read_text(encoding="utf-8")
+    rest_p = json.loads((carpeta / "pilares_modelo_rest.json").read_text(encoding="utf-8"))
+    modelo_p = modelo_de_html_pilares(
+        html_p,
+        "https://www.pilares.cl/nuestros-proyectos/proyectos-para-vivir/rodriguez-velasco-10/depto-a1/",
+    )
+    if modelo_p["precio_desde_uf"] != Decimal("2990"):
+        fallas.append(f"fixture pilares: precio {modelo_p['precio_desde_uf']} != 2990")
+    meta_p = meta_de_rest(rest_p)
+    if meta_p["comuna_slug"] != "la-florida":
+        fallas.append("fixture pilares REST: no extrajo comuna-la-florida")
+    if meta_p["dormitorios"] != 1 or meta_p["banos"] != 1:
+        fallas.append("fixture pilares REST: no extrajo dormitorios/banos de los tags")
     return (not fallas, fallas)

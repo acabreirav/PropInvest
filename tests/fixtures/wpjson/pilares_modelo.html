@@ -1,0 +1,25 @@
+<!-- Fixture reconstruida de la pagina real de modelo de Pilares (corrida en vivo
+     probar-wpjson - -volcar-ld del 03-sep-2026, rodriguez-velasco-10/depto-a1).
+     Titulo, dividendo y estructura observados verbatim; el item de m² de la minilist
+     es plausible-reconstruido (la sonda corto la lista tras "1 dormitorio"): si el
+     sitio no lo publica, el parser debe dejar m2 en None (ND), no inventarlo. -->
+<html><head><title>Depto A1 - Rodriguez Velasco 10 | Pilares</title>
+<link rel="alternate" title="JSON" type="application/json" href="https://www.pilares.cl/wp-json/wp/v2/proyecto/130732" />
+</head><body>
+<p class="breadcrumb">Rodríguez Velasco 10</p>
+<h1 class="planta__title">Depto A1</h1>
+<p class="single__details__dividendo">Desde UF 2.990</p>
+<ul class="single__details planta__minilist">
+  <li class="single__details__item">1 dormitorio</li>
+  <li class="single__details__item">1 baño</li>
+  <li class="single__details__item">30,5 m² totales</li>
+</ul>
+<div class="form-control" data-action="https://www.pilares.cl/wp-json/cargar/selector-planta">
+  <label for="cotizar-planta" class="form-control__label">Planta a cotizar </label>
+  <select name="planta">
+    <option value="130732" selected data-dispo="disponible-planta">Depto A1: Departamentos - Desde 2.990UF</option>
+    <option value="130733" data-dispo="agotada" disabled>Depto A2: Departamentos - Agotada</option>
+    <option value="130737" data-dispo="disponible-planta">Depto C1: Departamentos - Desde 3.590UF</option>
+  </select>
+</div>
+</body></html>

@@ -69,6 +69,27 @@ def test_meta_de_rest_lee_class_list() -> None:
     assert meta["disponibilidad"] is None  # el fixture real no trae la clase: ND
 
 
+def test_modelo_pilares_extrae_precio_y_atributos() -> None:
+    html = (FIXTURES / "pilares_modelo.html").read_text(encoding="utf-8")
+    m = wp.modelo_de_html_pilares(html, "https://www.pilares.cl/x/depto-a1/")
+    assert m["precio_desde_uf"] == D("2990")
+    assert m["m2_totales"] == D("30.5")
+    assert m["dormitorios"] == 1
+    assert m["banos"] == 1
+
+
+def test_meta_pilares_lee_comuna_estado_y_tags() -> None:
+    rest = json.loads((FIXTURES / "pilares_modelo_rest.json").read_text(encoding="utf-8"))
+    meta = wp.meta_de_rest(rest)
+    assert meta["comuna_slug"] == "la-florida"
+    assert meta["estado"] == "entrega-inmediata"
+    assert meta["tipo_bien"] == "departamentos"
+    assert meta["disponibilidad"] == "disponible-planta"
+    assert meta["dormitorios"] == 1
+    assert meta["banos"] == 1
+    assert meta["parent"] == 126752
+
+
 def test_selftest_fixture_verde() -> None:
     ok, fallas = wp.selftest_fixture(FIXTURES)
     assert ok, fallas

@@ -1,0 +1,25 @@
+{
+  "id": 130732,
+  "modified": "2026-08-06T18:04:30",
+  "slug": "depto-a1",
+  "status": "publish",
+  "type": "proyecto",
+  "link": "https://www.pilares.cl/nuestros-proyectos/proyectos-para-vivir/rodriguez-velasco-10/depto-a1/",
+  "title": { "rendered": "Depto A1" },
+  "parent": 126752,
+  "class_list": [
+    "post-130732",
+    "proyecto",
+    "type-proyecto",
+    "status-publish",
+    "has-post-thumbnail",
+    "hentry",
+    "tag-1-bano",
+    "tag-1-dormitorio",
+    "comuna-la-florida",
+    "tipologia-departamentos",
+    "estado-entrega-inmediata",
+    "disponibilidad-disponible-planta"
+  ],
+  "acf": null
+}
