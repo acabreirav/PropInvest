@@ -2476,3 +2476,24 @@ Si no corrio nada a mano, hay que buscar que lo movio.
   afirmaba mercado sin fuente.
 - Medición §8.4 registrada: el supuesto CREA el ranking actual (0 → 4 unidades vivas; la
   #1 entra por $7.278/mes de margen contra el tope de liquidez). Deuda anotada en D-018.
+
+
+## 2026-09-03 · T-931b (nuevas al "desde") + T-922b (obras OSM) + fix bitácora dirigida
+
+- **T-931b**: el informe suma la sección "nuevas evaluadas al desde" (HIPOTÉTICO,
+  separada del ranking de usadas). Microzona por lat/lon del proyecto (misma comuna,
+  tope 2,5 km; en memoria — la FK de DuckDB impide persistir el update), motor real
+  con tasa CON subsidio (primera venta) y arriendo de la celda n≥8. Descartes con
+  motivo (sin_geo / sin_comparables / desde_fuera_de_rango). 2 tests nuevos.
+- **T-922b**: la corrida real cosechó 0 estaciones en construcción porque la consulta
+  Overpass exigía `station=subway` en las obras; el ciclo de vida de OSM lo etiqueta
+  `railway=construction` + `construction=station` (+ `construction:station=subway`) o
+  `construction:railway=station`. Consulta ampliada a los 4 patrones y filtro de red
+  movido a `parsear` con contador `fuera_de_red` (tranvía/EFE no se cuelan). parser
+  0.3.0. Confirmación pendiente en la corrida viva local (`recolectar-metro`).
+- **Bitácora por modo**: la recolección dirigida comparaba su conteo contra la última
+  corrida COMPLETA y saltaba el detector de -30% (falso positivo real del 03-sep:
+  "conteo cayó 65,7%"). Ahora `portal:dirigida` compara contra su propia historia.
+- **Deuda D-018**: test golden nuevo que ata los TRES 140 m² (params, modelo, doc) a
+  una sola declaración.
+- gates: VERDE (calidad de datos PARCIAL por cobertura, como venía).

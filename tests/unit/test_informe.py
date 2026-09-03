@@ -134,3 +134,77 @@ def test_render_html_es_autocontenido() -> None:
     assert "Por qué está arriba: déficit mensual bajo" in html
     assert "Sin bajas de precio en la oferta nueva" in html
     assert "delta de prueba" in html
+
+
+# ------------------------------------------- T-931b · nuevas evaluadas al "desde"
+
+
+def _proyecto_con_geo(c, pid="wpjson-x-geo", comuna="nunoa", lat=-33.456, lon=-70.60):
+    c.execute(
+        "INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES (?, ?, '') "
+        "ON CONFLICT (comuna_id) DO NOTHING",
+        (comuna, comuna),
+    )
+    c.execute(
+        "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre, centro_lat, centro_lon) "
+        "VALUES (?, ?, 'Barrio X', ?, ?) ON CONFLICT (microzona_id) DO NOTHING",
+        (f"{comuna}/barrio-x", comuna, lat + 0.002, lon + 0.002),
+    )
+    c.execute(
+        "INSERT INTO dim_proyecto (proyecto_id, nombre, comuna_id, lat, lon) "
+        "VALUES (?, 'Edificio Geo', ?, ?, ?)",
+        (pid, comuna, lat, lon),
+    )
+
+
+def test_microzonas_por_geo_asigna_en_la_misma_comuna_con_tope(con) -> None:
+    _proyecto_con_geo(con)
+    # otro proyecto SIN geo no aparece; uno a >2.5 km tampoco
+    con.execute(
+        "INSERT INTO dim_proyecto (proyecto_id, nombre, comuna_id, lat, lon) "
+        "VALUES ('wpjson-x-lejos', 'Lejos', 'nunoa', -33.60, -70.60)"
+    )
+    mapa = inf.microzonas_por_geo(con)
+    assert mapa == {"wpjson-x-geo": "nunoa/barrio-x"}
+
+
+def test_nuevas_evaluadas_al_desde_pasa_por_el_motor_con_subsidio(con) -> None:
+    from flujocero.config import cargar
+
+    p, inv = cargar("params"), cargar("inversionista")
+    _proyecto_con_geo(con)
+    con.execute(
+        "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, n, "
+        "arriendo_uf_mediana, arriendo_uf_m2_mediana, calculado_en) "
+        "VALUES ('nunoa/barrio-x', '2D2B', '50-70', 20, 12.5, 0.22, ?)",
+        (AHORA,),
+    )
+    con.execute(
+        "INSERT INTO fact_unidad_venta (unidad_key, proyecto_id, numero_unidad, precio_uf, "
+        "m2_totales, dormitorios, banos, precio_es_desde, es_vivienda_nueva, evidence_level, "
+        "valid_from, fetched_at) "
+        "VALUES ('NG1', 'wpjson-x-geo', 'depto-a', 2900, 56, 2, 2, TRUE, TRUE, 'V', ?, ?)",
+        (AHORA, AHORA),
+    )
+    # y una sin geo, para el contador
+    con.execute(
+        "INSERT INTO dim_proyecto (proyecto_id, nombre, comuna_id) "
+        "VALUES ('wpjson-x-singeo', 'Sin Geo', 'nunoa')"
+    )
+    con.execute(
+        "INSERT INTO fact_unidad_venta (unidad_key, proyecto_id, numero_unidad, precio_uf, "
+        "m2_totales, dormitorios, banos, precio_es_desde, evidence_level, valid_from, "
+        "fetched_at) VALUES ('NG2', 'wpjson-x-singeo', 'depto-b', 3000, 50, 2, 2, TRUE, "
+        "'V', ?, ?)",
+        (AHORA, AHORA),
+    )
+    rangos = p.crudo("ingresos.rangos_m2")
+    filas, descartes = inf.nuevas_evaluadas_al_desde(con, p, inv, rangos)
+    assert descartes["sin_geo"] == 1
+    assert len(filas) == 1
+    f = filas[0]
+    assert f["proyecto"] == "Edificio Geo"
+    assert f["microzona"] == "nunoa/barrio-x"
+    # primera venta: el motor le APLICA el subsidio — el corazon de T-931b
+    assert f["con_subsidio"] is True
+    assert f["arriendo_clp"] > 0 and f["score"] >= 0

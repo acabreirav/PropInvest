@@ -50,6 +50,29 @@ OVERPASS = {
         },
         # nodo sin nombre: fuera
         {"id": 5, "lat": -33.0, "lon": -70.0, "tags": {"railway": "station", "station": "subway"}},
+        # obra L7 con etiquetado de ciclo de vida REAL: sin `station=subway` — el subway
+        # vive en `construction:station` (wiki OSM, Tag:railway=construction). Es el caso
+        # que la consulta vieja dejaba en cero.
+        {
+            "id": 6,
+            "lat": -33.4104,
+            "lon": -70.6604,
+            "tags": {
+                "railway": "construction",
+                "construction": "station",
+                "construction:station": "subway",
+                "name": "Huelén",
+                "ref": "L7",
+            },
+        },
+        # obra que NO es Metro ni Biotren (tranvia): la cosecha ancha la trae, el
+        # filtro de red la descarta y la cuenta
+        {
+            "id": 7,
+            "lat": -33.36,
+            "lon": -70.51,
+            "tags": {"railway": "construction", "construction": "station", "name": "Tranvía X"},
+        },
     ]
 }
 
@@ -61,11 +84,14 @@ def test_recolectar_guarda_crudo_y_parsea(tmp_path):
     cliente = httpx.Client(transport=httpx.MockTransport(responder))
     cosecha = osm_metro.recolectar(cliente, ahora=AHORA, raiz=tmp_path)
     assert cosecha.error is None
-    assert len(cosecha.estaciones) == 4 and cosecha.sin_nombre == 1
+    assert len(cosecha.estaciones) == 5 and cosecha.sin_nombre == 1
+    assert cosecha.fuera_de_red == 1, "el tranvia se descarta y se cuenta, no se cuela"
     assert list(tmp_path.rglob("estaciones_cl.json.gz")), "raw primero (§3.6)"
     por_id = {e.estacion_id: e for e in cosecha.estaciones}
     assert por_id["osm-2"].estado == "construccion" and por_id["osm-2"].linea == "l7"
     assert por_id["osm-4"].red == "biotren"
+    # el etiquetado de ciclo de vida (sin station=subway) entra igual — era el hueco
+    assert por_id["osm-6"].estado == "construccion" and por_id["osm-6"].linea == "l7"
 
 
 @pytest.fixture()
@@ -94,9 +120,9 @@ def test_catalizador_por_distancia_y_fecha(con, tmp_path):
     osm_metro.cargar(con, cosecha, AHORA)
     res = puente.calcular_catalizador(con, cargar("params"), AHORA)
     assert res["microzonas"] == 2
-    # elegibles: El Llano (operativa), Futura L7 (fecha 2028 <= 3 anios), Concepcion
-    # (biotren operativa). "Misteriosa" queda fuera y contada.
-    assert res["elegibles"] == 3 and res["construccion_sin_fecha"] == 1
+    # elegibles: El Llano (operativa), Futura L7 y Huelén (l7, fecha 2028 <= 3 anios),
+    # Concepcion (biotren operativa). "Misteriosa" queda fuera y contada.
+    assert res["elegibles"] == 4 and res["construccion_sin_fecha"] == 1
 
     valores = dict(
         con.execute("SELECT microzona_id, catalizador FROM agg_riesgo_microzona").fetchall()
@@ -142,5 +168,5 @@ def test_si_el_endpoint_principal_rechaza_se_usa_el_espejo(tmp_path):
 
     cliente = httpx.Client(transport=httpx.MockTransport(responder))
     cosecha = osm_metro.recolectar(cliente, ahora=AHORA, raiz=tmp_path)
-    assert cosecha.error is None and len(cosecha.estaciones) == 4
+    assert cosecha.error is None and len(cosecha.estaciones) == 5
     assert vistos == ["overpass-api.de", "overpass.kumi.systems"]

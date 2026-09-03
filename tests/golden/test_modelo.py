@@ -626,3 +626,13 @@ def test_la_forma_cerrada_descuenta_incobrabilidad(cfg):
     con_i = f.arriendo_equilibrio_uf(D(100), D(20), D("0.08"), D("0.02"), D("0.03"))
     sin_i = f.arriendo_equilibrio_uf(D(100), D(20), D("0.08"), D(0), D("0.03"))
     assert abs(con_i - sin_i / (D(1) - D("0.02"))) < D("1e-12")
+
+
+def test_el_limite_de_140_m2_es_UNO_en_las_tres_declaraciones(cfg) -> None:
+    """Deuda D-018: el 140 vive en params (regla DFL2-probable), en params (exclusion dura
+    del score) y en inversionista.yml. Si uno deriva, una unidad puede ser excluida por una
+    regla y bendecida por la otra sin que nadie lo note. Este test los amarra."""
+    p, inv = cfg
+    assert p.d("tributacion.dfl2_max_m2_utiles") == D(140)
+    assert D(str(p.crudo("score.exclusiones_duras")["m2_utiles_max"])) == D(140)
+    assert D(str(inv.crudo("estrategia_dfl2")["max_m2_utiles"])) == D(140)

@@ -1442,7 +1442,7 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-922b · Estaciones EN CONSTRUCCION ausentes de la cosecha OSM
-estado: pendiente
+estado: hecha  # pendiente de confirmar con la corrida viva local (recolectar-metro)
 agente: colector
 fase: 2
 depende_de: [T-922]
@@ -1451,8 +1451,16 @@ criterio_de_aceptacion:
     extension L6 no calzan con los tags de la consulta actual (railway=construction/proposed
     + station=subway). Investigar el tagging real en OSM (pueden ser ways/relations o
     construction=station) y ampliar la consulta
+  - HECHO (03-sep): la consulta exigia `station=subway` en las obras, pero el esquema de
+    ciclo de vida de OSM (wiki Tag:railway=construction / Key:construction:) lo muda a
+    `construction=station` + `construction:station=subway` o al prefijo
+    `construction:railway=station`. Consulta ampliada a los 4 patrones; el filtro de red
+    (subway/Metro/Biotren) baja a `parsear` (puro) con contador `fuera_de_red` para lo
+    descartado (tranvia/EFE). parser 0.3.0, fixture y tests extendidos.
   - mientras tanto el factor_en_construccion esta ocioso y Recoleta/Cerrillos no reciben
     su catalizador — el sesgo es de SUBmedicion, no de invento
+  - queda: `recolectar-metro` en vivo local debe traer >0 en construccion; si sigue en 0,
+    las obras estan mapeadas como way/relation (se junta con T-922c)
 gate: make gates
 
 ## T-922c · 126 estaciones operativas vs ~143 reales del Metro
@@ -1497,7 +1505,13 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-931b · Evaluar la oferta NUEVA al "precio desde" — que compita en el informe
-estado: pendiente · agente: motor-financiero + geo-microzonas · fase: 2
+estado: hecha  # pendiente de confirmar con la corrida viva local (informe-semanal)
+agente: motor-financiero + geo-microzonas
+fase: 2
+resultado: microzonas_por_geo (equirectangular, misma comuna, tope 2,5 km, en memoria por
+  la limitacion FK de DuckDB) + nuevas_evaluadas_al_desde (motor real, tasa CON subsidio
+  por primera venta, DFL2 con m2 totales como aproximacion) + seccion 5 del informe
+  etiquetada HIPOTETICO, nunca mezclada con el ranking de usadas; descartes con motivo.
 depende_de: []
 contexto: el usuario pidio que el informe compare rentabilidad tambien en nuevas. Hoy no
   se puede honestamente: (a) los proyectos no tienen microzona asignada, y el §2.4 prohibe

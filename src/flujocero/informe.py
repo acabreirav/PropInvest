@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -151,6 +152,166 @@ def menores_desde_en_alcance(
     ]
 
 
+# ----------------------------------------------- T-931b · nuevas evaluadas al "desde"
+
+
+def microzonas_por_geo(conexion: Any, max_dist_m: float = 2500.0) -> dict[str, str]:
+    """proyecto_id → microzona_id por el centro de barrio más cercano EN LA MISMA comuna.
+
+    Solo los proyectos que publican coordenadas (Fundamenta y RVC las traen en su JSON-LD).
+    No se persiste: la FK de DuckDB veta el UPDATE de dim_proyecto con fact referenciando,
+    y es un derivado barato de recalcular donde se usa. Tope de distancia para no asignar
+    un barrio a un proyecto con geo mala: más lejos que `max_dist_m`, queda sin microzona
+    (ND) y se cuenta.
+    """
+    import math
+
+    proyectos = conexion.execute(
+        "SELECT proyecto_id, comuna_id, lat, lon FROM dim_proyecto "
+        "WHERE lat IS NOT NULL AND lon IS NOT NULL AND comuna_id IS NOT NULL"
+    ).fetchall()
+    centros = conexion.execute(
+        "SELECT microzona_id, comuna_id, centro_lat, centro_lon FROM dim_microzona "
+        "WHERE centro_lat IS NOT NULL AND centro_lon IS NOT NULL"
+    ).fetchall()
+    por_comuna: dict[str, list[tuple[str, float, float]]] = {}
+    for mid, cid, la, lo in centros:
+        por_comuna.setdefault(cid, []).append((mid, float(la), float(lo)))
+
+    salida: dict[str, str] = {}
+    for pid, cid, la, lo in proyectos:
+        mejor, mejor_d = None, None
+        for mid, cla, clo in por_comuna.get(cid, []):
+            dx = (float(lo) - clo) * 111_320.0 * math.cos(math.radians(float(la)))
+            dy = (float(la) - cla) * 110_540.0
+            d = (dx * dx + dy * dy) ** 0.5
+            if mejor_d is None or d < mejor_d:
+                mejor, mejor_d = mid, d
+        if mejor is not None and mejor_d is not None and mejor_d <= max_dist_m:
+            salida[pid] = mejor
+    return salida
+
+
+def _rango_de(m2: float, rangos: list[list[int]]) -> str | None:
+    for a, b in rangos:
+        if a <= m2 < b:
+            return f"{a}-{b}"
+    return None
+
+
+def nuevas_evaluadas_al_desde(
+    conexion: Any, p: Any, inv: Any, rangos: list[list[int]], top: int = 10
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """La oferta nueva pasada por el MISMO motor que las usadas — al precio "desde".
+
+    Es una evaluación HIPOTÉTICA y así se rotula: el "desde" es el piso del modelo, no el
+    precio de una unidad, y los m² totales aproximan los útiles. Lo que sí es igual de
+    real que en las usadas: el arriendo comparable (mediana de su microzona por geo, regla
+    §2.4 — jamás la comuna), la tasa CON subsidio (primera venta) y el DFL2 probable
+    (D-018). Todo lo que no se puede evaluar queda contado con su motivo, no desaparece.
+    """
+    from flujocero.finance.escenarios import escenario_base, evaluar_universo
+    from flujocero.finance.modelo import Unidad
+    from flujocero.sources.portal_comun import tipologia_de
+
+    mapa = microzonas_por_geo(conexion)
+    filas = conexion.execute(
+        """
+        SELECT v.unidad_key, v.numero_unidad, v.precio_uf, v.m2_totales, v.dormitorios,
+               v.banos, p.proyecto_id, p.nombre, p.comuna_id, p.estado
+        FROM fact_unidad_venta v
+        JOIN dim_proyecto p ON p.proyecto_id = v.proyecto_id
+        WHERE coalesce(v.precio_es_desde, FALSE) AND v.valid_to IS NULL
+          AND v.precio_uf IS NOT NULL
+        """
+    ).fetchall()
+
+    descartes = {"sin_geo": 0, "sin_m2": 0, "sin_tipologia": 0, "sin_celda": 0, "excluida": 0}
+    unidades: list[Unidad] = []
+    contexto: dict[str, dict[str, Any]] = {}
+    for clave, modelo, precio, m2, dorm, banos, pid, nombre, comuna, estado in filas:
+        microzona = mapa.get(pid)
+        if microzona is None:
+            descartes["sin_geo"] += 1
+            continue
+        if m2 is None:
+            descartes["sin_m2"] += 1
+            continue
+        tipologia = tipologia_de(dorm, banos)
+        if tipologia is None:
+            descartes["sin_tipologia"] += 1
+            continue
+        rango = _rango_de(float(m2), rangos)
+        celda = conexion.execute(
+            "SELECT arriendo_uf_mediana, n FROM agg_arriendo_microzona "
+            "WHERE microzona_id = ? AND tipologia = ? AND rango_m2 = ? AND n >= 8 "
+            "ORDER BY calculado_en DESC LIMIT 1",
+            (microzona, tipologia, rango),
+        ).fetchone()
+        if celda is None:
+            descartes["sin_celda"] += 1
+            continue
+        mediana, n = celda
+        unidades.append(
+            Unidad(
+                unidad_key=clave,
+                precio_uf=Decimal(str(precio)),
+                # aproximación DECLARADA: la oferta nueva publica m² totales
+                m2_utiles=Decimal(str(m2)),
+                tipologia=tipologia,
+                comuna_id=comuna or "",
+                microzona_id=microzona,
+                arriendo_mensual_uf=Decimal(str(mediana)),
+                arriendo_n_comparables=int(n),
+                acogida_dfl2=None,  # D-018 decide: probable si cabe en 140 m²
+                es_vivienda_nueva=True,  # primera venta → subsidio y FOGAES aplican
+            )
+        )
+        contexto[clave] = {
+            "proyecto": nombre,
+            "modelo": modelo,
+            "comuna": comuna or "(sin comuna)",
+            "microzona": microzona,
+            "estado": estado or "",
+            "n": int(n),
+        }
+
+    if not unidades:
+        return [], descartes
+
+    evals = evaluar_universo(unidades, escenario_base(p, inv), p, inv)
+    uf = float(p.d("macro.valor_uf_clp"))
+    salida: list[dict[str, Any]] = []
+    for u, ev in zip(unidades, evals, strict=True):
+        if ev.excluido:
+            descartes["excluida"] += 1
+            continue
+        ctx = contexto[u.unidad_key]
+        salida.append(
+            {
+                **ctx,
+                "precio_uf": float(u.precio_uf),
+                "m2": float(u.m2_utiles),
+                "arriendo_clp": int(float(u.arriendo_mensual_uf) * uf),
+                "tasa_pct": float(ev.tasa_aplicada),
+                "con_subsidio": bool(ev.subsidio_aplicado),
+                "flujo_clp": int(float(ev.btcf_mensual_uf) * uf),
+                "pie_cero": (
+                    "positivo al pie mínimo"
+                    if ev.pie_flujo_cero_real == 0
+                    else (
+                        f"{ev.pie_flujo_cero_real:.0%}"
+                        if ev.pie_flujo_cero_real is not None
+                        else "nunca"
+                    )
+                ),
+                "score": float(ev.score),
+            }
+        )
+    salida.sort(key=lambda f: -f["score"])
+    return salida[:top], descartes
+
+
 # ------------------------------------------------------------------------------- render
 
 
@@ -168,6 +329,8 @@ def render_html(
     menores_nuevas: list[dict[str, Any]],
     delta_texto: str,
     notas: list[str],
+    nuevas_evaluadas: list[dict[str, Any]] | None = None,
+    descartes_nuevas: dict[str, int] | None = None,
 ) -> str:
     entrantes = set(cambios.entraron)
 
@@ -268,6 +431,46 @@ def render_html(
             f"<th>Antes</th><th>Ahora</th><th>Var.</th></tr>{filas}</table>"
         )
 
+    def tabla_evaluadas() -> str:
+        filas_ev = nuevas_evaluadas or []
+        if not filas_ev:
+            motivo = ""
+            if descartes_nuevas:
+                partes_d = [f"{k.replace('_', ' ')}: {v}" for k, v in descartes_nuevas.items() if v]
+                motivo = " Motivos: " + ", ".join(partes_d) + "." if partes_d else ""
+            return f"<p>Ningún proyecto nuevo se pudo evaluar todavía.{escape(motivo)}</p>"
+        cuerpo_ev = ""
+        for f in filas_ev:
+            flujo = (
+                f"<b class='pos'>+${_f(f['flujo_clp'])}</b>"
+                if f["flujo_clp"] >= 0
+                else f"<b class='neg'>−${_f(-f['flujo_clp'])}</b>"
+            )
+            tasa = f"{f['tasa_pct']:.2%}" + (" ✓sub" if f["con_subsidio"] else "")
+            cuerpo_ev += (
+                f"<tr><td>{escape(str(f['proyecto']))}</td><td>{escape(str(f['modelo']))}</td>"
+                f"<td>{escape(str(f['microzona']))}</td>"
+                f"<td class='n'>UF {_f(f['precio_uf'])}</td><td class='n'>{f['m2']:.0f}</td>"
+                f"<td class='n'>${_f(f['arriendo_clp'])} <span class='mini'>(n={f['n']})</span></td>"
+                f"<td class='n'>{tasa}</td><td class='n'>{flujo}</td>"
+                f"<td class='n'>{escape(str(f['pie_cero']))}</td>"
+                f"<td class='n'>{f['score']:.1f}</td></tr>"
+            )
+        resumen_d = ""
+        if descartes_nuevas:
+            partes_d = [f"{k.replace('_', ' ')}: {v}" for k, v in descartes_nuevas.items() if v]
+            if partes_d:
+                resumen_d = (
+                    "<p class='nota'>No evaluables (contados, no borrados): "
+                    + escape(", ".join(partes_d))
+                    + ".</p>"
+                )
+        return (
+            "<table><tr><th>Proyecto</th><th>Modelo</th><th>Microzona</th><th>Desde</th>"
+            "<th>m²*</th><th>Arriendo est.</th><th>Tasa</th><th>Flujo/mes</th>"
+            f"<th>Pie flujo 0</th><th>Score</th></tr>{cuerpo_ev}</table>{resumen_d}"
+        )
+
     notas_html = "".join(f"<p class='nota'>{escape(n)}</p>" for n in notas)
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Flujo Cero {fecha}</title>
@@ -321,13 +524,22 @@ libres): a partir de la tercera, estos flujos ya no son los tuyos.</p>
 <h2>4 · Oferta NUEVA: bajas de "precio desde" esta semana (señal de compra)</h2>
 {tabla_bajas_nuevas()}
 
-<h2>5 · Oferta NUEVA: menores "desde" vigentes en comunas del alcance</h2>
+<h2>5 · Oferta NUEVA evaluada al "desde" — HIPOTÉTICO, mismo motor que las usadas</h2>
+{tabla_evaluadas()}
+<p class='nota'>Rotulado hipotético a propósito: el "desde" es el PISO del modelo (una
+unidad real del proyecto puede costar más) y los m²* son totales aproximando útiles.
+Lo que sí es real: el arriendo es la mediana de arriendos efectivos de su microzona
+(asignada por las coordenadas del proyecto, regla §2.4 — jamás la comuna), la tasa es
+la subsidiada cuando corresponde (primera venta, "✓sub") y el DFL2 va por D-018.
+Sirve para elegir a quién pedir cotización, no para ofertar.</p>
+
+<h2>6 · Oferta NUEVA: menores "desde" vigentes en comunas del alcance</h2>
 <table><tr><th>Proyecto</th><th>Comuna</th><th>Modelo</th><th>Dorm.</th><th>m²</th>
 <th>Desde</th><th>Estado</th></tr>{tabla_nuevas(menores_nuevas)}</table>
 <p class='nota'>"Desde" = el piso del modelo, no el precio de una unidad: estas filas NO
 compiten en el ranking (regla B1); son el radar para pedir cotización dirigida.</p>
 
-<h2>6 · Delta del mercado usado (corte {corte})</h2>
+<h2>7 · Delta del mercado usado (corte {corte})</h2>
 <pre>{escape(delta_texto)}</pre>
 {notas_html}
 </body></html>

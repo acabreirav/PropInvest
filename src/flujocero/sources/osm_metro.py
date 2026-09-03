@@ -22,7 +22,7 @@ from typing import Any
 from flujocero.sources.base import escribir_crudo
 
 SOURCE_ID = "osm_metro"
-PARSER_VERSION = "0.2.0"
+PARSER_VERSION = "0.3.0"
 # El endpoint principal devolvio HTTP 406 en la maquina real: el frontal de
 # overpass-api.de rechaza clientes sin User-Agent identificable (politica de uso de OSM).
 # Se manda identificacion honesta y, si un servidor igual rechaza, se prueba el siguiente
@@ -38,16 +38,23 @@ CABECERAS = {
 }
 
 # subway agarra Metro de Santiago; la red Biotren va por nombre porque es tren de
-# cercania, no subway. `railway=construction` + subway trae las estaciones de L7.
+# cercania, no subway. Las obras (L7, extension L6) NO llevan `station=subway`: el
+# esquema de ciclo de vida de OSM las etiqueta `railway=construction` +
+# `construction=station` (o el prefijo `construction:railway=station`), y la condicion
+# de subway se muda a `construction:station` — exigir `station=subway` ahi cosechaba 0.
+# Fuente: wiki.openstreetmap.org/wiki/Tag:railway=construction y Key:construction:.
+# La cosecha de obras va ancha y el filtro de red se hace en `parsear` (puro, testeable).
 CONSULTA = """
 [out:json][timeout:90];
 area["ISO3166-1"="CL"][admin_level=2]->.cl;
 (
   node(area.cl)[railway=station][station=subway];
   node(area.cl)[railway=station][network~"Biotr",i];
-  node(area.cl)[railway=construction][station=subway];
-  node(area.cl)[railway=proposed][station=subway];
-  node(area.cl)["construction:railway"="station"][station=subway];
+  node(area.cl)[railway~"^(construction|proposed)$"][station=subway];
+  node(area.cl)[railway=construction][construction=station];
+  node(area.cl)[railway=proposed][proposed=station];
+  node(area.cl)["construction:railway"="station"];
+  node(area.cl)["proposed:railway"="station"];
 );
 out body;
 """
@@ -68,6 +75,7 @@ class Estacion:
 class CosechaMetro:
     estaciones: list[Estacion] = field(default_factory=list)
     sin_nombre: int = 0
+    fuera_de_red: int = 0  # obras cosechadas que no son Metro ni Biotren (tranvia, EFE…)
     error: str | None = None
 
 
@@ -80,11 +88,32 @@ def _linea_de(tags: dict[str, str]) -> str | None:
     return limpio if limpio.startswith("l") else f"l{limpio}"
 
 
+def _es_de_red_objetivo(tags: dict[str, str]) -> bool:
+    """Metro (subway) o Biotren. Las obras declaran subway en el tag con prefijo de ciclo
+    de vida (`construction:station=subway`), no en `station` — por eso se miran los tres."""
+    if (
+        "subway"
+        in (
+            tags.get("station"),
+            tags.get("construction:station"),
+            tags.get("proposed:station"),
+        )
+        or tags.get("subway") == "yes"
+    ):
+        return True
+    red = f"{tags.get('network', '')} {tags.get('operator', '')}".lower()
+    return "metro de santiago" in red or "biotr" in red
+
+
 def parsear(cuerpo: dict[str, Any]) -> CosechaMetro:
     """Elementos Overpass -> estaciones. Puro: testeable contra fixture."""
     cosecha = CosechaMetro()
     for el in cuerpo.get("elements", []):
         tags = el.get("tags", {})
+        if not _es_de_red_objetivo(tags):
+            # la cosecha de obras va ancha (sin exigir subway); el filtro de red vive aca
+            cosecha.fuera_de_red += 1
+            continue
         nombre = tags.get("name")
         if not nombre:
             # un nodo de estacion sin nombre no sirve para auditar; se cuenta, no se inventa
@@ -93,6 +122,7 @@ def parsear(cuerpo: dict[str, Any]) -> CosechaMetro:
         en_construccion = (
             tags.get("railway") in ("construction", "proposed")
             or tags.get("construction:railway") == "station"
+            or tags.get("proposed:railway") == "station"
         )
         red = "biotren" if "biotr" in (tags.get("network") or "").lower() else "metro-santiago"
         cosecha.estaciones.append(

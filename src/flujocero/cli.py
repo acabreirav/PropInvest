@@ -781,9 +781,13 @@ def recolectar_portal(
         raise typer.Exit(2)
 
     con = duckdb.connect(str(db.crear()))
-    corrida = bitacora.abrir(col.id)
+    # Una corrida dirigida es CHICA por diseño (solo arriendo, solo donde falta): compararla
+    # contra la completa anterior disparaba el detector de parser roto del §7.1 con un
+    # "cayo 65%" que no era un parser roto. Cada modo compara contra su propia historia.
+    id_bitacora = f"{col.id}:dirigida" if dirigida else col.id
+    corrida = bitacora.abrir(id_bitacora)
     try:
-        anterior = bitacora.filas_de_la_ultima_corrida_exitosa(con, col.id)
+        anterior = bitacora.filas_de_la_ultima_corrida_exitosa(con, id_bitacora)
         docs = col.collect(lista, ops, max_paginas=paginas, tipo=tipo or None)
         corrida.docs_recolectados = len(docs)
         tarjetas = [t for d in docs for t in col.parse(d)]
@@ -1681,9 +1685,13 @@ def informe_semanal(
                 tenencia_clp=int(ev.costo_tenencia_mensual_uf * uf),
                 pie_pct=float(ev.pie_efectivo),
                 pie_cero=(
-                    f"{ev.pie_flujo_cero_real:.0%}"
-                    if ev.pie_flujo_cero_real is not None
-                    else "nunca"
+                    "positivo al pie mínimo"
+                    if ev.pie_flujo_cero_real == 0
+                    else (
+                        f"{ev.pie_flujo_cero_real:.0%}"
+                        if ev.pie_flujo_cero_real is not None
+                        else "nunca"
+                    )
                 ),
                 score=float(ev.score),
                 precio_clp=int(u.precio_uf * uf),
@@ -1702,6 +1710,10 @@ def informe_semanal(
         cambios = inf.comparar_top(inf._carpeta_snapshots(RAIZ), hoy, filas_top)
         bajas_nuevas = inf.bajas_oferta_nueva(con, corte)
         menores = inf.menores_desde_en_alcance(con, alcance.comunas)
+        # T-931b: la oferta nueva pasada por el MISMO motor, al "desde", rotulada hipotetica
+        evaluadas, desc_nuevas = inf.nuevas_evaluadas_al_desde(
+            con, p, inv, p.crudo("ingresos.rangos_m2")
+        )
         delta_texto = str(dl.comparar(con, corte))
     finally:
         con.close()
@@ -1718,6 +1730,8 @@ def informe_semanal(
         menores,
         delta_texto,
         notas,
+        nuevas_evaluadas=evaluadas,
+        descartes_nuevas=desc_nuevas,
     )
     destino = _Path(carpeta).expanduser() if carpeta else RAIZ / "data" / "informes"
     destino.mkdir(parents=True, exist_ok=True)
@@ -2150,6 +2164,10 @@ def recolectar_metro() -> None:
         typer.echo(f"    {red:<16} {estado:<13} {cuenta:>4}")
     if cosecha.sin_nombre:
         typer.echo(f"  {cosecha.sin_nombre} nodos sin nombre quedaron fuera (no auditables).")
+    if cosecha.fuera_de_red:
+        typer.echo(
+            f"  {cosecha.fuera_de_red} obras que no son Metro ni Biotren descartadas (tranvia/EFE)."
+        )
     typer.echo("\n  Ahora corre `puente-censo`: el catalizador se calcula ahi.")
 
 
