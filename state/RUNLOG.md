@@ -2577,3 +2577,20 @@ gates: VERDE
   Fundamenta publica coordenadas), sin_m2=12, sin_celda=65, excluida=7.
 - T-922b y T-931b quedan confirmadas. La palanca más grande para la sección de
   nuevas es geo-referenciar los 217 proyectos sin coordenadas (direccion → lat/lon).
+
+
+## 2026-09-03 · Cierre de hilos: automatización semanal validada + fase 3 viva
+
+- Tarea programada "FlujoCero-Semanal" registrada y probada de punta a punta: las 3
+  fases + wp-json + informe HTML→PDF (222 KB) + correo recibido. El NativeCommandError
+  de Edge en el log era de la copia previa al pull; el script actual lo silencia.
+- Fase 3 DESBLOQUEADA: probar-comunas detectó que con region_slug "bio-bio" el portal
+  ignoraba el filtro de comuna (las 5 del Gran Concepción devolvían los mismos 47
+  avisos); con "biobio" cada comuna responde avisos propios. La corrida semanal cargó
+  1.409 filas de fase 3; el re-run manual dio 0 filas nuevas (idempotencia §3.6 ok).
+- agregar-arriendo: 1.425 celdas, 207 con n>=8, 198 utilizables; La Serena ya entre
+  las más profundas (avenida-del-mar 2D2B n=62). Reconciliación: las comunas de fase 3
+  quedan SIN VERIFICAR por falta de benchmark en docs/00-hallazgos.md — alerta, no
+  rechazo; anotar benchmarks de Concepción/La Serena/Antofagasta es mejora pendiente.
+- Regla operativa acordada: una sola cosa escribe en la base a la vez; si "archivo en
+  uso", revisar primero si es la tarea semanal antes de matar procesos.
