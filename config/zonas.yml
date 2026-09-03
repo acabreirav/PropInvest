@@ -75,7 +75,10 @@ fase_2:
 fase_3:
   - ciudad: gran-concepcion
     region: biobio
-    region_slug: bio-bio          # verificado 31-ago-2026
+    # 03-sep-2026: con "bio-bio" el portal respondia 200 pero IGNORABA el filtro de
+    # comuna (las 5 comunas devolvian los mismos 47 avisos — probar-comunas lo detecto);
+    # Coquimbo y Antofagasta filtraban bien con sus slugs. Se prueba "biobio".
+    region_slug: biobio
     comunas: [concepcion, san-pedro-de-la-paz, talcahuano, chiguayante, hualpen]
     razon: "cap rate neto 4,0% vs 2,8% de Santiago (+120 pb con el mismo ticket). 82% de las ventas bajo UF 4.000. EL ÚNICO MERCADO DEL ALCANCE DONDE EL PIE DE EQUILIBRIO BAJA A ~32%"
     microzonas_prioritarias: [concepcion-centro, barrio-universitario]
