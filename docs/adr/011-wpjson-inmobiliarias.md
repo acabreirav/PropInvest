@@ -64,6 +64,31 @@ La sonda contra los otros dominios de Empresas Socovesa (detectados por el
   entrar al ranking. Además su theme no expone REST por proyecto (solo `pages/`). Queda
   anotado en `fuentes.yml`; se revisita solo si el alcance deja de estar atado al subsidio.
 
+## Adenda 03-sep-2026 (2) · Fundamenta e iarmas — el modo "directo"
+
+Sondas en vivo contra los dos primeros candidatos del scouting
+(`docs/scouting-wpjson-2026-09.md`):
+
+- **Fundamenta (`fundamenta.cl`): INCORPORADO — la fuente más rica hasta ahora.** Su
+  JSON-LD publica `ApartmentComplex` con **comuna (`addressLocality`) y coordenadas
+  (`GeoCoordinates`)** — van directo a `dim_proyecto.lat/lon` y habilitan el cruce con
+  microzonas — más `Product/AggregateOffer` con `lowPrice` en UF. Detalle real: el
+  `lowPrice` del LD (2600) diverge del "Desde: UF 2.253" del aside — **manda el aside**
+  (es el que actualizan con promociones); el LD queda de respaldo. REST operativo
+  (`categoria-entrega-inmediata`, `sector-departamento-en-*`). Tickets UF 2.110–3.905 en
+  Santiago, Ñuñoa, La Florida, Macul, Cerrillos. Sitemap lista PROYECTOS directamente.
+- **iarmas (`iarmas.cl`): INCORPORADO con comuna pendiente.** WordPress confirmado
+  (wp-sitemap, wp-json root) pero **sin `<link>` al registro REST por proyecto**: la
+  metadata legible a máquina no existe, así que `comuna_slug` queda ND por ahora (la
+  ficha muestra la dirección solo como texto/imagen — mejorar es tarea aparte). El precio
+  vive por planta (`p.planta-desde` + `span.planta-uf`, formato "UF990" sin espacio, con
+  duplicados de carrusel que se deduplican). Ticket mínimo observado: **UF 990** — el más
+  bajo del censo. El slug de modelo sale de la descripción de la planta ("Estudio"), con
+  la limitación declarada de que iarmas no expone un id estable.
+- Ambos requirieron un **modo nuevo del colector ("directo")**: su sitemap lista páginas
+  de proyecto, no de unidad, así que no hay cadena `parent` que escalar. `PERFILES` ahora
+  declara `modo` (cadena/directo), `filtro` de URLs y `parser` por theme.
+
 ## Límites conocidos
 
 - El catálogo de Socovesa es mayormente **casas** (Huechuraba, Chicureo, Chillán) y varias

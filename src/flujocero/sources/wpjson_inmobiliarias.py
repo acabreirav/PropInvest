@@ -41,7 +41,7 @@ from typing import Any
 
 from flujocero.sources import robots_check
 from flujocero.sources.base import escribir_crudo
-from flujocero.sources.portal_comun import tipologia_de
+from flujocero.sources.portal_comun import slug, tipologia_de
 
 SOURCE_ID = "wpjson_inmobiliarias"
 PARSER_VERSION = "wpjson_inmobiliarias/0.1.0"
@@ -69,6 +69,8 @@ class ProyectoWp:
     fetched_at: datetime
     raw_blob_path: str
     robots_snapshot_sha: str
+    lat: float | None = None  # Fundamenta publica GeoCoordinates en su JSON-LD
+    lon: float | None = None
 
 
 @dataclass(frozen=True)
@@ -101,8 +103,13 @@ class Cosecha:
 
 
 def uf_de(texto: str) -> Decimal | None:
-    """'3.390 UF' / 'UF 6.390' / '3.390,5' → Decimal. Punto de miles, coma decimal (es-CL)."""
-    m = re.search(r"(\d{1,3}(?:\.\d{3})*|\d+)(,\d+)?", texto)
+    """'3.390 UF' / 'UF 6.390' / '2600' / '3.390,5' → Decimal. Miles con punto, coma decimal.
+
+    La rama con puntos de miles va PRIMERO y exige al menos un grupo `.###`: si fuera
+    opcional, la alternancia cortaria '2600' en '260' (el lowPrice del JSON-LD de
+    Fundamenta viene sin separador y lo descubrio el test de fixture).
+    """
+    m = re.search(r"(\d{1,3}(?:\.\d{3})+|\d+)(,\d+)?", texto)
     if m is None:
         return None
     crudo = m.group(1).replace(".", "") + (m.group(2) or "").replace(",", ".")
@@ -134,8 +141,17 @@ def meta_de_rest(datos: dict[str, Any]) -> dict[str, Any]:
     clases = datos.get("class_list") or []
     por_prefijo: dict[str, str] = {}
     dormitorios = banos = None
+    prefijos = (
+        "ciudad-",
+        "comuna-",
+        "sector-departamento-en-",  # Fundamenta
+        "estado-",
+        "categoria-",  # Fundamenta: categoria-entrega-inmediata
+        "tipologia-",
+        "disponibilidad-",
+    )
     for clase in clases:
-        for prefijo in ("ciudad-", "comuna-", "estado-", "tipologia-", "disponibilidad-"):
+        for prefijo in prefijos:
             if clase.startswith(prefijo):
                 # la primera gana: no se ha visto más de una clase por taxonomía
                 por_prefijo.setdefault(prefijo, clase[len(prefijo) :])
@@ -151,8 +167,10 @@ def meta_de_rest(datos: dict[str, Any]) -> dict[str, Any]:
         "nombre": html_mod.unescape(titulo).strip(),
         "link": datos.get("link"),
         "parent": datos.get("parent") or 0,
-        "comuna_slug": por_prefijo.get("ciudad-") or por_prefijo.get("comuna-"),
-        "estado": por_prefijo.get("estado-"),
+        "comuna_slug": por_prefijo.get("ciudad-")
+        or por_prefijo.get("comuna-")
+        or por_prefijo.get("sector-departamento-en-"),
+        "estado": por_prefijo.get("estado-") or por_prefijo.get("categoria-"),
         "tipo_bien": por_prefijo.get("tipologia-"),
         "disponibilidad": por_prefijo.get("disponibilidad-"),
         "dormitorios": dormitorios,
@@ -250,16 +268,134 @@ def modelo_de_html_pilares(html: str, url_pagina: str) -> dict[str, Any]:
     }
 
 
-# Perfil por dominio: dónde vive el precio dentro de la jerarquía REST (parent-chain).
-#   raiz   → el precio está en la página del proyecto (Socovesa: bloques planta)
-#   modelo → cada modelo tiene su propia página con el precio (Pilares: 3 niveles
-#            unidad → modelo → proyecto)
+_MAPA_COMUNAS = {"santiago-centro": "santiago"}  # el portal usa 'santiago'
+
+
+def _slug_comuna(nombre: str | None) -> str | None:
+    if not nombre:
+        return None
+    s = slug(nombre)
+    return _MAPA_COMUNAS.get(s, s) or None
+
+
+def proyecto_de_ld(html: str) -> dict[str, Any]:
+    """El JSON-LD de Fundamenta: ApartmentComplex (nombre, comuna, geo) + AggregateOffer.
+
+    Fundamenta es la única fuente vista que publica la COMUNA y las COORDENADAS legibles
+    por máquina — el `addressLocality` y el `GeoCoordinates` van directo a dim_proyecto.
+    El precio aparece dos veces y pueden divergir: el `lowPrice` del JSON-LD y el
+    "Desde: UF X" del aside (`project-description-aside__price`). Manda el aside (es el
+    que la inmobiliaria actualiza con las promociones); el lowPrice queda de respaldo.
+    """
+    from selectolax.parser import HTMLParser
+
+    salida: dict[str, Any] = {
+        "nombre": None,
+        "comuna": None,
+        "lat": None,
+        "lon": None,
+        "precio_ld": None,
+        "precio_aside": None,
+    }
+    for bloque in RE_BLOQUE_LD.findall(html):
+        try:
+            ld = json.loads(bloque)
+        except ValueError:
+            continue
+        for nodo in ld.get("@graph", [ld]):
+            if not isinstance(nodo, dict):
+                continue
+            if nodo.get("@type") == "ApartmentComplex":
+                salida["nombre"] = nodo.get("name") or salida["nombre"]
+                direccion = nodo.get("address") or {}
+                salida["comuna"] = direccion.get("addressLocality") or salida["comuna"]
+                geo = nodo.get("geo") or {}
+                try:
+                    salida["lat"] = float(geo["latitude"])
+                    salida["lon"] = float(geo["longitude"])
+                except (KeyError, TypeError, ValueError):
+                    pass
+            if nodo.get("@type") == "Product":
+                oferta = nodo.get("offers") or {}
+                if oferta.get("priceCurrency") in ("UF", "CLF"):
+                    salida["precio_ld"] = uf_de(str(oferta.get("lowPrice", "")))
+    arbol = HTMLParser(html)
+    aside = arbol.css_first("p.project-description-aside__price")
+    if aside is not None:
+        salida["precio_aside"] = uf_de(aside.text())
+    return salida
+
+
+def modelos_de_html_iarmas(html: str, url_pagina: str) -> list[dict[str, Any]]:
+    """Las plantas del theme de iarmas: `p.planta-desde` con `span.planta-uf`.
+
+    La página repite cada planta en más de un bloque (carrusel/mobile): se deduplica por
+    (descripción, precio). El slug del modelo sale de la descripción ("Estudio",
+    "2 Dormitorios 2 Baños"), con un contador para descripciones repetidas — es estable
+    entre corridas mientras el orden de la página no cambie (limitación declarada:
+    iarmas no expone un id de planta).
+    """
+    from selectolax.parser import HTMLParser
+
+    arbol = HTMLParser(html)
+    vistos: set[tuple[str, str]] = set()
+    conteo_desc: dict[str, int] = {}
+    salida: list[dict[str, Any]] = []
+    for ancla in arbol.css("p.planta-desde"):
+        nodo_uf = ancla.css_first("span.planta-uf")
+        precio = uf_de(nodo_uf.text()) if nodo_uf is not None else None
+        contenedor = ancla
+        for _ in range(3):
+            padre = contenedor.parent
+            if padre is None:
+                break
+            contenedor = padre
+            if "planta-detalle" in (contenedor.attributes.get("class") or ""):
+                break
+        desc_nodo = contenedor.css_first("p.planta-descripcion")
+        desc = desc_nodo.text().strip() if desc_nodo is not None else ""
+        clave = (desc, str(precio))
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        if re.search(r"estudio", desc, re.I):
+            dormitorios: int | None = 0
+        else:
+            m_d = re.search(r"(\d+)\s*dormitorio", desc, re.I)
+            dormitorios = int(m_d.group(1)) if m_d else None
+        m_b = re.search(r"(\d+)\s*bañ", desc, re.I)
+        banos = int(m_b.group(1)) if m_b else None
+        base_slug = slug(desc) or "planta"
+        conteo_desc[base_slug] = conteo_desc.get(base_slug, 0) + 1
+        modelo_slug = (
+            base_slug if conteo_desc[base_slug] == 1 else f"{base_slug}-{conteo_desc[base_slug]}"
+        )
+        salida.append(
+            {
+                "modelo_slug": modelo_slug,
+                "precio_desde_uf": precio,
+                "m2_totales": None,  # iarmas no publica m² en el bloque de planta (ND)
+                "dormitorios": dormitorios,
+                "banos": banos,
+            }
+        )
+    return salida
+
+
+# Perfil por dominio. Dos modos:
+#   cadena  → el sitemap lista UNIDADES; se escala la cadena REST parent hasta el
+#             proyecto raíz, y precio_en dice qué página parsear (Socovesa/Pilares).
+#   directo → el sitemap lista PROYECTOS; cada URL es la página a parsear, con el
+#             parser propio del theme (Fundamenta: JSON-LD; iarmas: bloques planta).
+# `filtro` acota las URLs del sitemap que son de interés para ese dominio.
 # Un dominio sin perfil NO se recolecta: primero su sonda (probar-wpjson --volcar-ld)
 # y su entrada aquí, con fixture. Almagro queda fuera a propósito: tickets observados
 # UF 10.590–16.790, todos sobre el tope UF 6.000 del subsidio (ADR 011).
 PERFILES: dict[str, dict[str, Any]] = {
-    "socovesa.cl": {"precio_en": "raiz"},
-    "pilares.cl": {"precio_en": "modelo"},
+    "socovesa.cl": {"modo": "cadena", "precio_en": "raiz", "filtro": r"/nuestros-proyectos/.+/.+"},
+    "pilares.cl": {"modo": "cadena", "precio_en": "modelo", "filtro": r"/nuestros-proyectos/.+/.+"},
+    "fundamenta.cl": {"modo": "directo", "parser": "fundamenta", "filtro": r"/proyecto/[^/]+/?$"},
+    "iarmas.cl": {"modo": "directo", "parser": "iarmas", "filtro": r"/proyectos/[^/]+/?$"},
 }
 
 
@@ -344,26 +480,12 @@ def recolectar(
                 )
         if urls_unidad:
             break
-    urls_unidad = [u for u in urls_unidad if "/nuestros-proyectos/" in u]
-    cosecha.urls_unidad = len(urls_unidad)
-    if not urls_unidad:
-        cosecha.errores.append(f"{dominio}: el sitemap no lista páginas de proyecto")
+    filtro = re.compile(perfil["filtro"])
+    urls_interes = [u for u in urls_unidad if filtro.search(u)]
+    cosecha.urls_unidad = len(urls_interes)
+    if not urls_interes:
+        cosecha.errores.append(f"{dominio}: el sitemap no lista páginas que calcen con el perfil")
         return cosecha
-
-    # 2 · una unidad representante por RAMA (la URL sin su último segmento). En Socovesa
-    # la rama es el proyecto (…/<proyecto>/<unidad>); en Pilares es el modelo
-    # (…/<proyecto>/<modelo>/<unidad>). Agrupar por rama cubre ambas jerarquías.
-    representantes: dict[str, str] = {}
-    for u in urls_unidad:
-        rama = u.rstrip("/").rsplit("/", 1)[0]
-        # una rama con ≤3 barras es la seccion raiz del sitio (la pagina indice que
-        # algunos sitemaps tambien listan): no es una unidad, se salta
-        if rama.count("/") <= 3:
-            continue
-        representantes.setdefault(rama, u)
-    grupos = sorted(representantes.items())
-    if limite_proyectos is not None:
-        grupos = grupos[:limite_proyectos]
 
     # Un registro puede responder 200 con HTML en vez de JSON (proyecto en borrador
     # que redirige a una pagina de error, y follow_redirects la sigue). No es JSON
@@ -384,6 +506,108 @@ def recolectar(
             return None
         datos = _json_o_nada(doc)
         return None if datos is None else (doc, datos)
+
+    # ---- modo "directo": el sitemap ya lista las paginas de PROYECTO (Fundamenta, iarmas)
+    if perfil["modo"] == "directo":
+        seleccion = sorted(set(urls_interes))
+        if limite_proyectos is not None:
+            seleccion = seleccion[:limite_proyectos]
+        for url in seleccion:
+            slug_p = url.rstrip("/").rsplit("/", 1)[-1]
+            doc_html = pedir(url, f"{dom}_proyecto_{slug_p}")
+            if doc_html is None:
+                continue
+            html_pagina = doc_html.contenido.decode("utf-8", errors="replace")
+            meta_rest: dict[str, Any] = {}
+            rid = rest_id_de(html_pagina)
+            if rid:  # iarmas no declara el registro REST; Fundamenta si
+                par = _rest(rid)
+                if par is not None:
+                    meta_rest = meta_de_rest(par[1])
+            procedencia = {
+                "url": url,
+                "fetched_at": doc_html.fetched_at,
+                "raw_blob_path": str(doc_html.ruta),
+                "robots_snapshot_sha": doc_html.robots_snapshot_sha,
+            }
+            if perfil["parser"] == "fundamenta":
+                info = proyecto_de_ld(html_pagina)
+                cosecha.proyectos.append(
+                    ProyectoWp(
+                        dominio=dominio,
+                        proyecto_slug=slug_p,
+                        nombre=info["nombre"] or meta_rest.get("nombre") or slug_p,
+                        comuna_slug=_slug_comuna(info["comuna"]) or meta_rest.get("comuna_slug"),
+                        estado=meta_rest.get("estado"),
+                        tipo_bien=meta_rest.get("tipo_bien"),
+                        lat=info["lat"],
+                        lon=info["lon"],
+                        **procedencia,
+                    )
+                )
+                cosecha.modelos.append(
+                    ModeloWp(
+                        dominio=dominio,
+                        proyecto_slug=slug_p,
+                        modelo_slug="desde",  # Fundamenta publica un solo "desde" por proyecto
+                        precio_desde_uf=info["precio_aside"] or info["precio_ld"],
+                        m2_totales=None,
+                        dormitorios=None,
+                        banos=None,
+                        **procedencia,
+                    )
+                )
+            else:  # iarmas
+                m_titulo = re.search(r"<title>(.*?)</title>", html_pagina, re.S)
+                nombre = (
+                    html_mod.unescape(m_titulo.group(1)).split("|")[0].split("–")[0].strip()
+                    if m_titulo
+                    else slug_p
+                )
+                cosecha.proyectos.append(
+                    ProyectoWp(
+                        dominio=dominio,
+                        proyecto_slug=slug_p,
+                        nombre=nombre or slug_p,
+                        comuna_slug=meta_rest.get("comuna_slug"),  # iarmas: ND por ahora
+                        estado="entrega-inmediata"
+                        if re.search(r"Entrega Inmediata", html_pagina)
+                        else None,
+                        tipo_bien=meta_rest.get("tipo_bien"),
+                        **procedencia,
+                    )
+                )
+                for m in modelos_de_html_iarmas(html_pagina, url):
+                    cosecha.modelos.append(
+                        ModeloWp(
+                            dominio=dominio,
+                            proyecto_slug=slug_p,
+                            modelo_slug=m["modelo_slug"],
+                            precio_desde_uf=m["precio_desde_uf"],
+                            m2_totales=m["m2_totales"],
+                            dormitorios=m["dormitorios"],
+                            banos=m["banos"],
+                            **procedencia,
+                        )
+                    )
+        return cosecha
+
+    urls_unidad = urls_interes
+
+    # 2 · una unidad representante por RAMA (la URL sin su último segmento). En Socovesa
+    # la rama es el proyecto (…/<proyecto>/<unidad>); en Pilares es el modelo
+    # (…/<proyecto>/<modelo>/<unidad>). Agrupar por rama cubre ambas jerarquías.
+    representantes: dict[str, str] = {}
+    for u in urls_unidad:
+        rama = u.rstrip("/").rsplit("/", 1)[0]
+        # una rama con ≤3 barras es la seccion raiz del sitio (la pagina indice que
+        # algunos sitemaps tambien listan): no es una unidad, se salta
+        if rama.count("/") <= 3:
+            continue
+        representantes.setdefault(rama, u)
+    grupos = sorted(representantes.items())
+    if limite_proyectos is not None:
+        grupos = grupos[:limite_proyectos]
 
     nodos_vistos: set[int] = set()
     raices_registradas: set[int] = set()
@@ -546,13 +770,16 @@ def cargar(conexion: Any, cosecha: Cosecha) -> dict[str, int]:
                 continue
             conexion.execute(
                 "UPDATE dim_proyecto SET nombre = ?, estado = ?, "
-                "comuna_id = coalesce(?, comuna_id), source_url = ?, fetched_at = ?, "
+                "comuna_id = coalesce(?, comuna_id), lat = coalesce(?, lat), "
+                "lon = coalesce(?, lon), source_url = ?, fetched_at = ?, "
                 "parser_version = ?, raw_blob_path = ?, robots_snapshot_sha = ? "
                 "WHERE proyecto_id = ?",
                 (
                     p.nombre,
                     p.estado,
                     p.comuna_slug,
+                    p.lat,
+                    p.lon,
                     p.url,
                     p.fetched_at,
                     PARSER_VERSION,
@@ -564,14 +791,17 @@ def cargar(conexion: Any, cosecha: Cosecha) -> dict[str, int]:
         else:
             conexion.execute(
                 "INSERT INTO dim_proyecto (proyecto_id, nombre, inmobiliaria, comuna_id, "
-                "estado, source_id, source_url, fetched_at, parser_version, raw_blob_path, "
-                "robots_snapshot_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "estado, lat, lon, source_id, source_url, fetched_at, parser_version, "
+                "raw_blob_path, robots_snapshot_sha) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     proyecto_id,
                     p.nombre,
                     p.dominio,
                     p.comuna_slug,
                     p.estado,
+                    p.lat,
+                    p.lon,
                     SOURCE_ID,
                     p.url,
                     p.fetched_at,
@@ -700,4 +930,18 @@ def selftest_fixture(carpeta: Path | None = None) -> tuple[bool, list[str]]:
         fallas.append("fixture pilares REST: no extrajo comuna-la-florida")
     if meta_p["dormitorios"] != 1 or meta_p["banos"] != 1:
         fallas.append("fixture pilares REST: no extrajo dormitorios/banos de los tags")
+
+    # perfil "directo" / Fundamenta: JSON-LD con comuna, geo y precio
+    html_f = (carpeta / "fundamenta_proyecto.html").read_text(encoding="utf-8")
+    info_f = proyecto_de_ld(html_f)
+    if info_f["precio_aside"] != Decimal("2253") or info_f["precio_ld"] != Decimal("2600"):
+        fallas.append("fixture fundamenta: precios aside/LD incorrectos")
+    if _slug_comuna(info_f["comuna"]) != "santiago" or info_f["lat"] is None:
+        fallas.append("fixture fundamenta: comuna o geo no extraidas")
+
+    # perfil "directo" / iarmas: plantas en HTML con deduplicacion
+    html_i = (carpeta / "iarmas_proyecto.html").read_text(encoding="utf-8")
+    modelos_i = modelos_de_html_iarmas(html_i, "https://www.iarmas.cl/proyectos/x/")
+    if len(modelos_i) != 2 or modelos_i[0]["precio_desde_uf"] != Decimal("990"):
+        fallas.append(f"fixture iarmas: se esperaban 2 plantas (UF990 primero), salio {modelos_i}")
     return (not fallas, fallas)

@@ -90,6 +90,35 @@ def test_meta_pilares_lee_comuna_estado_y_tags() -> None:
     assert meta["parent"] == 126752
 
 
+def test_fundamenta_ld_extrae_comuna_geo_y_prefiere_el_aside() -> None:
+    html = (FIXTURES / "fundamenta_proyecto.html").read_text(encoding="utf-8")
+    info = wp.proyecto_de_ld(html)
+    assert info["nombre"] == "Proyecto Eco Arauco"
+    assert info["comuna"] == "Santiago Centro"
+    assert wp._slug_comuna(info["comuna"]) == "santiago"
+    assert info["lat"] == pytest.approx(-33.4589)
+    assert info["lon"] == pytest.approx(-70.6350)
+    # divergencia real observada: el lowPrice del LD (2600) esta desactualizado
+    # frente al aside (2.253) — manda el aside
+    assert info["precio_ld"] == D("2600")
+    assert info["precio_aside"] == D("2253")
+
+
+def test_iarmas_plantas_deduplica_y_lee_uf_pegado() -> None:
+    html = (FIXTURES / "iarmas_proyecto.html").read_text(encoding="utf-8")
+    modelos = wp.modelos_de_html_iarmas(html, "https://www.iarmas.cl/proyectos/constantino-141/")
+    # tres bloques en la pagina, pero el tercero es la copia del carrusel: quedan 2
+    assert len(modelos) == 2
+    estudio, un_dorm = modelos
+    assert estudio["modelo_slug"] == "estudio"
+    assert estudio["precio_desde_uf"] == D("990")  # "UF990" sin espacio
+    assert estudio["dormitorios"] == 0
+    assert un_dorm["precio_desde_uf"] == D("1290")
+    assert un_dorm["dormitorios"] == 1
+    assert un_dorm["banos"] == 1
+    assert all(m["m2_totales"] is None for m in modelos)  # iarmas no publica m²: ND
+
+
 def test_selftest_fixture_verde() -> None:
     ok, fallas = wp.selftest_fixture(FIXTURES)
     assert ok, fallas

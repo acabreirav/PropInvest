@@ -1,0 +1,35 @@
+<!-- Fixture reconstruida de la pagina real iarmas.cl/proyectos/constantino-141/
+     (corrida en vivo probar-wpjson - -volcar-ld del 03-sep-2026). Bloques planta
+     verbatim: precios UF990 (sin espacio) y UF 1.290, descripcion "Estudio"; el
+     duplicado del carrusel esta a proposito para probar la deduplicacion. -->
+<html><head><title>Constantino 141 | Inmobiliaria Armas</title>
+<link rel="https://api.w.org/" href="https://www.iarmas.cl/wp-json/" />
+</head><body>
+<section>
+  <div class="precio"> Desde <b class="uf">UF990</b><br> Entrega Inmediata </div>
+</section>
+<div class="planta-detalle">
+  <div class="barra-precio">
+    <p class="planta-desde">Desde <br> <span class="planta-uf">UF 990</span> </p>
+    <a href="#" class="planta-ver cotizar btn btn-armas-amarillo">Cotizar</a>
+  </div>
+  <div> <p class="planta-descripcion">Estudio</p> </div>
+</div>
+<div class="planta-detalle">
+  <div class="barra-precio">
+    <p class="planta-desde">Desde <br> <span class="planta-uf">UF 1.290</span> </p>
+    <a href="#" class="planta-ver cotizar btn btn-armas-amarillo">Cotizar</a>
+  </div>
+  <div> <p class="planta-descripcion">1 Dormitorio 1 Baño</p> </div>
+</div>
+<!-- copia mobile/carrusel del mismo estudio: el parser debe deduplicarla -->
+<div class="planta-detalle">
+  <div class="planta-desde-container">
+    <p class="planta-desde">Desde <br> <span class="planta-uf">UF990</span> </p>
+  </div>
+  <p class="planta-descripcion">Estudio</p>
+</div>
+<div class="smallprint">
+  <p><sup>1</sup> Valores no incluyen estacionamiento ni bodega.</p>
+</div>
+</body></html>

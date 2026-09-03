@@ -271,7 +271,7 @@ fuentes:
     capa: 3
     legal_tier: html_permitido
     enabled: true
-    dominios: [socovesa.cl, pilares.cl]   # perfiles en sources/wpjson_inmobiliarias.PERFILES
+    dominios: [socovesa.cl, pilares.cl, fundamenta.cl, iarmas.cl]   # perfiles en sources/wpjson_inmobiliarias.PERFILES
     descartado_por_ahora:
       almagro.cl: "sondeado 03-sep-2026: precios desde UF 10.590–16.790, sobre el tope UF 6.000 del subsidio — ningún proyecto puede rankear"
     cadencia: semanal
