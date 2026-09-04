@@ -156,7 +156,8 @@ criterio_de_aceptacion:
   - ≥1.500 avisos de arriendo con microzona y tipología normalizada
 
 ## T-022 · Colector Assetplan (arriendo efectivo + vacancia)
-estado: pendiente · agente: colector · fase: 1 · depende_de: [T-002]
+estado: superseded  # esta entrada es la ORIGINAL; el estado vivo es la tercera entrada
+  # T-022 de este archivo (bloqueada esperando la medicion --render, ADR 008)
 paraleliza_con: [T-020, T-021]
 criterio_de_aceptacion:
   - 175 edificios desde `edificios.xml`, unidades por tipología (requiere JS render — justificarlo)
@@ -721,7 +722,7 @@ criterio_de_aceptacion:
   - [x] Detecta JSON-LD y estado de app embebido, que evitan parsear HTML
 
 ## T-022 · Colector Assetplan (arriendo efectivo + vacancia)
-estado: en_curso · agente: colector · fase: 1 · depende_de: [T-936]
+estado: superseded  # segunda entrada; el estado vivo es la tercera (bloqueada, ADR 008)
 PRIORIDAD ALTA, y por dos razones a la vez:
   1. Publica **arriendo EFECTIVO**, no precio pedido. Hoy el yield se calcula sobre una
      aspiracion y probablemente sea optimista.
@@ -907,7 +908,8 @@ criterio_de_aceptacion:
 
 
 ## T-042 · El §7.1 aplicado a la tabla, no a una muestra de 5 documentos
-estado: hecha
+estado: hecha  # OJO numeracion: este numero tambien lo usa "Backtest del score" (fase 3);
+  # aquella deberia renumerarse a T-942b si alguna vez se toma
 agente: auditor-datos
 fase: 2
 gate: make gates
@@ -1502,7 +1504,9 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-925c · Precios de proyectos nuevos via wp-json / JSON-LD de inmobiliarias
-estado: en_curso  # colector construido (ADR 011); falta la corrida viva local y sumar dominios
+estado: hecha  # 04-sep: 6 dominios en produccion (Socovesa, Pilares, Fundamenta, iarmas,
+  # RVC, Ingevec) corriendo en la semanal — 346 modelos vigentes UF 990-6.990, con geo,
+  # direccion y m2 de pagina (0.3.0). Sumar dominios nuevos = sondas del scouting, tarea aparte
 agente: colector
 fase: 2
 depende_de: []
