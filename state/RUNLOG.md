@@ -2800,3 +2800,15 @@ gates: VERDE
   Fundamenta/RVC congeladas cuyo lat/lon nunca aterrizo en el dim.
 - 5 tests nuevos (19 verdes en el modulo), fixture de Ingevec extendida con los
   patrones reales. gates: VERDE.
+
+
+## 2026-09-04 · El refresco SCD completa los ND — el ultimo tapon del m² de Ingevec
+
+- Corrida viva del re-censo: las coordenadas de pagina aterrizaron (sin_geo 170→158,
+  Nominatim quedo con solo 4 candidatos sin resolver) pero sin_m2 NO bajo: los 20 de
+  Ingevec salieron como "refrescos" (mismo precio) y ese camino solo actualizaba
+  procedencia — el m² medido llegaba hasta la puerta y no entraba.
+- Fix: el refresco ahora COMPLETA los campos que estaban NULL cuando la captura los
+  trae (m2/dormitorios/banos/tipologia via COALESCE). No es version nueva (el precio
+  no cambio) ni imputacion (es la medicion llegando tarde); lo ya poblado jamas se
+  pisa. Test con las tres fases (ND→completa→no pisa). gates: VERDE.

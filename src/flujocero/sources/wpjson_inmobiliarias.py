@@ -1168,11 +1168,30 @@ def cargar(conexion: Any, cosecha: Cosecha) -> dict[str, int]:
             contadores["fuera_de_orden"] += 1
             continue
         if vigente is not None and vigente[1] == m.precio_desde_uf:
+            # Refresco de procedencia Y COMPLETADO de ND: si la fila vigente no tenia
+            # m2/dormitorios/banos y esta captura los trae (un parser nuevo los aprendio,
+            # p.ej. el rango de m2 de Ingevec en 0.3.0), se rellenan. No es una version
+            # nueva —el precio no cambio— y completar un NULL con dato medido no es
+            # imputar: es la medicion llegando tarde. Lo ya poblado NO se pisa (COALESCE).
             conexion.execute(
                 "UPDATE fact_unidad_venta SET fetched_at = ?, source_url = ?, "
-                "raw_blob_path = ?, robots_snapshot_sha = ? "
+                "raw_blob_path = ?, robots_snapshot_sha = ?, "
+                "m2_totales = COALESCE(m2_totales, ?), "
+                "dormitorios = COALESCE(dormitorios, ?), "
+                "banos = COALESCE(banos, ?), "
+                "tipologia = COALESCE(tipologia, ?) "
                 "WHERE unidad_key = ? AND valid_to IS NULL",
-                (m.fetched_at, m.url, m.raw_blob_path, m.robots_snapshot_sha, clave),
+                (
+                    m.fetched_at,
+                    m.url,
+                    m.raw_blob_path,
+                    m.robots_snapshot_sha,
+                    float(m.m2_totales) if m.m2_totales is not None else None,
+                    m.dormitorios,
+                    m.banos,
+                    tipologia_de(m.dormitorios, m.banos),
+                    clave,
+                ),
             )
             contadores["refrescos"] += 1
             continue

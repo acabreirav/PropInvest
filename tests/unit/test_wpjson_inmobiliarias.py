@@ -340,3 +340,54 @@ def test_cargar_pone_la_geo_de_pagina_en_geo_proyecto_aunque_el_dim_este_congela
     p2 = wp.ProyectoWp(**{**p.__dict__, "lat": -33.51})
     wp.cargar(con, wp.Cosecha(proyectos=[p2], modelos=[m]))
     assert con.execute("SELECT lat FROM geo_proyecto").fetchone()[0] == -33.51
+
+
+def test_el_refresco_completa_los_nd_sin_pisar_lo_poblado() -> None:
+    """Un refresco (mismo precio) debe RELLENAR m2/dorms/banos que estaban NULL cuando
+    la captura nueva los trae — la medicion llegando tarde no es imputacion — y jamas
+    pisar un valor ya poblado."""
+    import duckdb
+
+    from flujocero import db as fdb
+
+    con = duckdb.connect(":memory:")
+    fdb.aplicar_esquema(con)
+    ahora = datetime(2026, 9, 4, tzinfo=UTC)
+    proc = dict(url="https://x.cl/m", fetched_at=ahora, raw_blob_path="r", robots_snapshot_sha="s")
+
+    def modelo(m2, dorms):
+        return wp.ModeloWp(
+            dominio="x.cl",
+            proyecto_slug="p1",
+            modelo_slug="desde",
+            precio_desde_uf=D("3000"),
+            m2_totales=m2,
+            dormitorios=dorms,
+            banos=None,
+            **proc,
+        )
+
+    p = wp.ProyectoWp(
+        dominio="x.cl",
+        proyecto_slug="p1",
+        nombre="P1",
+        comuna_slug="nunoa",
+        estado=None,
+        tipo_bien=None,
+        **proc,
+    )
+    # primera carga: sin m2 (el parser viejo no lo sabia)
+    wp.cargar(con, wp.Cosecha(proyectos=[p], modelos=[modelo(None, None)]))
+    # segunda carga, MISMO precio, ahora con m2 y dormitorios: refresco que completa
+    r = wp.cargar(con, wp.Cosecha(proyectos=[p], modelos=[modelo(D("33.51"), 1)]))
+    assert r["refrescos"] == 1 and r["versiones_nuevas"] == 0
+    fila = con.execute(
+        "SELECT m2_totales, dormitorios FROM fact_unidad_venta WHERE valid_to IS NULL"
+    ).fetchone()
+    assert float(fila[0]) == 33.51 and fila[1] == 1
+    # tercera carga con OTRO m2: lo poblado no se pisa
+    wp.cargar(con, wp.Cosecha(proyectos=[p], modelos=[modelo(D("99"), 3)]))
+    fila = con.execute(
+        "SELECT m2_totales, dormitorios FROM fact_unidad_venta WHERE valid_to IS NULL"
+    ).fetchone()
+    assert float(fila[0]) == 33.51 and fila[1] == 1
