@@ -2812,3 +2812,16 @@ gates: VERDE
   trae (m2/dormitorios/banos/tipologia via COALESCE). No es version nueva (el precio
   no cambio) ni imputacion (es la medicion llegando tarde); lo ya poblado jamas se
   pisa. Test con las tres fases (ND→completa→no pisa). gates: VERDE.
+
+
+## 2026-09-04 · T-931d confirmada en vivo — el embudo de nuevas, antes y despues
+
+- El refresco-que-completa funciono: sin_m2 43→24 (los 19 m² de Ingevec entraron).
+  Embudo del dia completo: sin_geo 217→158 (lo restante es mayormente fuera del
+  alcance), sin_m2 →24, y aparecio el contador honesto sin_tipologia=19: Ingevec
+  publica "1 y 2 dormitorios" como RANGO del proyecto, no la tipologia de la unidad
+  desde. DECISION: queda ND a proposito — asignar "la tipologia mas chica" apilaria
+  un tercer supuesto sobre precio-piso y m²-piso (la leccion del verificador D-018).
+- La palanca restante del embudo es sin_celda=68: comparables de arriendo n>=8 en las
+  microzonas de esos proyectos — trabajo de la recoleccion dirigida semanal, no de
+  parsers. T-931d cerrada de verdad.
