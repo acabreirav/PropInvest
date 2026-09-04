@@ -35,22 +35,30 @@ if not dias:
 ultimo = dias[-1]
 print(f"escaneando: {ultimo} ({len(list(ultimo.glob('*.gz')))} blobs)\n")
 
+# Solo paginas de PROYECTO: la primera corrida muestreo el blog y la portada de
+# Ingevec (0 coincidencias triviales). El nombre del blob delata la pagina.
+FILTRO_PROYECTO = {
+    "ingevec": re.compile(r"ingevec.*proyecto-"),
+    "socovesa": re.compile(r"socovesa(?!.*(casa-\d|depto-|bodega|estacionamiento|blog))"),
+    "pilares": re.compile(r"pilares(?!.*(depto-|oficina|casa-|bodega|estacionamiento|blog))"),
+    "fundamenta": re.compile(r"fundamenta.*(proyecto|eco-)"),
+}
 por_dominio: dict[str, list[Path]] = defaultdict(list)
 for ruta in sorted(ultimo.glob("*.gz")):
-    try:
-        contenido = gzip.open(ruta, "rb").read().decode("utf-8", errors="replace")
-    except OSError:
-        continue
-    if "<html" not in contenido.lower() and "<!doctype" not in contenido.lower():
-        continue
-    for dom in ("ingevec", "socovesa", "pilares", "fundamenta", "iarmas", "rvc"):
-        if dom in contenido.lower()[:6000] or dom in ruta.name.lower():
-            por_dominio[dom].append(ruta)
+    nombre = ruta.name.lower()
+    for dom, filtro in FILTRO_PROYECTO.items():
+        if dom in nombre and filtro.search(nombre):
+            try:
+                contenido = gzip.open(ruta, "rb").read().decode("utf-8", errors="replace")
+            except OSError:
+                break
+            if "<html" in contenido.lower() or "<!doctype" in contenido.lower():
+                por_dominio[dom].append(ruta)
             break
 
-# --- Ingevec: ¿donde estan los m²? (2 paginas de muestra bastan)
-print("== INGEVEC · patrones de m² (2 páginas de muestra) ==")
-for ruta in por_dominio.get("ingevec", [])[:2]:
+# --- Ingevec: ¿donde estan los m²?
+print(f"== INGEVEC · patrones de m² ({len(por_dominio.get('ingevec', []))} páginas de proyecto) ==")
+for ruta in por_dominio.get("ingevec", [])[:4]:
     html = gzip.open(ruta, "rb").read().decode("utf-8", errors="replace")
     # quitar scripts para no matchear JSON interno
     limpio = re.sub(r"<script.*?</script>", " ", html, flags=re.S)
@@ -76,7 +84,7 @@ for ruta in por_dominio.get("ingevec", [])[:2]:
 # --- Socovesa y Pilares: ¿publican direccion en alguna parte?
 for dom in ("socovesa", "pilares"):
     print(f"\n== {dom.upper()} · patrones de dirección (2 páginas de muestra) ==")
-    for ruta in por_dominio.get(dom, [])[:2]:
+    for ruta in por_dominio.get(dom, [])[:3]:
         html = gzip.open(ruta, "rb").read().decode("utf-8", errors="replace")
         limpio = re.sub(r"<script.*?</script>", " ", html, flags=re.S)
         vistos = []

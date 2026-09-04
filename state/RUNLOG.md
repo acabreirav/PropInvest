@@ -2766,3 +2766,18 @@ gates: VERDE
   Ingevec y de direccion en Socovesa/Pilares — para escribir el parser contra dato
   medido, no adivinado.
 - gates: VERDE.
+
+
+## 2026-09-04 · T-924 medida sobre la base real — sugerente, no concluyente
+
+- cli micro-unidades sobre 11.287 avisos activos y 2.416 unidades de la foto de mayo:
+  premio de renta confirmado (<25 m2: 0,477 UF/m2, +40% vs 50-70: 0,340); GGCC/m2 +8%
+  en 25-35 vs grandes (n chico: 10-30 avisos con GGCC); recortes de precio en 4 meses:
+  8,0% en <25 vs 1,6-2,1% en el resto (n=25 — dos casos); % no-vistas plano (92-96%).
+- Colocacion NO medible: el colector del portal no captura publicado_en/dias_en_mercado
+  → T-924b abierta (capturarla, o derivar cota inferior desde valid_from del SCD).
+- Decision §8.4 propuesta al usuario: mantener la advertencia del top tal cual, NO
+  agregar componente de score con esta evidencia, re-medir cuando T-924b junte fechas.
+- Sonda T-931d corregida: muestreaba el blog y la portada; ahora filtra a paginas de
+  PROYECTO. Hallazgo de la primera pasada: los proyectos de Pilares se LLAMAN como su
+  direccion ("Conde del Maule 4236") — por eso algunos ya geocodifican por nombre.

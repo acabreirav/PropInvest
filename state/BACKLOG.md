@@ -609,9 +609,12 @@ nota: >
   sesgada. Correccion entregada.
 
 ## T-924 · El ranking premia micro-unidades y no mide su riesgo
-estado: en_curso  # 04-sep: medicion construida (cli micro-unidades) — edad de aviso de
-  # arriendo, GGCC/m2 por aviso (dato V del portal) y % no-vistas de la foto de mayo,
-  # todo por tramo de m2. Falta correrla sobre la base real y decidir (§8.4)
+estado: en_curso  # 04-sep: MEDIDO sobre la base real (cli micro-unidades). Resultado:
+  # premio de renta confirmado (<25 m2 = 0,477 UF/m2, +40% vs 50-70); GGCC/m2 +8% en
+  # 25-35 (n=10-30); recortes de precio 8% en <25 vs ~2% resto (pero n=25); salida
+  # plana; colocacion NO MEDIBLE (falta publicado_en -> T-924b). Evidencia sugerente,
+  # no concluyente: se mantiene la advertencia del top, SIN componente de score aun.
+  # Re-medir cuando T-924b junte fecha de publicacion y el GGCC junte n
 agente: motor-financiero · fase: 2 · depende_de: [T-014]
 hallazgo: >
   Un tercio del top esta bajo 35 m2 (mediana 40 m2 en el top 15). El §13.3 advierte exactamente
@@ -1611,4 +1614,19 @@ criterio_de_aceptacion:
   - buscar dirección en otra superficie de Socovesa/Pilares (ficha del proyecto,
     texto "Ubicación") — o documentar que no existe
   - las nuevas evaluadas del informe suben de 10 de forma medible
+gate: make gates
+
+## T-924b · Capturar la fecha de publicacion de los avisos del portal
+estado: pendiente
+agente: colector
+fase: 2
+depende_de: [T-924]
+contexto: la medicion de T-924 dejo la COLOCACION (edad del aviso de arriendo, el proxy
+  mas directo de vacancia por tamano) en ND total — el colector no captura publicado_en
+  ni dias_en_mercado aunque el esquema tiene ambas columnas.
+criterio_de_aceptacion:
+  - sondear si las tarjetas _Desde_ o la ficha traen "publicado hace N dias" u otra fecha
+  - si existe: capturarla con procedencia; si no existe en la ruta permitida, documentarlo
+    y derivar la edad desde la PRIMERA captura propia (valid_from del SCD: cota inferior
+    honesta que mejora sola con las semanas)
 gate: make gates
