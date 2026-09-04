@@ -2781,3 +2781,22 @@ gates: VERDE
 - Sonda T-931d corregida: muestreaba el blog y la portada; ahora filtra a paginas de
   PROYECTO. Hallazgo de la primera pasada: los proyectos de Pilares se LLAMAN como su
   direccion ("Conde del Maule 4236") — por eso algunos ya geocodifican por nombre.
+
+
+## 2026-09-04 · T-931d implementada contra los patrones de la sonda (parser 0.3.0)
+
+- La sonda corregida midio ORO: Ingevec publica el rango de m2 ("desde 33,51 | hasta
+  54,25 m²") y las COORDENADAS del proyecto en el embed de Google Maps (!2d lon !3d lat);
+  Socovesa publica la direccion en icon-direccion ("Nelson 2040, Ñuñoa") + link Waze
+  (ll=lat,lon); Pilares la trae en paginas de modelo (y sus proyectos suelen llamarse
+  como su direccion).
+- Implementado: geo_de_html / direccion_de_html / rango_m2_de_html (puros, con caja de
+  Chile como guarda §3.2); enganchados en el modo directo (Ingevec) y en la cadena
+  (Socovesa raiz, Pilares modelo, via indice de raices + dataclasses.replace); el m2
+  "desde" acompana al precio "desde" como cota inferior coherente (documentado).
+- Las coordenadas DE PAGINA van a geo_proyecto con evidence V y la pagina como fuente
+  (el dim congelado por FK no las recibiria) y PISAN lo de Nominatim a proposito: lo
+  declarado por la inmobiliaria manda sobre lo inferido. Esto tambien repara a las
+  Fundamenta/RVC congeladas cuyo lat/lon nunca aterrizo en el dim.
+- 5 tests nuevos (19 verdes en el modulo), fixture de Ingevec extendida con los
+  patrones reales. gates: VERDE.

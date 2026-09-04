@@ -34,6 +34,7 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
+from dataclasses import replace as dc_replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -44,7 +45,7 @@ from flujocero.sources.base import escribir_crudo
 from flujocero.sources.portal_comun import slug, tipologia_de
 
 SOURCE_ID = "wpjson_inmobiliarias"
-PARSER_VERSION = "wpjson_inmobiliarias/0.2.0"  # 0.2.0: captura streetAddress (T-931c)
+PARSER_VERSION = "wpjson_inmobiliarias/0.3.0"  # 0.3.0: geo/direccion/m2 de la pagina (T-931d)
 LEGAL_TIER = "html_permitido"
 UA = "FlujoCero-ResearchBot/1.0"
 # Cortesía por defecto; si robots.txt declara Crawl-delay mayor, manda robots.
@@ -118,6 +119,57 @@ def uf_de(texto: str) -> Decimal | None:
         return Decimal(crudo)
     except InvalidOperation:  # pragma: no cover - el regex ya lo garantiza
         return None
+
+
+RE_COORDS_EMBED = re.compile(r"!2d(-?\d{1,3}\.\d{3,})!3d(-?\d{1,3}\.\d{3,})")
+RE_COORDS_WAZE = re.compile(r"waze\.com/ul\?ll=(-?\d{1,3}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)", re.I)
+RE_RANGO_M2 = re.compile(r"desde\s*([\d.,]+)\s*(?:\|\s*)?hasta\s*([\d.,]+)\s*m²", re.I)
+RE_DIRECCION_LI = re.compile(r'icon-direccion"?\s*>\s*</span>\s*([^<]{5,90})<', re.I)
+
+
+def _en_chile(lat: float, lon: float) -> bool:
+    return -56.5 <= lat <= -17.0 and -76.0 <= lon <= -66.0
+
+
+def geo_de_html(html: str) -> tuple[float, float] | None:
+    """Las coordenadas que la propia página declara (sonda T-931d, 04-sep-2026):
+    Ingevec incrusta Google Maps con `!2d<lon>!3d<lat>` del proyecto; Socovesa enlaza
+    Waze con `ll=lat,lon`. Solo se acepta dentro de la caja de Chile — una coordenada
+    de cualquier otra cosa es peor que ninguna (§3.2)."""
+    for m in RE_COORDS_EMBED.finditer(html):
+        lon, lat = float(m.group(1)), float(m.group(2))
+        if _en_chile(lat, lon):
+            return lat, lon
+    m = RE_COORDS_WAZE.search(html)
+    if m:
+        lat, lon = float(m.group(1)), float(m.group(2))
+        if _en_chile(lat, lon):
+            return lat, lon
+    return None
+
+
+def direccion_de_html(html: str) -> str | None:
+    """La dirección del proyecto en el theme de Socovesa: `<span class=... icon-direccion>
+    </span>Nelson 2040, Ñuñoa</li>` (medido en la sonda). Sin número no es dirección."""
+    m = RE_DIRECCION_LI.search(html)
+    if m is None:
+        return None
+    texto = html_mod.unescape(m.group(1)).strip()
+    return texto if re.search(r"\d{2,5}", texto) else None
+
+
+def rango_m2_de_html(html: str) -> tuple[Decimal, Decimal] | None:
+    """El rango de superficies de Ingevec: `desde 33,51 | hasta 54,25 m²` (medido).
+    El m² "desde" acompaña al precio "desde": la unidad más barata es la más chica, así
+    que el par queda como COTA INFERIOR coherente — piso de precio con piso de m², la
+    misma semántica que ya tiene `precio_es_desde`."""
+    m = RE_RANGO_M2.search(html)
+    if m is None:
+        return None
+    desde, hasta = uf_de(m.group(1)), uf_de(m.group(2))
+    if desde is None or hasta is None or not (10 <= desde <= 500) or hasta < desde:
+        return None
+    return desde, hasta
 
 
 def rest_id_de(html: str) -> int | None:
@@ -710,6 +762,10 @@ def recolectar(
                 if info["nombre"] is None:
                     cosecha.errores.append(f"{url}: sin RealEstateListing en el JSON-LD")
                     continue
+                # la pagina declara mas que su JSON-LD (sonda T-931d): coordenadas en el
+                # embed de Google Maps y el rango de m² en el feature-value
+                geo = geo_de_html(html_pagina)
+                rango = rango_m2_de_html(html_pagina)
                 cosecha.proyectos.append(
                     ProyectoWp(
                         dominio=dominio,
@@ -719,6 +775,8 @@ def recolectar(
                         estado=slug(info["estado"]) if info["estado"] else None,
                         tipo_bien=None,
                         direccion=info["direccion"],
+                        lat=geo[0] if geo else None,
+                        lon=geo[1] if geo else None,
                         **procedencia,
                     )
                 )
@@ -728,7 +786,9 @@ def recolectar(
                         proyecto_slug=slug_p,
                         modelo_slug="desde",
                         precio_desde_uf=info["precio"],
-                        m2_totales=None,
+                        # m² "desde" con precio "desde": cota inferior coherente (ver
+                        # rango_m2_de_html) — la unidad mas barata es la mas chica
+                        m2_totales=rango[0] if rango else None,
                         dormitorios=None,
                         banos=None,
                         **procedencia,
@@ -816,6 +876,7 @@ def recolectar(
 
     nodos_vistos: set[int] = set()
     raices_registradas: set[int] = set()
+    indice_raiz: dict[int, int] = {}  # raiz_id -> posicion en cosecha.proyectos
     raices: dict[int, tuple[Any, dict[str, Any]]] = {}  # cache: id → registro raíz
 
     for rama, url_unidad in grupos:
@@ -866,6 +927,7 @@ def recolectar(
         raiz_id = int(datos_raiz["id"])
         if raiz_id not in raices_registradas:
             raices_registradas.add(raiz_id)
+            indice_raiz[raiz_id] = len(cosecha.proyectos)
             cosecha.proyectos.append(
                 ProyectoWp(
                     dominio=dominio,
@@ -886,6 +948,23 @@ def recolectar(
             continue
         html_pagina = doc_html.contenido.decode("utf-8", errors="replace")
         link = str(meta_nodo["link"])
+
+        # direccion y geo medidos en la pagina (sonda T-931d): Socovesa los publica en la
+        # raiz (icon-direccion + Waze), Pilares en las paginas de modelo. El REST no los
+        # trae, asi que se cuelgan del proyecto ya cosechado apenas alguna pagina los de.
+        idx = indice_raiz.get(raiz_id)
+        if idx is not None:
+            actual = cosecha.proyectos[idx]
+            if actual.direccion is None or actual.lat is None:
+                d = direccion_de_html(html_pagina)
+                g = geo_de_html(html_pagina)
+                if (d and actual.direccion is None) or (g and actual.lat is None):
+                    cosecha.proyectos[idx] = dc_replace(
+                        actual,
+                        direccion=actual.direccion or d,
+                        lat=actual.lat if actual.lat is not None else (g[0] if g else None),
+                        lon=actual.lon if actual.lon is not None else (g[1] if g else None),
+                    )
         if perfil["precio_en"] == "modelo":
             m = modelo_de_html_pilares(html_pagina, link)
             cosecha.modelos.append(
@@ -965,6 +1044,32 @@ def cargar(conexion: Any, cosecha: Cosecha) -> dict[str, int]:
                 (
                     proyecto_id,
                     p.direccion,
+                    SOURCE_ID,
+                    p.url,
+                    p.fetched_at,
+                    PARSER_VERSION,
+                    p.raw_blob_path,
+                    p.robots_snapshot_sha,
+                ),
+            )
+        if p.lat is not None and p.lon is not None:
+            # coordenadas DECLARADAS POR LA PAGINA (embed de mapa / Waze / JSON-LD): van
+            # a geo_proyecto porque el dim congelado por la FK no las recibiria, y el
+            # informe hace COALESCE. Pisan lo geocodificado por Nominatim a proposito:
+            # lo que publica la inmobiliaria manda sobre lo inferido.
+            conexion.execute(
+                "INSERT INTO geo_proyecto (proyecto_id, lat, lon, consulta, resultado, "
+                "evidence_level, source_id, source_url, fetched_at, parser_version, "
+                "raw_blob_path, robots_snapshot_sha) VALUES (?, ?, ?, "
+                "'pagina de la inmobiliaria', 'coordenadas declaradas en la pagina', 'V', "
+                "?, ?, ?, ?, ?, ?) ON CONFLICT (proyecto_id) DO UPDATE SET "
+                "lat=excluded.lat, lon=excluded.lon, resultado=excluded.resultado, "
+                "source_id=excluded.source_id, source_url=excluded.source_url, "
+                "fetched_at=excluded.fetched_at, raw_blob_path=excluded.raw_blob_path",
+                (
+                    proyecto_id,
+                    p.lat,
+                    p.lon,
                     SOURCE_ID,
                     p.url,
                     p.fetched_at,

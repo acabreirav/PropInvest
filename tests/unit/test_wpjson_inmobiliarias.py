@@ -264,3 +264,79 @@ def test_cargar_sin_precio_no_inserta_ni_inventa(con) -> None:
     contadores = wp.cargar(con, cosecha)
     assert contadores["sin_precio"] == 1
     assert con.execute("SELECT count(*) FROM fact_unidad_venta").fetchone()[0] == 1
+
+
+# ------------------------------------------------- T-931d · lo que la pagina declara
+
+
+def test_geo_de_html_lee_el_embed_de_maps_y_el_link_de_waze() -> None:
+    embed = '<iframe src="...!2d-70.60202792427644!3d-33.515228673364014!2m3...">'
+    assert wp.geo_de_html(embed) == (-33.515228673364014, -70.60202792427644)
+    waze = '<a href="https://www.waze.com/ul?ll=-33.4569%2C-70.6011&navigate=yes">'
+    assert wp.geo_de_html(waze) == (-33.4569, -70.6011)
+    # una coordenada fuera de Chile es peor que ninguna (§3.2)
+    assert wp.geo_de_html('src="...!2d2.35!3d48.85!..."') is None
+
+
+def test_direccion_de_html_del_theme_socovesa() -> None:
+    html = '<li class="x"><span class="icon icon-direccion"></span>Nelson 2040, &Ntilde;u&ntilde;oa</li>'
+    assert wp.direccion_de_html(html) == "Nelson 2040, Ñuñoa"
+    # sin numero no es direccion
+    assert wp.direccion_de_html('icon-direccion"></span>Barrio Italia</li>') is None
+
+
+def test_rango_m2_de_ingevec_y_su_cota_inferior() -> None:
+    assert wp.rango_m2_de_html("desde 33,51 | hasta 54,25 m²") == (D("33.51"), D("54.25"))
+    assert wp.rango_m2_de_html("(desde 30,07 hasta 62,10 m²)") == (D("30.07"), D("62.10"))
+    assert wp.rango_m2_de_html("desde 700 hasta 900 m²") is None  # fuera de rango plausible
+
+
+def test_ingevec_fixture_declara_geo_y_rango() -> None:
+    html = (FIXTURES / "ingevec_proyecto.html").read_text(encoding="utf-8")
+    assert wp.geo_de_html(html) == (-33.515228673364014, -70.60202792427644)
+    assert wp.rango_m2_de_html(html) == (D("33.51"), D("54.25"))
+
+
+def test_cargar_pone_la_geo_de_pagina_en_geo_proyecto_aunque_el_dim_este_congelado() -> None:
+    import duckdb
+
+    from flujocero import db as fdb
+
+    con = duckdb.connect(":memory:")
+    fdb.aplicar_esquema(con)
+    ahora = datetime(2026, 9, 4, tzinfo=UTC)
+    proc = dict(
+        url="https://x.cl/p",
+        fetched_at=ahora,
+        raw_blob_path="r",
+        robots_snapshot_sha="s",
+    )
+    p = wp.ProyectoWp(
+        dominio="x.cl",
+        proyecto_slug="p1",
+        nombre="P1",
+        comuna_slug="nunoa",
+        estado=None,
+        tipo_bien=None,
+        lat=-33.5,
+        lon=-70.6,
+        **proc,
+    )
+    m = wp.ModeloWp(
+        dominio="x.cl",
+        proyecto_slug="p1",
+        modelo_slug="desde",
+        precio_desde_uf=D("3000"),
+        m2_totales=D("40"),
+        dormitorios=1,
+        banos=1,
+        **proc,
+    )
+    cosecha = wp.Cosecha(proyectos=[p], modelos=[m])
+    wp.cargar(con, cosecha)  # primera carga: dim nuevo + geo_proyecto
+    fila = con.execute("SELECT lat, lon, evidence_level FROM geo_proyecto").fetchone()
+    assert fila == (-33.5, -70.6, "V")
+    # segunda carga con el dim ya congelado por la FK del fact: la geo igual se refresca
+    p2 = wp.ProyectoWp(**{**p.__dict__, "lat": -33.51})
+    wp.cargar(con, wp.Cosecha(proyectos=[p2], modelos=[m]))
+    assert con.execute("SELECT lat FROM geo_proyecto").fetchone()[0] == -33.51

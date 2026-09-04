@@ -1599,9 +1599,14 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-931d · m² de Ingevec y direcciones faltantes: que las geocodificadas EVALUEN
-estado: en_curso  # 04-sep: sonda escrita (scripts/sonda_t931d.py) — escanea los blobs
-  # crudos locales buscando patrones de m2 (Ingevec) y direccion (Socovesa/Pilares);
-  # el parser se escribe contra lo que la sonda mida
+estado: hecha  # 04-sep, contra patrones MEDIDOS por la sonda: (1) Ingevec publica el
+  # rango de m2 (feature-value "desde X | hasta Y m²" -> m2 desde como cota inferior,
+  # par coherente con precio_es_desde) Y las coordenadas exactas en el embed de Google
+  # Maps (!2d lon !3d lat) — Nominatim ya no hace falta para ellos; (2) Socovesa publica
+  # la direccion (icon-direccion "Nelson 2040, Ñuñoa") y link de Waze con ll=lat,lon;
+  # (3) Pilares la trae en paginas de modelo. Todo se cuelga del proyecto en la cadena y
+  # las coordenadas de pagina van a geo_proyecto (V, pisan a Nominatim a proposito).
+  # parser 0.3.0. Confirmacion viva pendiente: re-censar los 4 dominios wp-json
 agente: colector
 fase: 2
 depende_de: [T-931c]
