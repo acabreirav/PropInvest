@@ -257,6 +257,59 @@ def crear_app(ruta_db: Path | None = None, servicio: Servicio | None = None) -> 
             "capacidades": fo.capacidades,
         }
 
+    @app.get("/api/mapa")
+    def mapa(pie: float | None = None) -> dict[str, Any]:
+        """GeoJSON de microzonas para el mapa del §7.5 (T-928).
+
+        Microzonas SIN geometría (T-014/T-928 no corrieron, o el puente Voronoi no les
+        asignó ninguna manzana con polígono censal) **no entran** al `FeatureCollection`:
+        `sin_geometria` dice cuántas quedaron fuera, para que el tablero lo pueda decir en
+        vez de fingir que el mapa está completo.
+
+        `pie_flujo_cero_minimo` viaja como número PLANO (`float`, puede ser `None`), nunca
+        envuelto por `cifra()`: MapLibre tilea el GeoJSON con `geojson-vt` incluso para una
+        fuente puramente local, y esa capa solo transporta primitivos — un objeto
+        `{valor, evidence_level}` anidado en `properties` llega mudo al otro lado (medido:
+        se convierte en algo sin `.valor` ni `.evidence_level` legibles). El §7.5 exige que
+        el número se MUESTRE con su nivel de evidencia, no que viaje envuelto por todas las
+        capas que lo tocan; el tablero resuelve esto pidiendo el mismo dato, ya envuelto,
+        por `/api/microzonas` (JSON plano, sin pasar por MapLibre) y lo cruza por
+        `microzona_id` antes de armar el popup — ver `pintarMapa` en `index.html`.
+        """
+        fo = svc.foto(_pie(pie))
+        geometrias = svc.geometria_microzonas()
+        features: list[dict[str, Any]] = []
+        sin_geometria = 0
+        for d in svc.microzonas(_pie(pie)):
+            geo = geometrias.get(d["microzona_id"])
+            if geo is None:
+                sin_geometria += 1
+                continue
+            pie_cero = d["pie_cero_minimo"]
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": geo["geometry"],
+                    "properties": {
+                        "microzona_id": d["microzona_id"],
+                        "nombre": geo["nombre"],
+                        "comuna_id": d["comuna_id"],
+                        "comuna_nombre": geo["comuna_nombre"],
+                        "n_unidades": d["n"],
+                        "arriendo_n_comparables": d["arriendo_n"],
+                        "pie_flujo_cero_minimo": (
+                            float(pie_cero) if pie_cero is not None else None
+                        ),
+                    },
+                }
+            )
+        return {
+            "type": "FeatureCollection",
+            "features": features,
+            "sin_geometria": sin_geometria,
+            "capacidades": fo.capacidades,
+        }
+
     if ESTATICOS.is_dir():
 
         @app.get("/")

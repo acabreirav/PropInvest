@@ -5,19 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flujo Cero — ranking de oportunidades</title>
 <!--
-  SIN LIBRERIAS EXTERNAS, y es a proposito (ver docs/adr/007-dashboard.md).
+  SIN LIBRERIAS EXTERNAS POR CDN, y es a proposito (ver docs/adr/007-dashboard.md).
 
-  El §5 del contrato sugiere Alpine.js + MapLibre + Chart.js por CDN. Se decidio no usarlas:
+  El §5 del contrato sugiere Alpine.js + MapLibre + Chart.js por CDN. Se decidio no traerlas
+  de un CDN:
 
   1. El gate E2E del §7.5 corre en un contenedor SIN salida a internet. Un tablero que
      depende del CDN no se puede testear ahi, y un gate que no puede correr no es un gate.
   2. Un tablero de decision financiera que se rompe cuando falla un CDN ajeno es peor que uno
      que no se rompe. Este archivo abre sin red.
-  3. MapLibre es discutible hoy igual: no hay geometria que dibujar (T-014).
 
-  Lo que se pierde es reactividad declarativa y graficos vistosos. Lo que se gana es que el
-  archivo funciona solo. Cuando entre la geometria se re-evalua, con su ADR.
+  MapLibre SI se usa desde T-928 (el mapa de microzonas, dim_microzona.geom ya no esta
+  siempre vacia), pero VENDORIZADO en static/vendor/ (commit 6023d31), servido por esta
+  misma app FastAPI: mismo argumento que el resto del archivo, cero salida a internet.
+  Alpine.js y Chart.js se evaluaron igual y se descartaron: el resto del tablero ya cumple
+  su funcion con HTML/CSS/JS plano (ver docs/adr/007), y no hay nada mas que MapLibre
+  resuelva que este archivo no resuelva solo.
 -->
+<link rel="stylesheet" href="/static/vendor/maplibre-gl.css">
 <style>
   :root{
     --tinta:#16181d; --tinta-2:#5a6069; --tinta-3:#8b919b;
@@ -110,6 +115,20 @@
   footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--linea);
     color:var(--tinta-3);font-size:.8rem}
   @media (max-width:640px){ .barra{grid-template-columns:8rem 1fr 3.4rem} }
+
+  /* ---------- mapa (T-928) ---------- */
+  .mapa-caja{margin-top:1rem;background:var(--papel);border:1px solid var(--linea);
+    border-radius:var(--radio);padding:1rem 1.1rem}
+  .mapa-caja h2{margin:0 0 .1rem;font-size:1.1rem}
+  .mapa-caja .sub{color:var(--tinta-3);font-size:.85rem;margin:0 0 .8rem}
+  #mapa{height:420px;border-radius:6px;overflow:hidden;border:1px solid var(--linea)}
+  .mapa-leyenda{display:flex;flex-wrap:wrap;gap:.9rem;align-items:center;margin-top:.6rem;
+    font-size:.78rem;color:var(--tinta-2)}
+  .mapa-leyenda i{display:inline-block;width:.85rem;height:.85rem;border-radius:3px;
+    vertical-align:-.1em;margin-right:.3rem}
+  .maplibregl-popup-content{background:var(--papel);color:var(--tinta);font:inherit;
+    font-size:.85rem;border-radius:6px;padding:.6rem .7rem}
+  .maplibregl-popup-tip{border-top-color:var(--papel);border-bottom-color:var(--papel)}
 </style>
 </head>
 <body>
@@ -170,6 +189,22 @@
 
   <div id="ficha"></div>
 
+  <div class="mapa-caja" id="mapa-caja" style="display:none">
+    <h2>Mapa de microzonas</h2>
+    <p class="sub">Coloreado por pie mínimo para flujo cero: más verde, menos pie hace
+      falta para que la unidad no te cueste plata cada mes. Clic en una microzona para
+      el detalle.</p>
+    <div id="mapa"></div>
+    <div class="mapa-leyenda">
+      <span><i style="background:#1a7f4b"></i>pie bajo (~20%)</span>
+      <span><i style="background:#d9c93a"></i>~35%</span>
+      <span><i style="background:#a35d00"></i>~50%</span>
+      <span><i style="background:#b3261e"></i>~65% o más</span>
+      <span><i style="background:#8b919b"></i>ninguna unidad llega a flujo cero</span>
+    </div>
+    <p class="sub" id="mapa-info" style="margin:.6rem 0 0"></p>
+  </div>
+
   <footer>
     <span class="ev ev-V">V</span> verificado, vino de una fuente ·
     <span class="ev ev-D">D</span> derivado, cálculo sobre datos verificados ·
@@ -180,6 +215,7 @@
   </footer>
 </div>
 
+<script src="/static/vendor/maplibre-gl.js"></script>
 <script>
 "use strict";
 
@@ -315,8 +351,151 @@ function pintarComunas(d) {
 
 function pintar() {
   const d = estado.datos;
-  pintarAvisos(d); pintarCifras(d); pintarTabla(d); pintarComunas(d);
+  pintarAvisos(d); pintarCifras(d); pintarTabla(d); pintarComunas(d); pintarMapa(d);
   if (estado.seleccion) abrirFicha(estado.seleccion);
+}
+
+// --------------------------------------------------------------- mapa (T-928)
+
+// Estilo LOCAL minimo: sin fuentes remotas ni tiles de OSM/Maptiler (requieren red, y el
+// gate del §7.5 corre sin ella). Un fondo plano basta: lo que importa es la capa GeoJSON
+// de microzonas que se agrega despues.
+const ESTILO_MAPA_LOCAL = {
+  version: 8,
+  sources: {},
+  layers: [{ id: "fondo", type: "background", paint: { "background-color": "#e4e6e8" } }],
+};
+
+// Verde = pie bajo = mejor; rojo = pie alto. Gris = ninguna unidad de la microzona llega
+// nunca a flujo cero (pie_flujo_cero_minimo es NULL: peor que cualquier tope, ver §7.5).
+const EXPRESION_COLOR_PIE = [
+  "case",
+  ["==", ["get", "pie_flujo_cero_minimo"], null], "#8b919b",
+  [
+    "interpolate", ["linear"], ["get", "pie_flujo_cero_minimo"],
+    0.20, "#1a7f4b",
+    0.35, "#d9c93a",
+    0.50, "#a35d00",
+    0.65, "#b3261e",
+  ],
+];
+
+let mapaInstancia = null;
+let mapaListo = false; // true cuando el mapa terminó su 'load' Y ya tiene fuente/capa
+let mapaFetchEnCurso = false;
+// `pie_cero_minimo` YA envuelto por `cifra()` (con su evidence_level), por microzona_id.
+// Viene de `/api/microzonas` — JSON plano, nunca tocado por MapLibre — porque el GeoJSON
+// que sí pasa por MapLibre no puede transportar el objeto anidado (ver docstring de
+// `/api/mapa` en `app.py`): un objeto `{valor, evidence_level}` dentro de `properties`
+// llega mudo al otro lado del tileado interno de `geojson-vt`, medido en vivo.
+let cifrasPorMicrozona = {};
+
+/** El bbox de un FeatureCollection, caminando la geometria a mano (sin turf: una libreria
+ *  mas por un calculo de cuatro lineas no vale la pena). */
+function bboxDe(geojson) {
+  let [minX, minY, maxX, maxY] = [Infinity, Infinity, -Infinity, -Infinity];
+  const visitar = (coords) => {
+    if (typeof coords[0] === "number") {
+      const [x, y] = coords;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    } else {
+      coords.forEach(visitar);
+    }
+  };
+  for (const f of geojson.features) visitar(f.geometry.coordinates);
+  return Number.isFinite(minX) ? [[minX, minY], [maxX, maxY]] : null;
+}
+
+function popupHTML(p) {
+  const cif = cifrasPorMicrozona[p.microzona_id] ?? null;
+  return `<b>${esc(p.nombre)}</b><br>
+    <span class="mono">${esc(p.comuna_nombre || p.comuna_id)}</span><br>
+    Pie de flujo cero mínimo: ${celda(cif, (v) => pct(v, 1))}<br>
+    Unidades rankeadas: ${num(p.n_unidades, 0)}<br>
+    Comparables de arriendo: ${p.arriendo_n_comparables != null ? p.arriendo_n_comparables : "—"}`;
+}
+
+function agregarCapaMicrozonas(geojson) {
+  mapaInstancia.addSource("microzonas", { type: "geojson", data: geojson });
+  mapaInstancia.addLayer({
+    id: "microzonas-relleno",
+    type: "fill",
+    source: "microzonas",
+    paint: { "fill-color": EXPRESION_COLOR_PIE, "fill-opacity": 0.65 },
+  });
+  mapaInstancia.addLayer({
+    id: "microzonas-borde",
+    type: "line",
+    source: "microzonas",
+    paint: { "line-color": "#16181d", "line-width": 1, "line-opacity": 0.35 },
+  });
+  mapaInstancia.on("click", "microzonas-relleno", (ev) => {
+    new maplibregl.Popup()
+      .setLngLat(ev.lngLat)
+      .setHTML(popupHTML(ev.features[0].properties))
+      .addTo(mapaInstancia);
+  });
+  mapaInstancia.on("mouseenter", "microzonas-relleno", () => {
+    mapaInstancia.getCanvas().style.cursor = "pointer";
+  });
+  mapaInstancia.on("mouseleave", "microzonas-relleno", () => {
+    mapaInstancia.getCanvas().style.cursor = "";
+  });
+  const caja = bboxDe(geojson);
+  if (caja) mapaInstancia.fitBounds(caja, { padding: 24, maxZoom: 15, animate: false });
+  mapaListo = true;
+  // Hook de prueba (§7.5 E2E): "la fuente GeoJSON cargó" tiene que poder verificarse desde
+  // afuera sin adivinar temporizaciones de MapLibre.
+  window.__flujoCeroMapa = { listo: true, features: geojson.features.length };
+}
+
+async function pintarMapa(d) {
+  const caja = $("#mapa-caja");
+  if (!d.capacidades.mapa) {
+    caja.style.display = "none";
+    return;
+  }
+  caja.style.display = "";
+  if (mapaFetchEnCurso) return;
+  mapaFetchEnCurso = true;
+  try {
+    const pie = (Number($("#pie").value) / 100).toFixed(2);
+    const [rMapa, rMicrozonas] = await Promise.all([
+      fetch("/api/mapa?pie=" + pie),
+      fetch("/api/microzonas?pie=" + pie),
+    ]);
+    if (!rMapa.ok) throw new Error("la API respondió " + rMapa.status);
+    const geojson = await rMapa.json();
+    // Las cifras CON evidence_level para el popup: `/api/microzonas` es JSON plano y no pasa
+    // por MapLibre, así que el objeto {valor, evidence_level} sí llega entero.
+    if (rMicrozonas.ok) {
+      const mz = await rMicrozonas.json();
+      cifrasPorMicrozona = Object.fromEntries(
+        (mz.microzonas || []).map((m) => [m.microzona_id, m.pie_cero_minimo])
+      );
+    }
+    $("#mapa-info").textContent = geojson.sin_geometria
+      ? `${geojson.sin_geometria} microzona(s) sin geometría no se muestran en el mapa.`
+      : "";
+    if (!mapaInstancia) {
+      mapaInstancia = new maplibregl.Map({
+        container: "mapa",
+        style: ESTILO_MAPA_LOCAL,
+        center: [-70.65, -33.45],
+        zoom: 10,
+      });
+      mapaInstancia.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      mapaInstancia.on("load", () => agregarCapaMicrozonas(geojson));
+    } else if (mapaListo) {
+      mapaInstancia.getSource("microzonas").setData(geojson);
+      window.__flujoCeroMapa = { listo: true, features: geojson.features.length };
+    }
+  } catch (e) {
+    $("#mapa-info").textContent = "No se pudo cargar el mapa: " + e.message;
+  } finally {
+    mapaFetchEnCurso = false;
+  }
 }
 
 // --------------------------------------------------------------- ficha

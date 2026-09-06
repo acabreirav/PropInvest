@@ -2343,8 +2343,48 @@ def puente_censo() -> None:
                 " `recolectar-metro` primero."
             )
         typer.echo("\n  Corre `oportunidades`: los componentes medidos del §12 entran solos.")
+        typer.echo("  Corre `cargar-geometria-microzonas`: destraba el mapa del §7.5 (T-928).")
     finally:
         con.close()
+
+
+@app.command()
+def cargar_geometria_microzonas() -> None:
+    """T-928 · dim_microzona.geom = unión de las manzanas censales del puente (T-014b).
+
+    Necesita `ingerir-censo` (dim_manzana.geom_wkb) y `puente-censo`
+    (map_microzona_manzana) corridos antes. Es un derivado puro: se puede recorrer las
+    veces que haga falta, y una microzona sin manzanas asignadas o sin ninguna con
+    polígono censal se queda sin geometría — nunca se le inventa una (§3.2).
+
+    La unión y la simplificación corren en `shapely`, no en `ST_Union`/`ST_Simplify` de
+    DuckDB: la extensión `spatial` se descarga por red la primera vez y este entorno de
+    desarrollo no tiene esa salida (ver `geo/microzona_geom.py`). Si tu máquina sí puede
+    instalarla, el resultado es idéntico: solo cambia si `geom` queda tipada `GEOMETRY`
+    o `BLOB`.
+    """
+    import duckdb
+
+    from flujocero.geo import microzona_geom as mg
+
+    con = duckdb.connect(str(db.crear()))
+    try:
+        res = mg.construir_geometria_microzonas(con, datetime.now(UTC))
+    finally:
+        con.close()
+    typer.echo(
+        f"✓ {res.con_geometria} de {res.total_microzonas} microzonas con geometría"
+        f" · {res.sin_geometria} sin geometría"
+        f" ({res.sin_manzanas_asignadas} de esas sin ninguna manzana asignada en el puente)."
+    )
+    if res.con_geometria == 0:
+        typer.echo(
+            "\n  0 con geometría: nada que dibujar todavía. ¿Corriste `ingerir-censo`"
+            " (dim_manzana.geom_wkb) y `puente-censo` (map_microzona_manzana)?"
+            " Ninguno de los dos deja rastro si simplemente no corrieron."
+        )
+    else:
+        typer.echo("\n  `capacidades.mapa` del tablero pasa a true. Levanta `serve` y mira /.")
 
 
 @app.command()
