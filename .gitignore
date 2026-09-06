@@ -6,3 +6,6 @@ __pycache__/
 state/outreach/contacts.json
 state/outreach/queue.jsonl
 secrets/smtp.json
+
+# worktrees temporales de subagentes (harness)
+.claude/worktrees/
