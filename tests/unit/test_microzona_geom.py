@@ -1,7 +1,7 @@
 """T-928 · el cargador de geometría de microzonas.
 
 Corre contra fixtures sintéticas: polígonos WKT chicos, nunca contra el GeoParquet real del
-Censo (que solo vive en la máquina del usuario, ver `docs/adr/013-mapa-microzonas.md`).
+Censo (que solo vive en la máquina del usuario, ver `docs/adr/014-mapa-microzonas.md`).
 """
 
 from __future__ import annotations
