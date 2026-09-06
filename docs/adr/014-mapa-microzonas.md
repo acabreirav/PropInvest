@@ -84,6 +84,23 @@ reordenar tests (frágil, se rompe de nuevo con el próximo fixture de página) 
 compartir UN solo navegador de alcance `session` (`tests/integration/test_dashboard_e2e.py`)
 y que cada fixture de página solo abra/cierre su propia pestaña.
 
+## Decisión 5 (06-sep, correctiva) — la geometría vive en la tabla lateral `geo_microzona`, no en `dim_microzona.geom`
+
+La versión original escribía `UPDATE dim_microzona SET geom = ...` y **murió en la
+primera corrida contra la base real**: el veto de claves foráneas de DuckDB rechaza
+cualquier UPDATE a una fila de dimensión referenciada por un hecho, aunque el UPDATE no
+toque la PK (`Violates foreign key constraint ... "talcahuano/santa-leonor" is still
+referenced`). Los tests no lo vieron porque sus fixtures no colgaban hechos de las
+microzonas; ahora los cuelgan a propósito.
+
+Es el mismo veto que ya obligó a `proyecto_direccion` y `geo_proyecto`, y la salida es
+el mismo patrón: tabla lateral `geo_microzona (microzona_id PK, geom_wkb BLOB,
+calculado_en)`, recalculada entera por el cargador (DELETE + INSERT — es un derivado
+puro sin hechos colgando, así que el veto no la toca) y leída con JOIN por el servicio.
+De paso desaparece el doble camino GEOMETRY/BLOB de la Decisión 1: el WKB en BLOB es el
+único formato, legible con y sin la extensión. `dim_microzona.geom` queda como columna
+muerta del DDL original.
+
 ## Qué se prueba acá y qué prueba el usuario en su máquina
 
 - **Acá (fixtures sintéticas):** `tests/unit/test_microzona_geom.py` (el cargador, contra

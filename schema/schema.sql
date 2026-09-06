@@ -149,6 +149,17 @@ CREATE TABLE IF NOT EXISTS fact_arriendo_comp (
   parser_version VARCHAR, raw_blob_path VARCHAR, robots_snapshot_sha VARCHAR
 );
 
+-- T-928 · geometria derivada de la microzona (union de sus manzanas censales, WKB en
+-- BLOB legible con y sin la extension spatial). Tabla LATERAL y no la columna
+-- dim_microzona.geom por el veto de FK de DuckDB: un UPDATE a una dim referenciada por
+-- hechos falla aunque no toque la PK — mismo patron que proyecto_direccion/geo_proyecto.
+-- Derivado puro: se recalcula entera con `cli cargar-geometria-microzonas`.
+CREATE TABLE IF NOT EXISTS geo_microzona (
+  microzona_id VARCHAR PRIMARY KEY,
+  geom_wkb     BLOB NOT NULL,
+  calculado_en TIMESTAMPTZ
+);
+
 -- T-014b · el puente: cada manzana censal asignada a su barrio MELI mas cercano dentro
 -- de su comuna (Voronoi sobre centros — aproximacion DECLARADA, ver docs/adr/009).
 -- Derivado puro: se recalcula entero en cada corrida de `cli puente-censo`.

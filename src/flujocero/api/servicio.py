@@ -22,7 +22,7 @@ pie después es una re-evaluación sin bisección, del orden de milisegundos.
 
 ## Lo que este módulo NO hace
 
-No inventa geometría. Mientras `dim_microzona.geom` esté vacía (no corrió
+No inventa geometría. Mientras `geo_microzona` esté vacía (no corrió
 `cli cargar-geometria-microzonas` sobre el Censo real, T-928), no hay mapa que dibujar. Se
 reporta en `capacidades.mapa` como `False` con su razón, y el tablero muestra por qué falta
 en vez de dibujar puntos o polígonos inventados. Cuando SÍ hay geometría, `geometria_microzonas()`
@@ -91,9 +91,7 @@ def _capacidades(conexion: Any) -> dict[str, Any]:
     Existe para que la interfaz no tenga que adivinar ni fingir. Un tablero que dibuja un
     mapa vacío es peor que uno que dice "todavía no hay geometría, falta el Censo".
     """
-    con_geom = conexion.execute(
-        "SELECT count(*) FROM dim_microzona WHERE geom IS NOT NULL"
-    ).fetchone()[0]
+    con_geom = conexion.execute("SELECT count(*) FROM geo_microzona").fetchone()[0]
     total_mz = conexion.execute("SELECT count(*) FROM dim_microzona").fetchone()[0]
     return {
         "mapa": bool(con_geom),
@@ -260,33 +258,18 @@ class Servicio:
     def geometria_microzonas(self) -> dict[str, dict[str, Any]]:
         """GeoJSON de cada microzona CON geometría (T-928), más su nombre y el de su comuna.
 
-        El WKB de `dim_microzona.geom` se traduce con `shapely`, nunca con `ST_AsGeoJSON` de
-        DuckDB spatial: así la ficha del mapa no depende de que la extensión esté cargada en
-        ESTE proceso — mismo criterio que `geo/microzona_geom.py` usa para escribir. Si la
-        columna SÍ quedó tipada `GEOMETRY` (la extensión cargó en algún momento sobre esta
-        base), se intenta `LOAD spatial` sobre esta conexión nueva solo para poder leer el
-        WKB con `ST_AsWKB`; si no está disponible, no hay nada que leer de esa columna y el
-        error se deja subir — es la misma base que ya declaró tener geometría, así que un
-        `LOAD` que falla ahí es un problema real, no un caso a silenciar.
+        La geometría vive en la tabla lateral `geo_microzona` (WKB en BLOB — el veto de
+        FK de DuckDB mató a la columna `dim_microzona.geom`, ver el docstring de
+        `geo/microzona_geom.py`) y se traduce con `shapely`, nunca con `ST_AsGeoJSON`:
+        así la ficha del mapa no depende de la extensión spatial en ningún proceso.
         """
-        import duckdb
-
-        from flujocero.geo.microzona_geom import columna_geom_es_espacial
-
         con = self._conectar()
         try:
-            if columna_geom_es_espacial(con):
-                try:
-                    con.execute("LOAD spatial")
-                except duckdb.Error:
-                    pass
-                expr = "ST_AsWKB(mz.geom)"
-            else:
-                expr = "mz.geom"
             filas = con.execute(
-                f"SELECT mz.microzona_id, mz.nombre, c.nombre, {expr} "  # noqa: S608
-                "FROM dim_microzona mz JOIN dim_comuna c USING (comuna_id) "
-                "WHERE mz.geom IS NOT NULL"
+                "SELECT g.microzona_id, mz.nombre, c.nombre, g.geom_wkb "
+                "FROM geo_microzona g "
+                "JOIN dim_microzona mz USING (microzona_id) "
+                "JOIN dim_comuna c USING (comuna_id)"
             ).fetchall()
         finally:
             con.close()

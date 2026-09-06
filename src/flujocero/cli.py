@@ -2370,18 +2370,17 @@ def puente_censo() -> None:
 
 @app.command()
 def cargar_geometria_microzonas() -> None:
-    """T-928 · dim_microzona.geom = unión de las manzanas censales del puente (T-014b).
+    """T-928 · geo_microzona = unión de las manzanas censales del puente (T-014b).
 
     Necesita `ingerir-censo` (dim_manzana.geom_wkb) y `puente-censo`
     (map_microzona_manzana) corridos antes. Es un derivado puro: se puede recorrer las
     veces que haga falta, y una microzona sin manzanas asignadas o sin ninguna con
     polígono censal se queda sin geometría — nunca se le inventa una (§3.2).
 
-    La unión y la simplificación corren en `shapely`, no en `ST_Union`/`ST_Simplify` de
-    DuckDB: la extensión `spatial` se descarga por red la primera vez y este entorno de
-    desarrollo no tiene esa salida (ver `geo/microzona_geom.py`). Si tu máquina sí puede
-    instalarla, el resultado es idéntico: solo cambia si `geom` queda tipada `GEOMETRY`
-    o `BLOB`.
+    La geometría vive en la tabla lateral `geo_microzona` (WKB en BLOB) y no en
+    `dim_microzona.geom`: el veto de FK de DuckDB rechaza cualquier UPDATE a una dim
+    referenciada por hechos, y la unión corre en `shapely` porque la extensión
+    `spatial` no baja en el contenedor de desarrollo (ver `geo/microzona_geom.py`).
     """
     import duckdb
 

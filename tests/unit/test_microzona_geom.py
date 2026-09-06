@@ -2,11 +2,16 @@
 
 Corre contra fixtures sintéticas: polígonos WKT chicos, nunca contra el GeoParquet real del
 Censo (que solo vive en la máquina del usuario, ver `docs/adr/014-mapa-microzonas.md`).
+
+La fixture cuelga un HECHO de cada microzona a propósito: la primera versión del cargador
+hacía `UPDATE dim_microzona SET geom` y reventaba contra la base real con el veto de FK de
+DuckDB — los tests no lo vieron porque sus microzonas no tenían hechos. No de nuevo.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal as D
 
 import duckdb
 import pytest
@@ -25,10 +30,17 @@ def con(tmp_path):
     c.execute(
         "INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES ('san-miguel', 'San Miguel', 'RM')"
     )
-    for mid in ("san-miguel/el-llano", "san-miguel/lo-vial"):
+    for i, mid in enumerate(("san-miguel/el-llano", "san-miguel/lo-vial")):
         c.execute(
             "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?, 'san-miguel', ?)",
             (mid, mid),
+        )
+        # el guardia del veto de FK: un comparable referenciando la microzona, como en
+        # la base real (donde el UPDATE de la v1 murio con "still referenced").
+        c.execute(
+            "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, arriendo_uf, "
+            "evidence_level, fetched_at) VALUES (?, ?, ?, 'V', ?)",
+            (f"G{i}", mid, D("8"), AHORA),
         )
     yield c
     c.close()
@@ -56,8 +68,7 @@ def test_con_las_tablas_vacias_no_inventa_nada_y_termina_limpio(con):
     assert (res.con_geometria, res.sin_geometria) == (0, 2)
     assert res.total_microzonas == 2
     assert res.sin_manzanas_asignadas == 2
-    geoms = con.execute("SELECT geom FROM dim_microzona").fetchall()
-    assert all(g == (None,) for g in geoms)
+    assert con.execute("SELECT count(*) FROM geo_microzona").fetchone()[0] == 0
 
 
 def test_une_las_manzanas_asignadas_de_una_microzona(con):
@@ -71,7 +82,7 @@ def test_une_las_manzanas_asignadas_de_una_microzona(con):
     assert (res.con_geometria, res.sin_geometria) == (1, 1)
 
     raw = con.execute(
-        "SELECT geom FROM dim_microzona WHERE microzona_id = 'san-miguel/el-llano'"
+        "SELECT geom_wkb FROM geo_microzona WHERE microzona_id = 'san-miguel/el-llano'"
     ).fetchone()[0]
     geom = wkb.loads(bytes(raw))
     assert geom.area == pytest.approx(2.0, rel=1e-6)
@@ -102,9 +113,4 @@ def test_es_un_derivado_que_se_puede_recorrer_muchas_veces(con):
     con.execute("DELETE FROM map_microzona_manzana")
     r3 = mg.construir_geometria_microzonas(con, AHORA)
     assert r3.con_geometria == 0
-
-
-def test_columna_geom_es_espacial_lee_el_tipo_real(con):
-    # En este contenedor `spatial` no se puede instalar (sin salida a internet): la columna
-    # queda BLOB, y el cargador tiene que enterarse solo de eso para escribir sin casteo.
-    assert mg.columna_geom_es_espacial(con) is False
+    assert con.execute("SELECT count(*) FROM geo_microzona").fetchone()[0] == 0
