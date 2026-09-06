@@ -2146,20 +2146,38 @@ def micro_unidades() -> None:
 
     from flujocero.agg import micro_riesgo as mr
 
+    ahora = datetime.now(UTC)
     con = duckdb.connect(str(db.crear()))
     try:
-        arriendo = mr.medir_arriendo(con)
-        venta = mr.medir_venta(con, datetime.now(UTC))
+        arriendo = mr.medir_arriendo(con, ahora)
+        venta = mr.medir_venta(con, ahora)
     finally:
         con.close()
 
     typer.echo("  ARRIENDO · avisos activos (sin amoblados ni sospechosos):")
-    typer.echo(f"    {'tramo':<8}{'n':>6}{'edad med.':>11}{'UF/m²':>8}{'GGCC/m²':>10}{'n ggcc':>8}")
+    typer.echo(
+        f"    {'tramo':<8}{'n':>6}{'edad med.':>11}{'edad>=':>8}{'% fresco':>10}"
+        f"{'UF/m²':>8}{'GGCC/m²':>10}{'n ggcc':>8}"
+    )
     for f in arriendo:
         edad = f"{f.edad_mediana_dias:.0f} d" if f.edad_mediana_dias is not None else "ND"
+        cota = (
+            f"{f.edad_cota_inf_mediana_dias:.0f} d"
+            if f.edad_cota_inf_mediana_dias is not None
+            else "ND"
+        )
+        fresco = f"{f.pct_recien_publicado:.0%}" if f.pct_recien_publicado is not None else "ND"
         ufm2 = f"{f.uf_m2_mediana:.3f}" if f.uf_m2_mediana is not None else "ND"
         ggcc = f"${f.ggcc_m2_mediana_clp:,.0f}" if f.ggcc_m2_mediana_clp is not None else "ND"
-        typer.echo(f"    {f.tramo:<8}{f.n:>6}{edad:>11}{ufm2:>8}{ggcc:>10}{f.n_con_ggcc:>8}")
+        typer.echo(
+            f"    {f.tramo:<8}{f.n:>6}{edad:>11}{cota:>8}{fresco:>10}"
+            f"{ufm2:>8}{ggcc:>10}{f.n_con_ggcc:>8}"
+        )
+    typer.echo(
+        "    (edad>= : cota inferior — dias desde la PRIMERA captura propia; mejora sola"
+        "\n     con las semanas. % fresco: cota inferior de avisos publicados hace <=7 dias"
+        "\n     segun la etiqueta del portal, T-924b.)"
+    )
 
     typer.echo("\n  VENTA · foto de mayo vs hoy (proxy de salida — comparar ENTRE tramos,")
     typer.echo("  el nivel absoluto esta contaminado por cobertura de paginas):")

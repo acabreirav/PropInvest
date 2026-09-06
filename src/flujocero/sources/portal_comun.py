@@ -468,12 +468,18 @@ def _cargar_arriendo(conexion: Any, a: Any, source_id: str, parser_version: str)
         INSERT INTO fact_arriendo_comp
           (comp_id, microzona_id, tipologia, dormitorios, banos, m2_utiles, arriendo_clp,
            arriendo_uf, gastos_comunes_clp, estacionamiento, bodega, activo, evidence_level,
+           publicado_en, publicado_desde, visto_primera_vez,
            source_id, source_url, fetched_at, parser_version, raw_blob_path,
            robots_snapshot_sha)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (comp_id) DO UPDATE SET
           arriendo_clp = excluded.arriendo_clp, arriendo_uf = excluded.arriendo_uf,
-          fetched_at = excluded.fetched_at
+          fetched_at = excluded.fetched_at,
+          -- T-924b: la PRIMERA noticia gana. Una re-vista sin etiqueta trae NULL y no
+          -- borra lo declarado antes; `visto_primera_vez` ni aparece aca: no se pisa.
+          publicado_en = COALESCE(fact_arriendo_comp.publicado_en, excluded.publicado_en),
+          publicado_desde = COALESCE(
+            fact_arriendo_comp.publicado_desde, excluded.publicado_desde)
         """,
         (
             a.portal_id,
@@ -489,6 +495,9 @@ def _cargar_arriendo(conexion: Any, a: Any, source_id: str, parser_version: str)
             getattr(a, "bodegas", 0) > 0,
             True,
             "E" if a.es_proyecto else "V",
+            getattr(a, "publicado_en", None),
+            getattr(a, "publicado_desde", None),
+            a.fetched_at,
             *_procedencia(a, source_id, parser_version),
         ),
     )

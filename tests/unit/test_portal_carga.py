@@ -71,6 +71,28 @@ def test_el_precio_nuevo_si_se_guarda_aunque_la_fila_no_cuente(con) -> None:
     assert visto.date() == MANANA.date()
 
 
+def test_la_primera_noticia_de_publicacion_y_la_primera_vista_no_se_pisan(con) -> None:
+    """T-924b: `visto_primera_vez` se fija al insertar y el upsert no lo toca; la cota
+    `publicado_desde` declarada en la primera captura sobrevive a una re-vista sin
+    etiqueta (el portal solo etiqueta avisos frescos — el silencio posterior no borra
+    lo que ya declaro)."""
+    primero = AvisoArriendo("MLC-A1", 450000)
+    primero.publicado_en = HOY.date()
+    primero.publicado_desde = HOY.date()
+    cargar_avisos(con, [primero], "portal_busqueda", "v1")
+
+    revisto = AvisoArriendo("MLC-A1", 450000, MANANA)  # sin atributos de publicacion
+    cargar_avisos(con, [revisto], "portal_busqueda", "v1")
+
+    pub, desde, visto, fetched = con.execute(
+        "SELECT publicado_en, publicado_desde, visto_primera_vez, fetched_at "
+        "FROM fact_arriendo_comp WHERE comp_id = 'MLC-A1'"
+    ).fetchone()
+    assert pub == HOY.date() and desde == HOY.date()
+    assert visto.date() == HOY.date(), "la primera vista es de HOY aunque se re-vio MANANA"
+    assert fetched.date() == MANANA.date(), "fetched_at si avanza: es la ultima vista"
+
+
 def test_un_comparable_nuevo_entre_confirmados_si_cuenta(con) -> None:
     cargar_avisos(con, [AvisoArriendo("MLC-A1", 450000)], "portal_busqueda", "v1")
     n = cargar_avisos(

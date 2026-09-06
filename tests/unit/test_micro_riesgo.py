@@ -72,6 +72,27 @@ def test_medir_arriendo_sin_fecha_es_nd_no_cero(con) -> None:
     filas = {f.tramo: f for f in mr.medir_arriendo(con)}
     assert filas["<25"].edad_mediana_dias is None
     assert filas["<25"].ggcc_m2_mediana_clp is None and filas["<25"].n_con_ggcc == 0
+    # sin `ahora` las cotas de T-924b quedan ND, jamas un cero inventado
+    assert filas["<25"].edad_cota_inf_mediana_dias is None
+    assert filas["<25"].pct_recien_publicado is None and filas["<25"].n_con_etiqueta == 0
+
+
+def test_las_cotas_t924b_salen_de_la_primera_vista_y_la_etiqueta(con) -> None:
+    """`edad>=` viene de visto_primera_vez (o fetched_at si la fila es de antes de la
+    migracion) y `% fresco` es cota inferior: el aviso sin etiqueta cuenta 0."""
+    _comp(con, "A", 22.0)  # fila vieja: sin visto_primera_vez -> usa fetched_at (AHORA)
+    con.execute(
+        "UPDATE fact_arriendo_comp SET visto_primera_vez = ?, publicado_desde = ? "
+        "WHERE comp_id = 'A'",
+        (AHORA - timedelta(days=20), (AHORA - timedelta(days=3)).date()),
+    )
+    _comp(con, "B", 23.0)  # sin primera vista propia ni etiqueta: cota 0 dias, no fresco
+
+    filas = {f.tramo: f for f in mr.medir_arriendo(con, AHORA)}
+    f = filas["<25"]
+    assert f.edad_cota_inf_mediana_dias == pytest.approx(10.0)  # mediana(20, 0)
+    assert f.pct_recien_publicado == pytest.approx(0.5)  # A fresco (3 d), B cuenta 0
+    assert f.n_con_etiqueta == 1
 
 
 def _venta(c, key, m2, primera, ultima, p1, p2):

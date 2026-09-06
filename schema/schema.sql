@@ -135,6 +135,13 @@ CREATE TABLE IF NOT EXISTS fact_arriendo_comp (
   edificio_multifamily BOOLEAN,
   publicado_en    DATE,
   dias_en_mercado INTEGER,
+  -- T-924b: cota inferior DECLARADA de la fecha de publicacion (etiqueta del listado:
+  -- "PUBLICADO HOY" => el dia de captura; "ESTA SEMANA" => captura-7). NULL = el portal
+  -- no lo dice, que no es lo mismo que aviso viejo.
+  publicado_desde DATE,
+  -- T-924b: cuando ESTE sistema vio el aviso por primera vez. Se fija al insertar y el
+  -- upsert nunca lo pisa: cota inferior de edad que mejora sola con las semanas.
+  visto_primera_vez TIMESTAMPTZ,
   activo          BOOLEAN,
   evidence_level  VARCHAR,
   sospechoso      BOOLEAN DEFAULT FALSE,

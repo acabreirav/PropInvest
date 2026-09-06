@@ -36,7 +36,7 @@ import random
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -66,7 +66,7 @@ from flujocero.sources.portal_comun import (
 log = logging.getLogger(__name__)
 
 SOURCE_ID = "portal_busqueda"
-PARSER_VERSION = "portal_busqueda/1.0.0"
+PARSER_VERSION = "portal_busqueda/1.1.0"
 TIMEOUT = 30.0
 INTENTOS = 4
 POR_PAGINA = 48  # tamaño de página estándar de MercadoLibre, verificado en el corpus
@@ -170,6 +170,27 @@ class Tarjeta:
     es_vivienda_nueva: bool | None
     raw_blob_path: str
     robots_snapshot_sha: str
+    # T-924b · la etiqueta "PUBLICADO HOY" / "PUBLICADO ESTA SEMANA" que el portal pinta
+    # sobre la tarjeta (`.poly-component__float-highlight`). Es lo UNICO que el listado
+    # permitido declara sobre la edad del aviso: se captura tal cual y las fechas salen
+    # de las propiedades de abajo. La ausencia de etiqueta NO significa aviso viejo —
+    # significa que el portal no lo dice: ND.
+    publicado_etiqueta: str | None = None
+
+    @property
+    def publicado_en(self) -> date | None:
+        """Fecha exacta de publicacion, solo cuando el portal dice HOY."""
+        return self.fetched_at.date() if self.publicado_etiqueta == "hoy" else None
+
+    @property
+    def publicado_desde(self) -> date | None:
+        """Cota inferior declarada de la fecha de publicacion: HOY => el mismo dia;
+        ESTA SEMANA => a lo mas 7 dias antes de la captura. Sin etiqueta => ND."""
+        if self.publicado_etiqueta == "hoy":
+            return self.fetched_at.date()
+        if self.publicado_etiqueta == "esta_semana":
+            return (self.fetched_at - timedelta(days=7)).date()
+        return None
 
     @property
     def comuna_id(self) -> str | None:
@@ -281,6 +302,20 @@ def _atributos(tarjeta: Any) -> tuple[int | None, int | None, Decimal | None]:
     return dorm, banos, m2
 
 
+def _etiqueta_publicado(texto: str) -> str | None:
+    """Normaliza el destacado de la tarjeta a lo que declara sobre la edad del aviso.
+
+    Solo se reconocen las dos formas medidas en el corpus (T-924b); cualquier otro texto
+    del destacado ("Destacado", promociones) no dice nada de la edad y queda en ND.
+    """
+    plano = texto.strip().upper()
+    if plano == "PUBLICADO HOY":
+        return "hoy"
+    if plano == "PUBLICADO ESTA SEMANA":
+        return "esta_semana"
+    return None
+
+
 def _es_proyecto(tarjeta: Any) -> bool:
     """Un proyecto publica "Desde UF X" y un conteo de unidades disponibles.
 
@@ -353,6 +388,7 @@ def parse_busqueda(
 
         dorm, banos, m2 = _atributos(c)
         comuna, barrio = _ubicacion(_texto(c, ".poly-component__location"), comuna_url)
+        etiqueta = _etiqueta_publicado(_texto(c, ".poly-component__float-highlight"))
 
         t = Tarjeta(
             portal_id=portal_id,
@@ -372,6 +408,7 @@ def parse_busqueda(
             es_vivienda_nueva=es_nueva,
             raw_blob_path=blob,
             robots_snapshot_sha=sha,
+            publicado_etiqueta=etiqueta,
         )
         if plausible(t):
             salida.append(t)

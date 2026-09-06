@@ -37,6 +37,12 @@ COLUMNAS_AGREGADAS: tuple[tuple[str, str, str], ...] = (
     # T-922b: apertura declarada por el nodo OSM; la lee puente.calcular_catalizador,
     # que puede correr ANTES que el colector — la migracion vive aca, no en cargar().
     ("dim_estacion_metro", "anio_apertura", "INTEGER"),
+    # T-924b: lo que el listado declara sobre la edad del aviso, y la primera captura
+    # propia. `publicado_desde` = cota inferior declarada de la fecha de publicacion
+    # ("PUBLICADO HOY" => el dia; "ESTA SEMANA" => captura-7). `visto_primera_vez` se
+    # fija al INSERTAR y el upsert no lo toca: es la cota "existe al menos desde".
+    ("fact_arriendo_comp", "publicado_desde", "DATE"),
+    ("fact_arriendo_comp", "visto_primera_vez", "TIMESTAMPTZ"),
 )
 
 

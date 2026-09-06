@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -118,6 +118,27 @@ def test_parsea_una_tarjeta_de_unidad() -> None:
     assert t.tipologia == "2D2B"
     assert t.es_vivienda_nueva is False, "la RUTA dice propiedades-usadas"
     assert not t.es_proyecto
+
+
+def test_la_etiqueta_publicado_se_captura_y_sin_ella_queda_nd() -> None:
+    """T-924b: el destacado `.poly-component__float-highlight` es lo unico que el listado
+    permitido declara sobre la edad del aviso. HOY => fecha exacta; ESTA SEMANA => cota
+    captura-7; ausencia o cualquier otro destacado => ND, jamas un cero."""
+    span = '<span class="poly-component__float-highlight">{}</span>'
+    hoy = parsear(tarjeta_html(extra=span.format("PUBLICADO HOY")))[0]
+    assert hoy.publicado_etiqueta == "hoy"
+    assert hoy.publicado_en == AHORA.date() and hoy.publicado_desde == AHORA.date()
+
+    semana = parsear(tarjeta_html(extra=span.format("Publicado esta semana")))[0]
+    assert semana.publicado_etiqueta == "esta_semana"
+    assert semana.publicado_en is None, "la fecha exacta NO se conoce: solo la cota"
+    assert semana.publicado_desde == (AHORA - timedelta(days=7)).date()
+
+    sin = parsear(tarjeta_html())[0]
+    destacado = parsear(tarjeta_html(extra=span.format("Destacado")))[0]
+    for t in (sin, destacado):
+        assert t.publicado_etiqueta is None
+        assert t.publicado_en is None and t.publicado_desde is None
 
 
 def test_la_comuna_se_lee_desde_el_final_porque_la_direccion_trae_comas() -> None:
