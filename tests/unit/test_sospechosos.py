@@ -146,3 +146,23 @@ def test_dos_repetidos_baratos_no_bastan_para_cluster(con):
         "SELECT count(*) FROM fact_arriendo_comp WHERE sospechoso AND comp_id LIKE 'B%'"
     ).fetchone()[0]
     assert baratos == 0
+
+
+def test_el_promo_chico_no_se_esconde_tras_la_mezcla_de_tamanos(con):
+    """El caso que se escapo de la v1 (medido 06-sep): las unidades grandes de la
+    microzona arrastran la mediana UF/m² global hacia abajo, y el promo de 25 m² queda
+    a un pelo del umbral. La referencia correcta son sus VECINOS de tamano (±25% m²)."""
+    for i in range(6):  # chicas de mercado: ~9,5k CLP/m²
+        _arriendo(con, f"S{i}", 260_000 + i * 8_000, m2=28)
+    for i in range(8):  # grandes: ~6,9k CLP/m² — arrastran la mediana global
+        _arriendo(con, f"G{i}", 660_000, m2=95)
+    for i in range(5):  # promo primer mes: 6,0k CLP/m² — sobre 0,75x la mediana GLOBAL
+        _arriendo(con, f"PROMO{i}", 150_000, m2=25)
+
+    sospechosos.marcar_arriendo(con)
+    marcados = {
+        f[0]
+        for f in con.execute("SELECT comp_id FROM fact_arriendo_comp WHERE sospechoso").fetchall()
+    }
+    assert {f"PROMO{i}" for i in range(5)} <= marcados
+    assert not any(c.startswith(("S", "G")) for c in marcados)

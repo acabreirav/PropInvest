@@ -4,11 +4,13 @@ Es el eslabón que faltaba. Estaban las dos puntas —2.696 unidades con precio 
 la mediana de arriendo por celda— y no había nada que las uniera, así que el motor financiero
 solo había corrido sobre departamentos inventados.
 
-**La regla de emparejamiento es la clave `(microzona, tipología, rango_m2)` del §2.4**, la
-misma con la que se agregó el arriendo. No hay caída a comuna: si una unidad no tiene su celda
-con suficientes comparables, **no se rankea**. Prestarle la mediana de la comuna sería
-exactamente lo que el §2.4 prohíbe — dentro de una comuna hay 17% de brecha a pocas cuadras, y
-esa diferencia es mayor que la que separa a dos comunas distintas.
+**La regla de emparejamiento es `(microzona, tipología, m² similares)`** — desde T-949, el
+arriendo sale de la ventana de vecinos de ±20% de m² dentro de la microzona y tipología de la
+unidad, con la celda de tramo fijo del §2.4 como respaldo cuando la ventana no junta n≥8 (la
+procedencia dice cuál se usó). No hay caída a comuna en ningún caso: si una unidad no junta
+comparables ni en la ventana ni en su tramo, **no se rankea**. Prestarle la mediana de la
+comuna sería exactamente lo que el §2.4 prohíbe — dentro de una comuna hay 17% de brecha a
+pocas cuadras, y esa diferencia es mayor que la que separa a dos comunas distintas.
 
 Las unidades que quedan fuera se cuentan por motivo. Un universo que se achica sin explicación
 es indistinguible de un filtro roto.
@@ -23,6 +25,7 @@ from typing import Any
 
 from flujocero.agg.arriendo import (
     MIN_COMPARABLES,
+    comparables_desde_duckdb,
     etiqueta_rango,
     percentil,
     serie_uf,
@@ -102,6 +105,18 @@ def celdas_de_arriendo(
     }
 
 
+# T-949 · la ventana de vecinos por m²: el arriendo de una unidad sale de los
+# comparables de TAMANO similar (±20% de sus m², minimo ±3), no de la mediana del tramo
+# fijo. Medido el 06-sep sobre el top real (auditoria del top 1): un 2D1B de 36 m²
+# tomaba la mediana de la celda 35-50 —cuyos comparables se concentran en 42-48 m²— y
+# eso le regalaba 12,7% de arriendo; 5 de 14 filas del top se movian >10%, todas hacia
+# abajo. Decision §8.4 tomada con el usuario mirando `scripts/medir_celda_vs_vecinos.py`.
+# El tramo del §2.4 queda como RESPALDO cuando la ventana no junta n>=8: menos preciso,
+# pero es la celda auditada de siempre, y la procedencia dice cual de los dos se uso.
+VENTANA_M2_REL = D("0.20")
+VENTANA_M2_MIN = D(3)
+
+
 def emparejar(
     conexion: Any,
     rangos: list[list[int]],
@@ -137,6 +152,13 @@ def emparejar(
     es lo que necesitan los tests para hablar de otra cosa sin tener que inventar fechas.
     """
     celdas = celdas_de_arriendo(conexion)
+    # T-949 · la MISMA poblacion de comparables que armo las celdas (filtros §7.3 y
+    # frescura identicos — dos criterios distintos serian dos verdades), agrupada para
+    # la ventana de vecinos por m².
+    comps, _descartes_comps = comparables_desde_duckdb(conexion, ahora)
+    vecinos: dict[tuple[str, str], list[tuple[Decimal, Decimal]]] = {}
+    for c in comps:
+        vecinos.setdefault((c.microzona_id, c.tipologia), []).append((c.m2_utiles, c.arriendo_uf))
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
     riesgos: dict[str, Decimal] = {
@@ -298,8 +320,12 @@ def emparejar(
             r.descartes["fuera_de_rango"] += 1
             _anotar(r, comuna, "fuera_de_rango")
             continue
+
+        # T-949 · primero la ventana de vecinos por m²; el tramo solo de respaldo.
+        ventana = max(VENTANA_M2_MIN, m2 * VENTANA_M2_REL)
+        pool = [arr for m2c, arr in vecinos.get((mz, tip), []) if abs(m2c - m2) <= ventana]
         celda = celdas.get((mz, tip, rango))
-        if celda is None:
+        if len(pool) < MIN_COMPARABLES and celda is None:
             # SIN caída a comuna, a proposito. Ver el docstring del módulo.
             r.descartes["sin_comparables"] += 1
             _anotar(r, comuna, "sin_comparables")
@@ -313,7 +339,13 @@ def emparejar(
         vistos.add(firma)
         _anotar(r, comuna, "rankea")
 
-        arriendo, n, m2_celda = celda
+        m2_celda = None
+        if len(pool) >= MIN_COMPARABLES:
+            arriendo, n = percentil(pool, D("0.5")), len(pool)
+            metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f}"
+        else:
+            arriendo, n, m2_celda = celda
+            metodo = f"tramo {rango} m²"
         med = mediana_zona.get(mz)
         riesgo = riesgos.get(mz)
         if riesgo is None:
@@ -359,10 +391,10 @@ def emparejar(
                 catalizador=catalizador if catalizador is not None else D(0),
             )
         )
-        r.procedencia_arriendo[key] = (f"{mz} · {tip} · {rango} m²", n, arriendo)
-        # Cuanto se aleja esta unidad del depto TIPICO de su celda. No corrige el arriendo
-        # —eso seria imputar (§3.2)— pero deja medido el sesgo para que la ficha lo muestre
-        # y para poder decidir con numeros si las bandas hay que angostarlas.
+        r.procedencia_arriendo[key] = (f"{mz} · {tip} · {metodo}", n, arriendo)
+        # Cuanto se aleja esta unidad del depto TIPICO de su celda. Solo aplica al camino
+        # de respaldo (tramo): la ventana de vecinos elimina el sesgo por construccion.
+        # La medicion de este desvio fue la que termino en T-949.
         if m2_celda:
             r.desvio_m2[key] = (Decimal(str(m2)) - m2_celda) / m2_celda
     return r

@@ -461,3 +461,81 @@ def test_sin_la_UF_de_su_dia_se_descarta_y_se_cuenta(con) -> None:
     r = op.emparejar(con, RANGOS, ahora=AHORA)
     assert r.unidades == [] and r.descartes["sin_uf_del_dia"] == 1
     assert r.por_comuna["sm"]["sin_uf_del_dia"] == 1
+
+
+# ------------------------------------------------------------- T-949 · vecinos por m²
+
+
+def _comp_arr(con, cid, m2, uf, mz="sm/el-llano", tip="2D1B"):
+    con.execute(
+        "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+        "arriendo_uf, activo, evidence_level, source_id, source_url, fetched_at, "
+        "parser_version, raw_blob_path, robots_snapshot_sha) "
+        "VALUES (?, ?, ?, ?, ?, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
+        (cid, mz, tip, m2, D(str(uf)), AHORA),
+    )
+
+
+def test_el_arriendo_sale_de_los_vecinos_de_m2_no_del_tramo(con) -> None:
+    """El caso del top 1 (06-sep): un 2D1B de 36 m² en la celda 35-50 cuyos comparables
+    se concentran en 42-48 m². La ventana ±20% (36 => ±7,2) toma los de 30-43 y deja
+    fuera los grandes que inflaban la mediana del tramo."""
+    # tramo declarado con mediana INFLADA por los grandes
+    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)
+    # vecinos reales: 8 chicos alrededor de 36 m² a ~7,5 UF y 6 grandes de 46-48 a ~9,6
+    for i in range(8):
+        _comp_arr(con, f"CH{i}", 33 + i, "7.5")
+    for i in range(6):
+        _comp_arr(con, f"GR{i}", 46 + (i % 3), "9.6")
+    unidad(con, tip="2D1B", m2=36, precio="1500")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    u = r.unidades[0]
+    assert u.arriendo_mensual_uf == D("7.5"), "la mediana de la VENTANA, no la del tramo"
+    assert u.arriendo_n_comparables == 8
+    origen, n, arr = r.procedencia_arriendo["U1"]
+    assert "vecinos" in origen and n == 8 and arr == D("7.5")
+
+
+def test_ventana_flaca_cae_al_tramo_y_lo_dice(con) -> None:
+    """Con menos de 8 vecinos de tamano, el respaldo es la celda de tramo auditada de
+    siempre — y la procedencia dice cual de los dos caminos se uso."""
+    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)
+    for i in range(4):  # solo 4 vecinos: no bastan
+        _comp_arr(con, f"CH{i}", 34 + i, "7.5")
+    unidad(con, tip="2D1B", m2=36, precio="1500")
+
+    r = op.emparejar(con, RANGOS)
+    u = r.unidades[0]
+    assert u.arriendo_mensual_uf == D("8.6")
+    origen, n, _ = r.procedencia_arriendo["U1"]
+    assert "tramo" in origen and n == 20
+
+
+def test_sin_ventana_ni_celda_no_se_rankea(con) -> None:
+    for i in range(3):
+        _comp_arr(con, f"CH{i}", 34 + i, "7.5")
+    unidad(con, tip="2D1B", m2=36, precio="1500")
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1
+
+
+def test_la_ventana_respeta_la_frescura_del_ranking(con) -> None:
+    """Los vecinos vienen de la MISMA poblacion §7.3 que las celdas: un comparable de
+    hace cuatro meses no puede definir el arriendo de una compra de hoy."""
+    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)
+    viejo = AHORA - timedelta(days=120)
+    for i in range(8):
+        con.execute(
+            "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+            "arriendo_uf, activo, evidence_level, source_id, source_url, fetched_at, "
+            "parser_version, raw_blob_path, robots_snapshot_sha) "
+            "VALUES (?, 'sm/el-llano', '2D1B', ?, ?, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
+            (f"V{i}", 34 + i, D("5.0"), viejo),
+        )
+    unidad(con, tip="2D1B", m2=36, precio="1500")
+
+    r = op.emparejar(con, RANGOS, ahora=AHORA)
+    u = r.unidades[0]
+    assert u.arriendo_mensual_uf == D("8.6"), "los viejos no arman ventana: cae al tramo"

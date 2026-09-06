@@ -48,9 +48,9 @@ filas = con.execute(
 # limpieza promocional en memoria (la base puede no tener corrida la marca nueva)
 from decimal import Decimal as D  # noqa: E402
 
-grupos: dict[str, list[tuple[str, D, D | None]]] = {}
+grupos: dict[str, list[tuple[str, D, D | None, D]]] = {}
 for cid, mz, tip, m2, clp in filas:
-    grupos.setdefault(mz, []).append((cid, D(str(clp)) / D(str(m2)), D(str(clp))))
+    grupos.setdefault(mz, []).append((cid, D(str(clp)) / D(str(m2)), D(str(clp)), D(str(m2))))
 promos = _clusters_promocionales(grupos)
 limpias = [(cid, mz, tip, m2, clp) for cid, mz, tip, m2, clp in filas if cid not in promos]
 print(f"comparables limpios: {len(limpias)} ({len(promos)} descartados como cluster promocional)\n")
