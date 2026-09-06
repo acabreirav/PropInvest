@@ -1708,3 +1708,37 @@ criterio_de_aceptacion:
     precio, ventana de fechas) con la decision anotada
   - el check evalua >0 filas sobre la base real y lo reporta
 gate: make gates
+
+## T-947 · Clusters promocionales ("precio primer mes") en las medianas de arriendo
+estado: hecha  # 06-sep: auditoria del top 1 destapo DIEZ avisos a $150.000 exactos
+  # (25-30 m²) que eran precio primer mes — arriendo real $260.000, confirmado por el
+  # usuario abriendo el aviso — y la cerca de Tukey no los veia porque diez valores
+  # identicos la corren. Regla nueva en sospechosos.marcar_arriendo: mismo precio
+  # exacto >=3 veces bajo 0,75x la mediana UF/m² del grupo => sospechoso (fuera de
+  # medianas, se conserva). Corre ANTES de Tukey, sobre el grupo limpio despues.
+agente: auditor-datos · fase: 2
+
+## T-948 · El arriendo de equilibrio no llegaba al informe
+estado: hecha  # 06-sep: el motor lo calculaba (biseccion real) y la ficha no lo
+  # mostraba — el usuario lo busco con Ctrl+F y no estaba. Ahora cada ficha del top
+  # trae "Arriendo de equilibrio" con el colchon (%): la vara para contrastar la
+  # mediana de la celda contra lo que se ve en terreno.
+agente: dashboard · fase: 2
+
+## T-949 · La celda de arriendo por tramo de m² queda corta en micro-unidades
+estado: en_curso  # medicion lista, decision §8.4 pendiente con el humano
+agente: motor-financiero
+fase: 2
+contexto: auditoria del top 1 (06-sep) — un 2D1B de 36 m² tomo la mediana de la celda
+  2D1B x 35-50 ($350.000, n=29) cuyos comparables se concentran en 42-48 m²; los de
+  ~40 m² rentan $300-325k. El tramo de 15 m² de ancho le regala arriendo a la unidad
+  chica del borde. Candidato: mediana de los k=8 vecinos mas cercanos en m² dentro de
+  (microzona, tipologia), mismos filtros §7.3 + limpieza promocional; el tramo queda
+  solo como gate de liquidez. `scripts/medir_celda_vs_vecinos.py` mide el impacto
+  sobre el ultimo snapshot del top SIN tocar el ranking.
+criterio_de_aceptacion:
+  - correr la medicion sobre la base real y pegarla aca
+  - si el delta es material (>10% en varias filas del top): decidir con el humano
+    (§8.4) e implementar en el emparejamiento con tests y verificador
+  - si no: documentar y cerrar sin tocar nada
+gate: make gates

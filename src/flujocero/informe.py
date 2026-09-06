@@ -49,6 +49,10 @@ class FilaTop:
     pie_clp: int = 0
     dfl2: str = "no"  # "sí" / "probable*" (supuesto E, verificar en escritura) / "no"
     drivers: list[str] = field(default_factory=list)  # por qué puntúa alto (§12)
+    # Arriendo bajo el cual el flujo mensual se da vuelta, resuelto por bisección sobre
+    # el modelo completo (auditoría del top 1, 06-sep: sin esta vara, un arriendo de
+    # celda sobreestimado no se puede contrastar con lo que se ve en terreno). 0 = ND.
+    equilibrio_clp: int = 0
 
 
 @dataclass
@@ -323,6 +327,25 @@ def _f(n: float) -> str:
     return f"{n:,.0f}".replace(",", ".")
 
 
+def _equilibrio(f: FilaTop) -> str:
+    """El arriendo bajo el cual el flujo se da vuelta, con el colchón a la vista.
+
+    Es la vara para contrastar el arriendo de la celda con lo que se ve en terreno: si
+    los avisos reales de la manzana están BAJO el equilibrio, la oportunidad depende de
+    un número frágil y hay que decirlo, no esconderlo."""
+    if f.equilibrio_clp <= 0:
+        return "<b>ND</b>"
+    if f.arriendo_clp > 0:
+        colchon = (f.arriendo_clp - f.equilibrio_clp) / f.arriendo_clp
+        detalle = (
+            f"colchón {colchon:.0%}: el arriendo puede caer hasta ahí y el flujo aguanta"
+            if colchon > 0
+            else "SIN colchón: el arriendo estimado ya está bajo el equilibrio"
+        )
+        return f"<b>${_f(f.equilibrio_clp)}/mes</b> <span class='mini'>{detalle}</span>"
+    return f"<b>${_f(f.equilibrio_clp)}/mes</b>"
+
+
 def render_html(
     fecha: str,
     corte: str,
@@ -358,6 +381,7 @@ def render_html(
     <div><span>Precio</span><b>UF {_f(f.precio_uf)}</b> ≈ ${_f(f.precio_clp)}</div>
     <div><span>Arriendo estimado</span><b>${_f(f.arriendo_clp)}/mes</b>
       <span class="mini">mediana de {f.n_comparables} arriendos reales en su microzona</span></div>
+    <div><span>Arriendo de equilibrio</span>{_equilibrio(f)}</div>
     <div><span>Tasa</span><b>{tasa}</b></div>
     <div><span>Dividendo</span><b>${_f(f.dividendo_clp)}/mes</b></div>
     <div><span>Flujo mensual</span>{flujo}</div>

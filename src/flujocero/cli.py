@@ -1674,6 +1674,16 @@ def informe_semanal(
             pares = sorted(ev.score_desglose.items(), key=lambda kv: -kv[1])
             return [nombres_driver.get(k, k) for k, _ in pares[:2]]
 
+        # El arriendo de equilibrio (biseccion sobre el modelo completo) solo para las
+        # filas que van al informe: es la vara contra la que se contrasta el arriendo de
+        # la celda en terreno (auditoria del top 1, 06-sep). Barato: top x ~15 evals.
+        from flujocero.finance.modelo import arriendo_equilibrio_real
+
+        esc = escenario_base(p, inv)
+        equilibrios = {
+            u.unidad_key: arriendo_equilibrio_real(u, esc, p, inv) for u, _ in vivos[:top]
+        }
+
         filas_top = [
             inf.FilaTop(
                 unidad_key=u.unidad_key,
@@ -1704,6 +1714,7 @@ def informe_semanal(
                 pie_clp=int(u.precio_uf * ev.pie_efectivo * uf),
                 dfl2=(("probable*" if ev.dfl2_es_supuesto else "sí") if ev.dfl2_aplicado else "no"),
                 drivers=_drivers(ev),
+                equilibrio_clp=int(eq * uf) if (eq := equilibrios.get(u.unidad_key)) else 0,
             )
             for u, ev in vivos[:top]
         ]

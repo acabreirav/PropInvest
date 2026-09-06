@@ -2874,3 +2874,22 @@ Reporte completo en el hilo; resumen fiel:
   de meses despues, no solo con el fixture del dia de captura. Las dos mentiras mas
   graves (0% fresco, 0 dias de edad) pasaban todos los tests y solo se veian contra
   la base real envejecida.
+
+
+## 2026-09-06 · Auditoria del top 1 (Arturo Prat... no: san-alberto-hurtado) — 3 hoyos
+
+El usuario contrasto el top 1 (2D1B, 36 m², arriendo de celda $350.000) contra los
+avisos reales de la manzana y encontro el hilo. La auditoria fila a fila
+(`scripts/auditar_celda_arriendo.py`, 154 comparables) confirmo y amplio:
+1. **Promos "primer mes"**: 10 avisos a $150.000 exactos que eran precio promocional
+   (real $260.000). Diez valores identicos CORREN la cerca de Tukey: el detector no
+   los veia. -> regla de cluster promocional en `sospechosos` (T-947, hecha).
+2. **El equilibrio no estaba en el informe**: el motor lo bisecciona y la ficha no lo
+   mostraba. -> "Arriendo de equilibrio" + colchon % en cada ficha (T-948, hecha).
+3. **La celda 35-50 es demasiado ancha para micro-unidades**: los comparables del
+   tramo se concentran en 42-48 m² y le regalan ~$25-50k de arriendo a un 36 m².
+   -> medicion k-vecinos lista (T-949, en_curso); decision §8.4 pendiente con la
+   salida de `scripts/medir_celda_vs_vecinos.py` sobre la base real.
+Leccion: la mediana de celda paso todos los gates y aun asi el terreno la refuto en
+el borde del tramo. El gate que faltaba era ensenarle al usuario la vara (equilibrio)
+para que la refutacion fuera medible y no una sensacion.

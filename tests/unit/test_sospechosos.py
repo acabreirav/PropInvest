@@ -99,3 +99,50 @@ def test_venta_marca_por_uf_m2_contra_su_microzona(con):
     assert con.execute("SELECT unidad_key FROM fact_unidad_venta WHERE sospechoso").fetchall() == [
         ("CARO",)
     ]
+
+
+def test_el_cluster_promocional_se_marca_aunque_corra_la_cerca(con):
+    """Caso medido 06-sep (auditoria del top 1): DIEZ avisos a $150.000 exactos por
+    25-30 m² que eran "precio primer mes" (arriendo real $260.000). Tukey no los ve
+    porque diez valores identicos corren la cerca hacia ellos; la firma del promo es
+    repeticion exacta + nivel bajo 0,75x la mediana del grupo."""
+    for i in range(12):
+        _arriendo(con, f"C{i}", 330_000 + i * 3_000)
+    for i in range(10):
+        _arriendo(con, f"PROMO{i}", 150_000, m2=28)
+
+    marcados, _ = sospechosos.marcar_arriendo(con)
+    assert marcados == 10
+    filas = con.execute(
+        "SELECT comp_id FROM fact_arriendo_comp WHERE sospechoso ORDER BY comp_id"
+    ).fetchall()
+    assert all(f[0].startswith("PROMO") for f in filas)
+
+
+def test_precio_repetido_a_nivel_de_mercado_no_es_promo(con):
+    """Un multifamily publicando 6 unidades identicas al precio de mercado es oferta
+    real, no promocion: la repeticion sola no marca nada."""
+    for i in range(10):
+        _arriendo(con, f"C{i}", 320_000 + i * 5_000)
+    for i in range(6):
+        _arriendo(con, f"MF{i}", 330_000)
+
+    marcados, _ = sospechosos.marcar_arriendo(con)
+    assert marcados == 0
+
+
+def test_dos_repetidos_baratos_no_bastan_para_cluster(con):
+    """Bajo 3 repeticiones no hay firma de promo: puede ser coincidencia. En un grupo
+    disperso (cerca de Tukey holgada), dos repetidos baratos quedan DENTRO de la cerca
+    y sin cluster: no se marcan por ninguna de las dos reglas."""
+    # dispersion real de mercado: $200k a $500k -> la cerca queda lejisimos de $240k
+    for i in range(12):
+        _arriendo(con, f"C{i}", 200_000 + i * 27_000)
+    _arriendo(con, "B1", 240_000)  # bajo 0,75x la mediana, pero solo DOS veces
+    _arriendo(con, "B2", 240_000)
+
+    sospechosos.marcar_arriendo(con)
+    baratos = con.execute(
+        "SELECT count(*) FROM fact_arriendo_comp WHERE sospechoso AND comp_id LIKE 'B%'"
+    ).fetchone()[0]
+    assert baratos == 0

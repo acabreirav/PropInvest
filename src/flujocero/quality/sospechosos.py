@@ -43,6 +43,39 @@ def _marcas(grupos: dict[str, list[tuple[str, Decimal]]]) -> set[str]:
     return fuera
 
 
+# Cluster promocional: el MISMO precio repetido >=3 veces en la microzona, con un UF/m²
+# muy por debajo de la mediana del grupo. Caso medido (06-sep, auditoria del top 1 en
+# san-alberto-hurtado): DIEZ avisos a $150.000 exactos por 25-30 m² que eran "precio
+# primer mes" — el arriendo real era $260.000, confirmado abriendo el aviso. La cerca de
+# Tukey no los ve porque diez valores identicos CORREN la cerca hacia ellos. La firma es
+# inequivoca: repeticion exacta + nivel imposible. 0,75 y el minimo de 3 son constantes
+# de la regla (como la cerca misma, D-019), no supuestos de mercado.
+FACTOR_PROMO = D("0.75")
+MIN_CLUSTER_PROMO = 3
+
+
+def _clusters_promocionales(
+    grupos: dict[str, list[tuple[str, Decimal, Decimal | None]]],
+) -> set[str]:
+    """Ids cuyos precios EXACTOS se repiten >=3 veces bajo 0,75x la mediana UF/m² del grupo."""
+    fuera: set[str] = set()
+    for triples in grupos.values():
+        if len(triples) < MIN_CLUSTER_PROMO:
+            continue
+        mediana = sorted(v for _, v, _ in triples)[len(triples) // 2]
+        por_precio: dict[Decimal, list[tuple[str, Decimal]]] = {}
+        for clave, v, clp in triples:
+            if clp is not None:
+                por_precio.setdefault(clp, []).append((clave, v))
+        for miembros in por_precio.values():
+            if len(miembros) < MIN_CLUSTER_PROMO:
+                continue
+            ufm2 = sorted(v for _, v in miembros)[len(miembros) // 2]
+            if ufm2 < mediana * FACTOR_PROMO:
+                fuera |= {clave for clave, _ in miembros}
+    return fuera
+
+
 def marcar_venta(conexion: Any) -> tuple[int, int]:
     """Marca `sospechoso` en `fact_unidad_venta` vigente, por UF/m² contra su microzona.
 
@@ -94,16 +127,25 @@ def marcar_arriendo(conexion: Any) -> tuple[int, int]:
         "AND microzona_id IS NOT NULL AND m2_utiles IS NOT NULL AND m2_utiles > 0 "
         "AND coalesce(arriendo_uf, arriendo_clp) IS NOT NULL"
     ).fetchall()
-    grupos: dict[str, list[tuple[str, Decimal]]] = {}
+    grupos: dict[str, list[tuple[str, Decimal, Decimal | None]]] = {}
     for clave, mz, m2, arr_uf, clp, visto in filas:
         if arr_uf is None:
             uf = uf_del_dia(serie, visto) if visto else None
             if uf is None:
                 continue
             arr_uf = D(str(clp)) / uf
-        grupos.setdefault(mz, []).append((clave, D(str(arr_uf)) / D(str(m2))))
+        grupos.setdefault(mz, []).append(
+            (clave, D(str(arr_uf)) / D(str(m2)), D(str(clp)) if clp is not None else None)
+        )
 
-    fuera = _marcas(grupos)
+    # Primero los clusters promocionales (que la cerca de Tukey no puede ver: la corren
+    # ellos mismos), y la cerca despues, sobre el grupo ya limpio.
+    promos = _clusters_promocionales(grupos)
+    limpios = {
+        mz: [(clave, v) for clave, v, _ in triples if clave not in promos]
+        for mz, triples in grupos.items()
+    }
+    fuera = promos | _marcas(limpios)
     conexion.execute("UPDATE fact_arriendo_comp SET sospechoso = FALSE WHERE activo")
     for clave in sorted(fuera):
         conexion.execute(
