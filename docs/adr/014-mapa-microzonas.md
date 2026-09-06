@@ -1,4 +1,4 @@
-# ADR 013 · El mapa de microzonas: geometría vía shapely, no vía DuckDB spatial — T-928
+# ADR 014 · El mapa de microzonas: geometría vía shapely, no vía DuckDB spatial — T-928
 
 **Fecha:** 06-sep-2026 · **Estado:** aceptada
 

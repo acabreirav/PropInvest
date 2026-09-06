@@ -37,7 +37,7 @@ verdad que dibujar. Ahí se evalúa vendorizar MapLibre —copiarlo al repo, no 
 CDN— y se escribe el ADR que corresponda.
 
 **Actualización T-928 (06-sep-2026):** ya pasó. `dim_microzona.geom` puede poblarse
-(`cli cargar-geometria-microzonas`, ver ADR 013) y el tablero usa MapLibre GL, vendorizado
+(`cli cargar-geometria-microzonas`, ver ADR 014) y el tablero usa MapLibre GL, vendorizado
 en `static/vendor/` (commit 6023d31) — sigue sin CDN, la razón 1 y 2 de este ADR se
 mantienen intactas. El resto del tablero (ranking, ficha, filtros) sigue siendo HTML/CSS/JS
 plano: MapLibre entró solo donde de verdad hacía falta.
