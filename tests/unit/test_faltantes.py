@@ -312,36 +312,29 @@ def test_la_celda_guarda_el_tamano_tipico_de_sus_comparables() -> None:
     assert ag.m2_mediana == 34, "la mediana la fijan los grandes, que son mayoría"
 
 
-def test_el_emparejamiento_mide_cuanto_se_desvia_la_unidad_de_su_celda() -> None:
-    """No corrige el arriendo —eso sería imputar (§3.2)— pero deja el sesgo medido."""
+def test_desvio_m2_murio_con_el_respaldo_al_tramo() -> None:
+    """T-949 + verificador M1: el arriendo sale de vecinos del TAMANO de la unidad, asi
+    que el sesgo por banda que `desvio_m2` media desaparecio por construccion — y el
+    respaldo al tramo (el unico camino que lo poblaba) murio por servir la mediana de
+    deptos que no se parecen a la unidad. Se fija que quede vacio: si alguien lo
+    repuebla, que sea una decision, no inercia."""
     from flujocero.agg.oportunidades import emparejar
 
     con = _base(unidades=[("CHICA", "a/uno", "1D1B", 22.0)], celdas=[])
-    con.execute(
-        "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, "
-        "arriendo_uf_mediana, n, m2_mediana) VALUES ('a/uno','1D1B','0-35',10.0,20,34.0)"
-    )
+    for i in range(8):  # vecinos reales de su tamano
+        con.execute(
+            "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+            "arriendo_uf, activo, evidence_level, source_id, source_url, fetched_at, "
+            "parser_version, raw_blob_path, robots_snapshot_sha) "
+            "VALUES (?, 'a/uno', '1D1B', ?, 7.0, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
+            (f"v{i}", 20 + i, AHORA),
+        )
     try:
         r = emparejar(con, RANGOS)
     finally:
         con.close()
-    assert r.unidades, "la unidad tiene que rankear: el desvío no la excluye"
-    # 22 contra 34: la unidad es 35% más chica que el depto típico de su celda.
-    assert r.desvio_m2["CHICA"] == pytest.approx(Decimal("-0.3529"), abs=Decimal("0.001"))
-
-
-def test_sin_m2_mediana_no_se_inventa_un_desvio() -> None:
-    """Una celda vieja, anterior a la columna, no tiene con qué comparar. Devolver 0 diría
-    "no hay sesgo", que es una afirmación distinta de "no se puede medir"."""
-    from flujocero.agg.oportunidades import emparejar
-
-    con = _base(unidades=[("X", "a/uno", "1D1B", 22.0)], celdas=[("a/uno", "1D1B", "0-35", 20)])
-    try:
-        r = emparejar(con, RANGOS)
-    finally:
-        con.close()
-    assert r.unidades
-    assert "X" not in r.desvio_m2
+    assert r.unidades and r.unidades[0].arriendo_mensual_uf == Decimal("7.0")
+    assert r.desvio_m2 == {}
 
 
 # --------------------------------------------------------------- el contrato de las bandas

@@ -107,7 +107,7 @@ def test_el_cluster_promocional_se_marca_aunque_corra_la_cerca(con):
     porque diez valores identicos corren la cerca hacia ellos; la firma del promo es
     repeticion exacta + nivel bajo 0,75x la mediana del grupo."""
     for i in range(12):
-        _arriendo(con, f"C{i}", 330_000 + i * 3_000)
+        _arriendo(con, f"C{i}", 330_000 + i * 3_000, m2=30)  # vecinos de tamano del promo
     for i in range(10):
         _arriendo(con, f"PROMO{i}", 150_000, m2=28)
 

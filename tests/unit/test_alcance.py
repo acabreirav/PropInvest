@@ -142,11 +142,14 @@ def _base_con(unidades):
             "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?,?,?)",
             (mz, comuna, mz.split("/")[1]),
         )
-        con.execute(
-            "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, "
-            "arriendo_uf_mediana, n) VALUES (?,'2D2B','50-70',12.0,20)",
-            (mz,),
-        )
+        for i in range(20):  # T-949: el emparejamiento lee comparables vivos, no la tabla agregada
+            con.execute(
+                "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
+                "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
+                "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+                "VALUES (?,?,'2D2B',60,12.0,TRUE,'V','s','u',?,'v','p','x')",
+                (f"{mz}-c{i}", mz, AHORA),
+            )
     for key, mz in unidades:
         con.execute(
             "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, m2_utiles, "

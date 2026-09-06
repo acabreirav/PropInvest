@@ -734,3 +734,28 @@ magnitud queda registrada aquí.
   rango y no tiene ADR.
 
 **Se revierte** con `tributacion.dfl2_probable_usadas_bajo_140m2: false`.
+
+## D-020 · El arriendo de una unidad sale de sus vecinos por m², no del tramo fijo — 06-sep-2026
+
+**Decisión (§8.4, tomada con el usuario mirando la medición):** la ventana de vecinos
+±20% de m² dentro de (microzona, tipología) reemplaza a la celda de tramo como fuente
+del arriendo del ranking. Si ±20% no junta n>=8 se ensancha a ±30% y ±40% (la
+procedencia dice cuál quedó); si ni así junta, la unidad **no rankea** (ND). El
+respaldo a la celda de tramo de la primera versión fue eliminado por el verificador
+§7.6: se disparaba exactamente donde el sesgo del tramo es peor (el #1 del ranking
+era un 51 m² tomando la mediana de una celda cuyo comparable más chico medía 57 m²) y
+leía un snapshot con la frescura y los sospechosos de otra corrida.
+
+**Corrección del registro (verificador m7):** la medición que motivó la decisión
+(`scripts/medir_celda_vs_vecinos.py` sobre el top-15) mostraba "5 de 14 filas >10%,
+todas hacia abajo". Sobre las 558 unidades comunes del universo completo el reajuste
+es **bidireccional**: 301 suben, 248 bajan. La dirección "solo baja" era un artefacto
+de mirar el top (que por construcción concentra los arriendos sobreestimados). La
+decisión se sostiene igual — el objetivo era precisión por tamaño, no conservadurismo —
+pero el registro dice lo que la muestra era.
+
+**Efectos colaterales aceptados y anotados:** ~114 unidades entran al universo
+rankeable porque su ventana junta n>=8 donde su celda no llegaba (relajamiento de
+facto del §12, visible en el embudo); `desvio_m2` queda vacío (el sesgo que medía
+desapareció por construcción); `agg_arriendo_microzona` deja de ser fuente del
+emparejamiento y queda para diagnóstico/informe de nuevas (unificarla es T-950).

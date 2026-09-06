@@ -100,12 +100,14 @@ def test_emparejar_usa_el_riesgo_medido_y_cuenta_el_defecto(con):
     puente.calcular_riesgo(con, cargar("params"), AHORA)
 
     # una unidad en lo-vial (riesgo medido) con su celda de arriendo completa
-    con.execute(
-        "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, n, "
-        "arriendo_uf_mediana, avisos_activos, calculado_en) "
-        "VALUES ('san-miguel/lo-vial', '2D1B', '35-50', 9, 9.0, 9, ?)",
-        (AHORA,),
-    )
+    for i in range(9):  # T-949: comparables vivos, no la tabla agregada
+        con.execute(
+            "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+            "arriendo_uf, activo, evidence_level, source_id, source_url, fetched_at, "
+            "parser_version, raw_blob_path, robots_snapshot_sha) "
+            "VALUES (?, 'san-miguel/lo-vial', '2D1B', 40, 9.0, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
+            (f"lv-c{i}", AHORA),
+        )
     con.execute(
         "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, m2_utiles, "
         "precio_uf, evidence_level, valid_from, source_id, source_url, fetched_at, "

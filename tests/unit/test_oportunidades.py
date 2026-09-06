@@ -33,11 +33,19 @@ def con():
 
 
 def celda(con, mz="sm/el-llano", tip="2D2B", rango="50-70", mediana="12.35", n=94):
-    con.execute(
-        "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, n, "
-        "arriendo_uf_mediana, arriendo_uf_m2_mediana, calculado_en) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (mz, tip, rango, n, D(mediana), D(mediana) / D(56), AHORA),
-    )
+    """Siembra n comparables VIVOS del tamano tipico del rango. Desde el verificador de
+    T-949 el emparejamiento no lee `agg_arriendo_microzona`: la ventana de vecinos se
+    arma en vivo desde `fact_arriendo_comp` — el nombre del helper se conserva porque
+    lo que representa (la referencia de arriendo de la microzona) es el mismo."""
+    lo, hi = (int(x) for x in rango.split("-"))
+    for i in range(n):
+        con.execute(
+            "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
+            "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
+            "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+            "VALUES (?, ?, ?, ?, ?, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
+            (f"{mz}·{tip}·{rango}·{i}", mz, tip, (lo + hi) / 2, D(mediana), AHORA),
+        )
 
 
 def unidad(con, key="U1", mz="sm/el-llano", tip="2D2B", m2=56, precio="3000", ev="V", nueva=False):
@@ -126,7 +134,7 @@ def test_guarda_de_donde_salio_cada_arriendo(con) -> None:
     celda(con)
     unidad(con)
     celda_txt, n, arr = op.emparejar(con, RANGOS).procedencia_arriendo["U1"]
-    assert "sm/el-llano" in celda_txt and "2D2B" in celda_txt and "50-70" in celda_txt
+    assert "sm/el-llano" in celda_txt and "2D2B" in celda_txt and "vecinos" in celda_txt
     assert (n, arr) == (94, D("12.35"))
 
 
@@ -480,9 +488,6 @@ def test_el_arriendo_sale_de_los_vecinos_de_m2_no_del_tramo(con) -> None:
     """El caso del top 1 (06-sep): un 2D1B de 36 m² en la celda 35-50 cuyos comparables
     se concentran en 42-48 m². La ventana ±20% (36 => ±7,2) toma los de 30-43 y deja
     fuera los grandes que inflaban la mediana del tramo."""
-    # tramo declarado con mediana INFLADA por los grandes
-    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)
-    # vecinos reales: 8 chicos alrededor de 36 m² a ~7,5 UF y 6 grandes de 46-48 a ~9,6
     for i in range(8):
         _comp_arr(con, f"CH{i}", 33 + i, "7.5")
     for i in range(6):
@@ -498,33 +503,52 @@ def test_el_arriendo_sale_de_los_vecinos_de_m2_no_del_tramo(con) -> None:
     assert "vecinos" in origen and n == 8 and arr == D("7.5")
 
 
-def test_ventana_flaca_cae_al_tramo_y_lo_dice(con) -> None:
-    """Con menos de 8 vecinos de tamano, el respaldo es la celda de tramo auditada de
-    siempre — y la procedencia dice cual de los dos caminos se uso."""
-    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)
-    for i in range(4):  # solo 4 vecinos: no bastan
-        _comp_arr(con, f"CH{i}", 34 + i, "7.5")
-    unidad(con, tip="2D1B", m2=36, precio="1500")
+def test_la_ventana_se_ensancha_antes_de_rendirse(con) -> None:
+    """±20% no junta n>=8 pero ±30% si: se usa la ancha y la procedencia dice cuanto.
+    Es el reemplazo del respaldo al tramo, que el verificador mato (M1): se disparaba
+    exactamente donde el sesgo del tramo era peor."""
+    for i in range(8):  # a 12 m² de distancia: fuera de ±8 (20%), dentro de ±12 (30%)
+        _comp_arr(con, f"V{i}", 52, "9.0")
+    unidad(con, tip="2D1B", m2=40, precio="1500")
 
     r = op.emparejar(con, RANGOS)
     u = r.unidades[0]
-    assert u.arriendo_mensual_uf == D("8.6")
+    assert u.arriendo_mensual_uf == D("9.0")
     origen, n, _ = r.procedencia_arriendo["U1"]
-    assert "tramo" in origen and n == 20
+    assert "±12" in origen and n == 8
 
 
-def test_sin_ventana_ni_celda_no_se_rankea(con) -> None:
-    for i in range(3):
-        _comp_arr(con, f"CH{i}", 34 + i, "7.5")
-    unidad(con, tip="2D1B", m2=36, precio="1500")
+def test_sin_vecinos_no_hay_arriendo_ni_respaldo_al_tramo(con) -> None:
+    """Verificador M1: el respaldo al tramo servia la mediana de deptos que no se
+    parecen a la unidad (el #1 real: 51 m² contra una celda cuyo minimo era 57).
+    Sin n>=8 ni a ±40%, el resultado honesto es ND: la unidad no rankea."""
+    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)  # tipicos de 42,5 m²
+    unidad(con, tip="2D1B", m2=15, precio="900")  # ±40% = ±6: ningun vecino real
+
     r = op.emparejar(con, RANGOS)
     assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1
 
 
+def test_un_comparable_sobre_140_m2_no_es_vecino_de_nadie(con) -> None:
+    """Verificador M2: sobre 140 m² se pierde el DFL2 y la unidad no compite (§12) —
+    su arriendo tampoco sirve de comparable. Sin este filtro, un 130 m² tomaba
+    arriendo de penthouses de 150 y fabricaba un yield doble."""
+    for i in range(4):
+        _comp_arr(con, f"OK{i}", 128 + i, "30")
+    for i in range(8):
+        _comp_arr(con, f"PH{i}", 145 + i, "60")  # ±20% de 130 = ±26: entrarian todos
+    unidad(con, tip="2D1B", m2=130, precio="6000")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 0, "4 vecinos legitimos no bastan y los penthouses no cuentan"
+    assert r.descartes["sin_comparables"] == 1
+
+
 def test_la_ventana_respeta_la_frescura_del_ranking(con) -> None:
-    """Los vecinos vienen de la MISMA poblacion §7.3 que las celdas: un comparable de
-    hace cuatro meses no puede definir el arriendo de una compra de hoy."""
-    celda(con, tip="2D1B", rango="35-50", mediana="8.6", n=20)
+    """Los vecinos vienen de la MISMA poblacion §7.3 de esta corrida: un comparable de
+    hace cuatro meses no define el arriendo de una compra de hoy — y desde que murio el
+    respaldo al tramo (verificador M3), tampoco vuelve por la puerta del snapshot: la
+    unidad queda en ND."""
     viejo = AHORA - timedelta(days=120)
     for i in range(8):
         con.execute(
@@ -537,5 +561,4 @@ def test_la_ventana_respeta_la_frescura_del_ranking(con) -> None:
     unidad(con, tip="2D1B", m2=36, precio="1500")
 
     r = op.emparejar(con, RANGOS, ahora=AHORA)
-    u = r.unidades[0]
-    assert u.arriendo_mensual_uf == D("8.6"), "los viejos no arman ventana: cae al tramo"
+    assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1

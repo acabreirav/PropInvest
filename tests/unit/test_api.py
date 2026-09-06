@@ -87,11 +87,15 @@ def _poblar_datos_basicos(con: duckdb.DuckDBPyConnection) -> None:
             ),
         )
     for mz, tip, rango, mediana, n in CELDAS:
-        con.execute(
-            "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, "
-            "arriendo_uf_mediana, n) VALUES (?,?,?,?,?)",
-            (mz, tip, rango, mediana, n),
-        )
+        lo, hi = (int(x) for x in rango.split("-"))
+        for i in range(n):  # T-949: comparables vivos, no la tabla agregada
+            con.execute(
+                "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
+                "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
+                "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+                "VALUES (?,?,?,?,?,TRUE,'V','s','u',?,'v','p','x')",
+                (f"{mz}-{tip}-{rango}-{i}", mz, tip, (lo + hi) / 2, mediana, AHORA),
+            )
 
 
 @pytest.fixture(scope="module")

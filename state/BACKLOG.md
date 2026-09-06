@@ -1702,6 +1702,9 @@ contexto: verificador 06-sep — `duplicados_de_arriendo` agrupa por una columna
   fact_arriendo_comp NO tiene; llevaba meses publicando OK con cero filas evaluadas
   (desde 4329d77 al menos dice "no evaluable" en vez de OK). El umbral n>=8 por
   microzona corre sin proteccion contra el mismo depto republicado por dos corredores.
+  06-sep (verificador de T-949, m3): medido — 6% de filas repetidas por firma
+  (mz,tip,m2,arriendo); 16 unidades del camino ventana caen bajo n=8 si se deduplica.
+  La ventana es mas chica que la celda: este riesgo ahora se concentra mas.
 criterio_de_aceptacion:
   - o capturar/normalizar direccion desde la tarjeta (sin datos personales, §3.4), o
     redefinir la clave de dedup con columnas que existan (microzona, m2, dormitorios,
@@ -1726,7 +1729,10 @@ estado: hecha  # 06-sep: el motor lo calculaba (biseccion real) y la ficha no lo
 agente: dashboard · fase: 2
 
 ## T-949 · La celda de arriendo por tramo de m² queda corta en micro-unidades
-estado: en_curso  # medicion lista, decision §8.4 pendiente con el humano
+estado: hecha  # 06-sep, D-020: ventana de vecinos ±20/30/40% de m² y despues ND —
+  # SIN respaldo al tramo (el verificador lo mato: servia la mediana de deptos que no
+  # se parecen a la unidad justo donde mas importaba, incluido el #1 del ranking).
+  # 4 materiales y 4 menores del verificador corregidos; registro m7 en D-020.
 agente: motor-financiero
 fase: 2
 contexto: auditoria del top 1 (06-sep) — un 2D1B de 36 m² tomo la mediana de la celda
@@ -1741,4 +1747,28 @@ criterio_de_aceptacion:
   - si el delta es material (>10% en varias filas del top): decidir con el humano
     (§8.4) e implementar en el emparejamiento con tests y verificador
   - si no: documentar y cerrar sin tocar nada
+gate: make gates
+
+## T-950 · La oferta nueva del informe sigue tomando arriendo de tramo
+estado: pendiente
+agente: dashboard
+fase: 2
+contexto: verificador 06-sep (m6) — `informe.nuevas_evaluadas_al_desde` consulta
+  `agg_arriendo_microzona` por tramo mientras el ranking de usadas ya usa la ventana
+  de vecinos (D-020). Dos reglas de arriendo en el mismo documento, sin decirlo.
+criterio_de_aceptacion:
+  - las nuevas usan la misma ventana de vecinos, o el informe declara explicitamente
+    que su arriendo es de tramo (metodo distinto, hipotesis distinta)
+gate: make gates
+
+## T-951 · ¿santa-isabel saturada aplica tambien bajo la comuna de santiago?
+estado: pendiente
+agente: fuente-scout
+fase: 2
+contexto: verificador 06-sep (n9) — zonas.yml declara saturada solo
+  estacion-central/santa-isabel; santiago/santa-isabel rankea (puestos 10-11 del top
+  medido). El eje Santa Isabel cruza AMBAS comunas: hay que verificar si la evidencia
+  (Tattersall, hallazgos) habla del eje o del poligono de Estacion Central.
+criterio_de_aceptacion:
+  - evidencia citada en 00-hallazgos y decision en zonas.yml (marcar o descartar con razon)
 gate: make gates

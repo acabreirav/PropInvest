@@ -64,28 +64,44 @@ def _clusters_promocionales(
     comparaba contra la mediana global del grupo y el cluster real de san-alberto-hurtado
     se escapo (medido 06-sep en `medir_celda_vs_vecinos`): las unidades grandes de la
     microzona arrastran la mediana UF/m² hacia abajo y el promo de 25 m² queda a un pelo
-    del umbral. Contra sus vecinos de tamano, la firma es inequivoca. Si hay menos de 5
-    vecinos de tamano, cae a la mediana del grupo entero, que es mejor que nada.
+    del umbral. Contra sus vecinos de tamano, la firma es inequivoca. Con menos de 5
+    vecinos de tamano NO CLUSTERIZADOS no se marca: abstenerse antes que comparar contra
+    una mezcla que se sabe sesgada (§3.2) — la v2 original caia a la mediana del grupo y
+    marcaba mal a un multifamily legitimo que domina su rango de tamano.
     """
     fuera: set[str] = set()
     for triples in grupos.values():
         if len(triples) < MIN_CLUSTER_PROMO:
             continue
-        mediana_grupo = sorted(v for _, v, _, _ in triples)[len(triples) // 2]
         por_precio: dict[Decimal, list[tuple[str, Decimal, Decimal]]] = {}
         for clave, v, clp, m2 in triples:
             if clp is not None:
                 por_precio.setdefault(clp, []).append((clave, v, m2))
-        for precio, miembros in por_precio.items():
+        # Verificador 06-sep (m4): un miembro de CUALQUIER cluster de precio exacto no
+        # sirve de referencia — si no, dos promos del mismo proyecto ($150.000 y
+        # $155.000) se validan mutuamente y ninguna se marca.
+        en_algun_cluster = {
+            clave
+            for miembros in por_precio.values()
+            if len(miembros) >= MIN_CLUSTER_PROMO
+            for clave, _, _ in miembros
+        }
+        for miembros in por_precio.values():
             if len(miembros) < MIN_CLUSTER_PROMO:
                 continue
             m2_cluster = sorted(m for _, _, m in miembros)[len(miembros) // 2]
             pares = [
                 v
-                for _, v, clp, m2 in triples
-                if clp != precio and abs(m2 - m2_cluster) <= m2_cluster * D("0.25")
+                for clave, v, _clp, m2 in triples
+                if clave not in en_algun_cluster and abs(m2 - m2_cluster) <= m2_cluster * D("0.25")
             ]
-            referencia = sorted(pares)[len(pares) // 2] if len(pares) >= 5 else mediana_grupo
+            if len(pares) < 5:
+                # Verificador m5: sin vecinos de tamano no hay referencia honesta — la
+                # mediana del grupo mezclado marcaba mal a un multifamily legitimo que
+                # ES la mayoria de su rango. §3.2: abstenerse antes que imputar; el
+                # caso absurdo lo agarra la cerca de Tukey igual.
+                continue
+            referencia = sorted(pares)[len(pares) // 2]
             ufm2 = sorted(v for _, v, _ in miembros)[len(miembros) // 2]
             if ufm2 < referencia * FACTOR_PROMO:
                 fuera |= {clave for clave, _, _ in miembros}

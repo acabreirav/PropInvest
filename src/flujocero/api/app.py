@@ -88,7 +88,10 @@ def _fila_json(f: Fila) -> dict[str, Any]:
         "precio_uf": cifra(u.precio_uf, "V", "UF"),
         "m2_utiles": cifra(u.m2_utiles, "V", "m²"),
         "uf_m2": cifra(u.precio_uf / u.m2_utiles, nivel_derivado("V", "V"), "UF/m²"),
-        "arriendo_mensual_uf": cifra(u.arriendo_mensual_uf, "V", "UF"),
+        # `D`, no `V` (verificador 06-sep M4): una mediana de vecinos es un CALCULO
+        # sobre avisos verificados, no un dato leido de una fuente — §3.2 lo distingue
+        # a proposito, y este era el numerador del yield vestido de verificado.
+        "arriendo_mensual_uf": cifra(u.arriendo_mensual_uf, "D", "UF"),
         "arriendo_n_comparables": u.arriendo_n_comparables,
         "es_vivienda_nueva": u.es_vivienda_nueva,
         "antiguedad_anios": u.antiguedad_anios,

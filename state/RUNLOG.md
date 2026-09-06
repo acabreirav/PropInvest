@@ -2893,3 +2893,26 @@ avisos reales de la manzana y encontro el hilo. La auditoria fila a fila
 Leccion: la mediana de celda paso todos los gates y aun asi el terreno la refuto en
 el borde del tramo. El gate que faltaba era ensenarle al usuario la vara (equilibrio)
 para que la refutacion fuera medible y no una sensacion.
+
+
+## 2026-09-06 · Verificador sobre T-949: 4 materiales, el respaldo al tramo MUERE
+
+El primer intento dejo el respaldo a la celda de tramo "por seguridad" y el verificador
+demostro que era lo contrario: M1 — el respaldo se dispara exactamente donde el sesgo
+del tramo es peor (el #1 del ranking real: 51 m² contra una celda cuyo minimo era 57 m²;
+7 de 9 unidades de respaldo con |desvio| > 15%; yield +90% sobre el benchmark de su
+comuna); M2 — la ventana importaba comparables >140 m² que el §12 excluye (un 130 m²
+podia tomar arriendo de penthouses y doblar su yield); M3 — el respaldo revivia avisos
+que la propia corrida habia descartado por viejos (el snapshot agregado tiene la
+frescura de OTRA corrida); M4 — el arriendo salia a la ficha como evidencia V siendo D.
+Correcciones: ventana progresiva ±20/30/40% y despues ND (sin tramo), vecinos filtrados
+por rangos del §12, comparables leidos en vivo, evidencia D. En la regla promocional:
+los miembros de cualquier cluster no sirven de referencia (dos promos ya no se validan
+mutuamente, m4) y sin 5 vecinos de tamano se abstiene en vez de imputar (m5).
+m7 — la medicion que motivo la decision era direccionalmente sesgada (top-only): sobre
+el universo el reajuste es bidireccional (301 suben / 248 bajan). Corregido en D-020:
+la decision se sostiene, el registro dice la verdad. Nacieron T-950 (nuevas siguen en
+tramo) y T-951 (santa-isabel bajo santiago). El dup del pool (6% de filas repetidas,
+16 unidades cuyo n>=8 depende de republicaciones) queda anotado en T-946.
+Leccion: "respaldo conservador" es un nombre bonito para "el bug sigue vivo en el 1%
+de los casos — y ese 1% era el numero uno del ranking".
