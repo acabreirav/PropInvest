@@ -2916,3 +2916,14 @@ tramo) y T-951 (santa-isabel bajo santiago). El dup del pool (6% de filas repeti
 16 unidades cuyo n>=8 depende de republicaciones) queda anotado en T-946.
 Leccion: "respaldo conservador" es un nombre bonito para "el bug sigue vivo en el 1%
 de los casos — y ese 1% era el numero uno del ranking".
+
+### Corrección del registro (misma fecha)
+El commit 60e79e4* de las correcciones del verificador salió con "[gates: verde]"
+cuando la corrida de gates de ese momento habia FALLADO (las fixtures E2E del
+dashboard seguian sembrando agg_arriendo_microzona y el ranking les llegaba vacio;
+ademas la corrida se lanzo en paralelo con las ediciones de tests — error doble:
+carrera y afirmacion sin veredicto). §3.2 vale tambien para lo que el proyecto se
+afirma a si mismo, segunda vez que esta leccion se paga. Las fixtures E2E quedaron
+migradas a comparables vivos (8/8 verdes) y los gates completos re-corridos en
+serio sobre el arbol final ANTES de este commit.
+(*el hash exacto es el del commit "verificador de T-949: muere el respaldo...")

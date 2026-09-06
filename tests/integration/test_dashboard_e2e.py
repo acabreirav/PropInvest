@@ -102,11 +102,14 @@ def base_grande(tmp_path_factory) -> Path:
         filas,
     )
     for mz in MICROZONAS:
-        con.execute(
-            "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, "
-            "arriendo_uf_mediana, n) VALUES (?,?,?,?,?)",
-            (mz, "1D1B", "35-50", 10.5, 20),
-        )
+        for i in range(20):  # T-949: el emparejamiento lee comparables vivos
+            con.execute(
+                "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
+                "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
+                "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+                "VALUES (?,?,?,?,?,TRUE,'V','s','u',?,'v','p','x')",
+                (f"{mz}-c{i}", mz, "1D1B", 42, 10.5, AHORA),
+            )
     con.close()
     return ruta
 
@@ -249,11 +252,14 @@ def base_mapa(tmp_path_factory) -> Path:
             "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?,?,?)",
             (mz, mz.split("/")[0], mz.split("/")[1]),
         )
-        con.execute(
-            "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, n, "
-            "arriendo_uf_mediana, calculado_en) VALUES (?,'1D1B','35-50', 20, 10.5, ?)",
-            (mz, AHORA),
-        )
+        for i in range(20):  # T-949: el emparejamiento lee comparables vivos
+            con.execute(
+                "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
+                "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
+                "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+                "VALUES (?,?,'1D1B',37,10.5,TRUE,'V','s','u',?,'v','p','x')",
+                (f"{mz}-c{i}", mz, AHORA),
+            )
         for i in range(3):
             con.execute(
                 "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, "
