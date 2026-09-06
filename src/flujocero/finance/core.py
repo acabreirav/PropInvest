@@ -222,6 +222,28 @@ def break_even_occupancy(
 # --------------------------------------------------------------------------- retorno
 
 
+class TirNoDefinida(ValueError):
+    """La TIR de estos flujos no existe o no es única: se reporta ND, jamás un número.
+
+    Hereda de ValueError para que un caller antiguo que atrapaba ValueError no deje
+    pasar el caso — pero el caller del motor debe atrapar ESTA clase y propagar el ND
+    (ADR 013). Antes cualquier fallo se guardaba como -1 (la peor TIR posible, 20% del
+    score): un ND disfrazado de dato, exactamente lo que el §3.2 prohíbe.
+    """
+
+
+def cambios_de_signo(flujos: Sequence[Decimal]) -> int:
+    """Cuenta las alternancias de signo de la serie, ignorando los ceros.
+
+    Con exactamente UNA alternancia la TIR existe y es única en (-1, ∞) — es el único
+    caso en que la bisección puede certificar lo que devuelve. Con cero no existe; con
+    dos o más puede haber varias raíces y la bisección elegiría una sin avisar
+    (verificador §7.6, 03-sep, F5: [-100, 230, -132] tiene raíces en 10% y 20%).
+    """
+    signos = [f > 0 for f in flujos if f != 0]
+    return sum(1 for a, b in zip(signos, signos[1:]) if a != b)
+
+
 def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 300) -> Decimal:
     """TIR por bisección sobre [-0,9999; 10]. Flujos en UF => la TIR resultante es REAL.
 
@@ -237,6 +259,12 @@ def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 30
     bit-idéntico a la versión anterior (verificado campo a campo sobre 2.000 unidades).
     """
     lista = list(flujos)
+    cambios = cambios_de_signo(lista)
+    if cambios != 1:
+        raise TirNoDefinida(
+            f"{cambios} cambios de signo en los flujos: "
+            + ("la TIR no existe" if cambios == 0 else "la TIR no es única")
+        )
 
     def van(r: Decimal) -> Decimal:
         uno_mas_r = D(1) + r
@@ -250,7 +278,9 @@ def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 30
     lo, hi = D("-0.9999"), D(10)
     v_lo = van(lo)
     if v_lo * van(hi) > 0:
-        raise ValueError("TIR sin cambio de signo en el intervalo")
+        # Con un solo cambio de signo la raíz existe y es única, pero cae fuera del
+        # intervalo de búsqueda (TIR real < -99,99% o > 1.000%): tampoco se certifica.
+        raise TirNoDefinida("raíz única pero fuera del intervalo [-0,9999; 10]")
     for _ in range(max_iter):
         mid = (lo + hi) / D(2)
         v = van(mid)

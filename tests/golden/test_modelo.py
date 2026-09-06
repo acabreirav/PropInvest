@@ -655,3 +655,28 @@ def test_una_evaluacion_no_excluida_siempre_trae_tir_completa(cfg) -> None:
 
     interna = evaluar(unidad(), escenario(), p, inv, saltar_exclusiones=True, calcular_tir=False)
     assert interna.tir_real == {}  # y por eso puntuar() la haria reventar, no rankear
+
+
+# ------------------------------------------------------------------- T-943 · ADR 013
+
+
+def test_tir_no_definida_excluye_con_motivo_y_sin_menos_uno(cfg, monkeypatch) -> None:
+    """Los flujos de evaluar() tienen hoy exactamente un cambio de signo, asi que el ND
+    de TIR es inalcanzable por la puerta: se inyecta. El contrato que fija este test:
+    jamas un -1 en tir_real (eso era un ND disfrazado de peor-TIR-posible), la clave
+    ausente para que puntuar() reviente si la puntua, y la fila excluida con el motivo
+    a la vista, como el filtro D-012."""
+    p, inv = cfg
+    from flujocero.finance import core
+
+    def tir_rota(flujos, tol=D("1e-10"), max_iter=300):
+        raise core.TirNoDefinida("2 cambios de signo en los flujos: la TIR no es única")
+
+    monkeypatch.setattr(core, "tir", tir_rota)
+    ev = evaluar(unidad(), escenario(), p, inv)
+    assert ev.excluido and ev.motivo_exclusion is not None
+    assert "TIR no definida" in ev.motivo_exclusion and "ADR 013" in ev.motivo_exclusion
+    assert ev.tir_real == {}  # ausente, no -1
+    assert ev.tir_nd_motivo is not None and "no es única" in ev.tir_nd_motivo
+    # las demas metricas sobreviven para que el informe muestre por que se cayo
+    assert ev.noi_uf != D(0)

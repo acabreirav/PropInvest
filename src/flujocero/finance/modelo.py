@@ -86,6 +86,11 @@ class Evaluacion:
     pie_minimo_flujo_cero: Decimal = D(0)
     break_even_occupancy: Decimal = D(0)
     tir_real: dict[int, Decimal] = field(default_factory=dict)
+    # T-943 · ND explícito: si algún horizonte no tiene TIR certificable (cero o varios
+    # cambios de signo, o raíz fuera del intervalo), acá queda el motivo, la clave del
+    # horizonte queda AUSENTE de `tir_real` y la evaluación sale excluida del ranking.
+    # Jamás un -1: eso era un ND disfrazado de peor-TIR-posible (§3.2, ADR 013).
+    tir_nd_motivo: str | None = None
     van_uf: Decimal = D(0)
     # Que tasa se aplico DE VERDAD, y si el subsidio del escenario sobrevivio al inmueble.
     tasa_aplicada: Decimal = D(0)
@@ -486,8 +491,12 @@ def evaluar(
             )
             try:
                 ev.tir_real[n] = f.tir(flujos)
-            except ValueError:
-                ev.tir_real[n] = D("-1")
+            except f.TirNoDefinida as nd:
+                # §3.2: un ND no se disfraza de -100%. La clave queda AUSENTE — el
+                # indexado directo del score sigue reventando si alguien puntúa esta
+                # evaluación — y más abajo la fila se excluye del ranking con el
+                # motivo a la vista (ADR 013). MIRR quedó descartada ahí mismo.
+                ev.tir_nd_motivo = f"horizonte {n} años: {nd}"
             if n == 10:
                 ev.van_uf = f.van(flujos, r)
 
@@ -501,6 +510,13 @@ def evaluar(
             f"deficit de caja {-ev.btcf_mensual_uf * uf:,.0f} CLP/mes sobre el tope "
             f"tolerado de {tope * uf:,.0f} CLP/mes"
         )
+
+    # T-943 · una TIR no definida también excluye DESPUÉS de calcular (mismo patrón
+    # D-012): la fila conserva sus métricas y el informe muestra por qué se cayó. Si
+    # además reventó el tope de caja, este motivo gana — es el más grave de los dos.
+    if ev.tir_nd_motivo is not None:
+        ev.excluido = True
+        ev.motivo_exclusion = f"TIR no definida ({ev.tir_nd_motivo}) — ver ADR 013"
     return ev
 
 

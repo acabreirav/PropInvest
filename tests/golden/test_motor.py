@@ -72,6 +72,22 @@ def test_tir_anclas_de_forma_cerrada() -> None:
         f.tir([D(-100), D(-10)])
 
 
+# 5c · TIR no certificable => TirNoDefinida, jamas un numero (T-943, ADR 013)
+def test_tir_multiples_cambios_de_signo_es_nd() -> None:
+    # El caso del verificador F5: raices en 10% y 20% — la biseccion elegiria una
+    # sin avisar. Verificacion independiente de las dos raices, a mano:
+    #   VAN(10%) = -100 + 230/1,1 - 132/1,21 = -100 + 209,0909 - 109,0909 = 0
+    #   VAN(20%) = -100 + 230/1,2 - 132/1,44 = -100 + 191,6667 -  91,6667 = 0
+    with pytest.raises(f.TirNoDefinida, match="no es única"):
+        f.tir([D(-100), D(230), D(-132)])
+    # cero cambios de signo (todo positivo): la TIR no existe
+    with pytest.raises(f.TirNoDefinida, match="no existe"):
+        f.tir([D(100), D(10)])
+    # y el conteo ignora los ceros: [-100, 0, 121] sigue siendo UN cambio => 10%
+    assert f.cambios_de_signo([D(-100), D(0), D(121)]) == 1
+    assert f.cambios_de_signo([D(-100), D(230), D(-132)]) == 2
+
+
 # 6 · el saldo insoluto llega a cero al final del plazo
 def test_saldo_insoluto_final() -> None:
     s = f.saldo_insoluto(D(4500), D("0.034"), 30, 360)

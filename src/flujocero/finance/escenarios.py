@@ -132,9 +132,10 @@ def puntuar(unidades: list[Unidad], evals: list[Evaluacion], p: Config) -> list[
             False,
         ),
         # Indexado directo A PROPOSITO: una evaluacion no excluida siempre trae tir_real
-        # (el fallo de calculo se guarda como -1, no como ausencia). Si alguien filtra
-        # aca una evaluacion de calcular_tir=False, esto revienta en vez de puntuarla
-        # en silencio como la peor TIR posible (verificador §7.6, 03-sep, F3).
+        # — una TIR no definida EXCLUYE la evaluacion (T-943, ADR 013), asi que nunca
+        # llega viva hasta aca. Si alguien filtra aca una evaluacion de
+        # calcular_tir=False o cuela una excluida, esto revienta en vez de puntuarla
+        # en silencio (verificador §7.6, 03-sep, F3).
         "tir_real_apalancada_10a": _normalizar([e.tir_real[10] for _, e in vivos], True),
         "riesgo_microzona": _normalizar([u.riesgo_microzona for u, _ in vivos], False),
         "catalizador": _normalizar([u.catalizador for u, _ in vivos], True),
