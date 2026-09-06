@@ -234,7 +234,15 @@ desviacion_declarada: >
   Hay dos tests que fijan la ausencia de dependencias externas. Ver ADR 007 §1.1.
 
 ## T-928 · El mapa de microzonas
-estado: pendiente  # DESBLOQUEADA 03-sep: T-014b hecha, el puente existe · agente: dashboard · fase: 2 · depende_de: [T-014]
+estado: hecha  # 06-sep, agente dashboard en worktree, gates verdes. Cargador
+  # `cli cargar-geometria-microzonas` (union shapely de manzanas via el puente —
+  # INSTALL spatial da 403 en el contenedor, ver ADR 014), endpoint /api/mapa
+  # (GeoJSON plano: geojson-vt de MapLibre pierde objetos anidados, el popup cruza
+  # /api/microzonas para el dato con evidence), MapLibre 4.7.1 VENDORIZADO (dist
+  # oficial npm, sin CDN ni tiles externos: el E2E corre sin internet), coropleta por
+  # pie de flujo cero minimo. FALTA el paso local del usuario: ingerir-censo +
+  # puente-censo + cargar-geometria-microzonas para ver poligonos reales.
+agente: dashboard · fase: 2 · depende_de: [T-014]
 motivo: >
   Es el unico criterio del §7.5 que T-027 no pudo cumplir. Necesita geometria: hoy
   `dim_microzona.geom` esta vacio en las 165 microzonas y `fact_unidad_venta` no guarda
@@ -616,6 +624,9 @@ estado: en_curso  # 04-sep: MEDIDO sobre la base real (cli micro-unidades). Resu
   # plana; colocacion NO MEDIBLE (falta publicado_en -> T-924b). Evidencia sugerente,
   # no concluyente: se mantiene la advertencia del top, SIN componente de score aun.
   # Re-medir cuando T-924b junte fecha de publicacion y el GGCC junte n
+  # 06-sep: T-924b hecha — la colocacion ya se captura (etiqueta del portal + primera
+  # vista propia). Falta acumular semanas de corridas para que la cota discrimine;
+  # la decision §8.4 (componente de score si/no) sigue esperando al humano.
 agente: motor-financiero · fase: 2 · depende_de: [T-014]
 hallazgo: >
   Un tercio del top esta bajo 35 m2 (mediana 40 m2 en el top 15). El §13.3 advierte exactamente
@@ -1589,7 +1600,13 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-943 · TIR con mas de un cambio de signo se reporta como -100%
-estado: pendiente
+estado: hecha  # 06-sep: se eligio ND explicito sobre MIRR (ADR 013). tir() cuenta los
+  # cambios de signo antes de bisectar y lanza TirNoDefinida cuando no puede CERTIFICAR
+  # la raiz; evaluar() deja la clave ausente (el score sigue reventando fuerte) y
+  # excluye con motivo SOLO si falta el horizonte 10 que el §12 consume. Verificador
+  # 06-sep: cero regresiones en 20.000 vectores diferenciales; ND inalcanzable desde
+  # evaluar() hoy (medido en barrido de 4.000 unidades); sus 4 bordes de comportamiento
+  # (m-9..m-12) corregidos en 4329d77.
 agente: motor-financiero
 fase: 3
 contexto: verificador §7.6 (03-sep, F5). [-100, 230, -132] tiene raices en 10% y 20%
@@ -1626,7 +1643,17 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-924b · Capturar la fecha de publicacion de los avisos del portal
-estado: pendiente
+estado: hecha  # 06-sep: el listado permitido SI declara edad — etiqueta "PUBLICADO
+  # HOY / ESTA SEMANA" en el 35% de las tarjetas del corpus (33/94 medidas). parser
+  # 1.1.0 la captura (HOY -> publicado_en exacto en dia chileno; ESTA SEMANA -> cota
+  # publicado_desde = captura-7) y ademas visto_primera_vez, que el upsert conserva
+  # con LEAST (replay de data/raw/ da lo mismo en cualquier orden) + backfill para las
+  # 2.835 filas pre-migracion. micro-unidades muestra edad>=, % visto fresco y sus n.
+  # Verificador 06-sep encontro 6 materiales en la v1 (ancla al reloj, sesgo de
+  # seleccion en la edad, backfill faltante, orden de replay, relisting, tz) — todos
+  # corregidos en 4329d77. Techo estructural: el slot del destacado tambien lo ocupa
+  # "VISTO" (102 tarjetas), esas nunca declararan fecha. La colocacion real por tramo
+  # se re-mide cuando las corridas semanales acumulen historia (T-924).
 agente: colector
 fase: 2
 depende_de: [T-924]
@@ -1638,4 +1665,46 @@ criterio_de_aceptacion:
   - si existe: capturarla con procedencia; si no existe en la ruta permitida, documentarlo
     y derivar la edad desde la PRIMERA captura propia (valid_from del SCD: cota inferior
     honesta que mejora sola con las semanas)
+gate: make gates
+
+## T-944 · La etiqueta PUBLICADO tambien existe en VENTA y no se guarda
+estado: pendiente
+agente: colector
+fase: 2
+depende_de: [T-924b]
+contexto: verificador 06-sep — 482 tarjetas de venta del corpus traen la etiqueta
+  (64 HOY + 418 ESTA SEMANA) y `_cargar_venta` la ignora. Es el valid_from REAL del
+  SCD de precios; hoy la "primera version" de una unidad es solo la primera captura.
+criterio_de_aceptacion:
+  - persistir publicado_en/publicado_desde en fact_unidad_venta con la misma semantica
+    LEAST del arriendo, y que `cli delta` distinga "aviso nuevo" de "recien capturado"
+gate: make gates
+
+## T-945 · `activo` es TRUE en el 100% de los comparables: nada lo apaga
+estado: pendiente
+agente: colector
+fase: 2
+contexto: verificador 06-sep — las 2.835 filas de fact_arriendo_comp tienen
+  activo=TRUE desde siempre; ningun camino lo pone en FALSE. Todo encabezado que dice
+  "avisos activos" (micro-unidades, agregacion) afirma algo no verificado, y el proxy
+  de saturacion (conteo de avisos activos, §1 B2) cuenta avisos muertos.
+criterio_de_aceptacion:
+  - una corrida que NO re-ve un comp_id vigente en su comuna lo marca activo=FALSE con
+    fecha (o define y documenta la ventana de gracia), sin borrar la fila (§11)
+  - micro-unidades y la agregacion declaran que filtro de vigencia aplican de verdad
+gate: make gates
+
+## T-946 · El gate de dedup de arriendo nunca pudo evaluar: falta direccion_normalizada
+estado: pendiente
+agente: colector
+fase: 2
+contexto: verificador 06-sep — `duplicados_de_arriendo` agrupa por una columna que
+  fact_arriendo_comp NO tiene; llevaba meses publicando OK con cero filas evaluadas
+  (desde 4329d77 al menos dice "no evaluable" en vez de OK). El umbral n>=8 por
+  microzona corre sin proteccion contra el mismo depto republicado por dos corredores.
+criterio_de_aceptacion:
+  - o capturar/normalizar direccion desde la tarjeta (sin datos personales, §3.4), o
+    redefinir la clave de dedup con columnas que existan (microzona, m2, dormitorios,
+    precio, ventana de fechas) con la decision anotada
+  - el check evalua >0 filas sobre la base real y lo reporta
 gate: make gates

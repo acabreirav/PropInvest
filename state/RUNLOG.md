@@ -2825,3 +2825,52 @@ gates: VERDE
 - La palanca restante del embudo es sin_celda=68: comparables de arriendo n>=8 en las
   microzonas de esos proyectos — trabajo de la recoleccion dirigida semanal, no de
   parsers. T-931d cerrada de verdad.
+
+
+## 2026-09-06 · Ola de tres: T-943 (motor), T-924b (colocacion), T-928 (mapa)
+
+- **T-943**: TIR no certificable => `TirNoDefinida` + exclusion con motivo; jamas un
+  -1 imputado (el bug real era mas ancho que el titulo: TODO ValueError se disfrazaba
+  de peor-TIR-posible sobre el 20% del score). ND sobre MIRR: ADR 013.
+- **T-924b**: sonda sobre el corpus real — la etiqueta "PUBLICADO HOY/ESTA SEMANA"
+  viene en el 35% de las tarjetas del listado permitido (33/94; en venta 482 mas,
+  ahora T-944). parser 1.1.0 la captura; `visto_primera_vez` nuevo, con backfill y
+  LEAST para que el replay de la zona cruda sea independiente del orden (§3.6).
+- **T-928** (agente dashboard, worktree): cargador de geometria via shapely (INSTALL
+  spatial => 403 en el contenedor, ADR 014), /api/mapa GeoJSON plano (geojson-vt de
+  MapLibre pierde objetos anidados — medido con Playwright), MapLibre 4.7.1
+  vendorizado de npm: el gate E2E corre sin internet. Falta el paso local:
+  `ingerir-censo` + `puente-censo` + `cargar-geometria-microzonas`.
+
+### Verificador §7.6 (obligatorio: se toco el motor)
+
+Reporte completo en el hilo; resumen fiel:
+- **COMMIT T-943: cero numeros incorrectos.** 20.000 vectores diferenciales — 6.748
+  divergencias vs la version vieja, 6.744 son EXACTAMENTE el caso que la ADR ataja
+  (raiz elegida sin avisar entre varias) y las otras 4 tambien multi-signo. Barrido de
+  4.000 unidades: el ND es inalcanzable desde evaluar() hoy (el flujo terminal a 10
+  anios ~+1.570 UF exigiria ATCF de -130 UF/mes, 13x el tope D-012). De regalo: la
+  version vieja con flujos todos-cero devolvia "TIR 450%"; la nueva lanza ND.
+  4 bordes de comportamiento (m-9 horizonte informativo excluia, m-10 motivo D-012
+  pisado, m-11 bucket partido por ':', m-12 saltar_exclusiones ignorado): corregidos.
+- **COMMIT T-924b: 6 materiales, todos corregidos en 4329d77.** M-1/M-2 el % fresco
+  anclado al reloj de la medicion daba 0% sobre capturas de mayo y descartaba el 74%
+  de la evidencia un dia despues (ahora: fraccion vista fresca EN SU captura, medida
+  9,3%/7,5%/12,1%/9,5%/8,0% por tramo — discrimina); M-3 la edad mediana pasaba de ND
+  honesto a 0,0 por sesgo de seleccion (solo los "HOY" tenian fecha) — el publicado_en
+  autoreferente ya no alimenta la mediana y n_con_fecha va al lado; M-4 backfill de
+  visto_primera_vez (sin el, la proxima corrida borraba 125 dias de evidencia); M-5
+  LEAST en el upsert (89/2835 filas cambiaban segun el orden de replay); M-6 el
+  relisting (publicado_en 42 dias DESPUES de la primera vista) queda fuera de la edad;
+  m-7 el filtro de amoblados era un no-op (la columna nunca se puebla; el sesgo era
+  DIFERENCIAL: 16,4% de amoblados en 70+ vs 8,2% en 25-35) — ahora corre no_comparable
+  sobre la URL, y el docstring dice la verdad sobre la frescura; m-8 fechas en dia
+  chileno, no UTC.
+- **Preexistente destapado**: `duplicados_de_arriendo` publicaba OK con CERO filas
+  evaluadas desde siempre (agrupa por una columna que la tabla no tiene). Ahora dice
+  "no evaluable" (MARCA) y nacio T-946. Tambien T-944 (etiqueta en venta) y T-945
+  (`activo` nunca se apaga: 100% TRUE).
+- Leccion para el tablero: una metrica nueva se ataca ANTES de mostrarla con el reloj
+  de meses despues, no solo con el fixture del dia de captura. Las dos mentiras mas
+  graves (0% fresco, 0 dias de edad) pasaban todos los tests y solo se veian contra
+  la base real envejecida.
