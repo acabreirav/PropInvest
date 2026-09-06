@@ -22,10 +22,11 @@ pie después es una re-evaluación sin bisección, del orden de milisegundos.
 
 ## Lo que este módulo NO hace
 
-No inventa geometría. `dim_microzona.geom` está vacío en las 165 microzonas y
-`fact_unidad_venta` no guarda coordenadas, así que **no hay mapa que dibujar**. El §7.5 lo
-pide y no se puede cumplir todavía; se reporta en `capacidades.mapa` como `False` con su
-razón, y el tablero muestra por qué falta en vez de dibujar puntos inventados.
+No inventa geometría. Mientras `dim_microzona.geom` esté vacía (no corrió
+`cli cargar-geometria-microzonas` sobre el Censo real, T-928), no hay mapa que dibujar. Se
+reporta en `capacidades.mapa` como `False` con su razón, y el tablero muestra por qué falta
+en vez de dibujar puntos o polígonos inventados. Cuando SÍ hay geometría, `geometria_microzonas()`
+la sirve tal cual quedó — nunca la aproxima ni la interpola.
 """
 
 from __future__ import annotations
@@ -254,6 +255,53 @@ class Servicio:
             d["pie_cero_minimo"] = pies[0] if pies else None
             salida.append(d)
         salida.sort(key=lambda d: (d["pie_cero_minimo"] is None, d["pie_cero_minimo"]))
+        return salida
+
+    def geometria_microzonas(self) -> dict[str, dict[str, Any]]:
+        """GeoJSON de cada microzona CON geometría (T-928), más su nombre y el de su comuna.
+
+        El WKB de `dim_microzona.geom` se traduce con `shapely`, nunca con `ST_AsGeoJSON` de
+        DuckDB spatial: así la ficha del mapa no depende de que la extensión esté cargada en
+        ESTE proceso — mismo criterio que `geo/microzona_geom.py` usa para escribir. Si la
+        columna SÍ quedó tipada `GEOMETRY` (la extensión cargó en algún momento sobre esta
+        base), se intenta `LOAD spatial` sobre esta conexión nueva solo para poder leer el
+        WKB con `ST_AsWKB`; si no está disponible, no hay nada que leer de esa columna y el
+        error se deja subir — es la misma base que ya declaró tener geometría, así que un
+        `LOAD` que falla ahí es un problema real, no un caso a silenciar.
+        """
+        import duckdb
+
+        from flujocero.geo.microzona_geom import columna_geom_es_espacial
+
+        con = self._conectar()
+        try:
+            if columna_geom_es_espacial(con):
+                try:
+                    con.execute("LOAD spatial")
+                except duckdb.Error:
+                    pass
+                expr = "ST_AsWKB(mz.geom)"
+            else:
+                expr = "mz.geom"
+            filas = con.execute(
+                f"SELECT mz.microzona_id, mz.nombre, c.nombre, {expr} "  # noqa: S608
+                "FROM dim_microzona mz JOIN dim_comuna c USING (comuna_id) "
+                "WHERE mz.geom IS NOT NULL"
+            ).fetchall()
+        finally:
+            con.close()
+
+        from shapely import wkb
+        from shapely.geometry import mapping
+
+        salida: dict[str, dict[str, Any]] = {}
+        for microzona_id, nombre, comuna_nombre, geom_bytes in filas:
+            geometria = wkb.loads(bytes(geom_bytes))
+            salida[microzona_id] = {
+                "nombre": nombre,
+                "comuna_nombre": comuna_nombre,
+                "geometry": mapping(geometria),
+            }
         return salida
 
     # ------------------------------------------------------------------ construcción

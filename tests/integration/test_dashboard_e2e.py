@@ -10,7 +10,7 @@ Los cinco criterios del §7.5, y qué pasa con cada uno:
 |---|---|
 | carga en <3 s con 10.000 unidades | se mide acá, con 10.000 unidades sintéticas |
 | el ranking respeta el filtro de pie | se mide acá |
-| el mapa dibuja las microzonas | **NO se puede**: no hay geometría (T-014). Se verifica que el tablero lo DIGA |
+| el mapa dibuja las microzonas | se mide acá (T-928): base aparte con geometría sintética |
 | la ficha muestra las seis columnas de procedencia | se mide acá |
 | ningún número aparece sin su `evidence_level` | se mide acá, sobre el DOM renderizado |
 """
@@ -172,24 +172,210 @@ def _chromium_del_sistema() -> str | None:
     return None
 
 
-@pytest.fixture(scope="module")
-def pagina(servidor: str):
+@pytest.fixture(scope="session")
+def navegador():
+    """UN solo Chromium para toda la sesión de tests.
+
+    Playwright Sync API no tolera bien un segundo `sync_playwright()` en el mismo
+    proceso una vez que el primero se cerró (revienta con "using Playwright Sync API
+    inside the asyncio loop" en la SEGUNDA apertura) — se midió al agregar `pagina_mapa`
+    (T-928) junto a `pagina`: dos fixtures de módulo, cada una abriendo y cerrando su
+    propio navegador, hacían fallar TODOS los tests que corrían después de la primera.
+    Un solo navegador de alcance `session`, compartido por página, evita el problema de raíz
+    en vez de parchar el orden de los tests.
+    """
     pw = pytest.importorskip("playwright.sync_api")
     with pw.sync_playwright() as p:
-        navegador = None
+        nav = None
         for kwargs in ({}, {"executable_path": _chromium_del_sistema()}):
             if kwargs.get("executable_path", "no-vacio") is None:
                 continue
             try:
-                navegador = p.chromium.launch(**kwargs)
+                nav = p.chromium.launch(**kwargs)
                 break
             except Exception:  # noqa: BLE001 — se prueba el siguiente binario
                 continue
-        if navegador is None:
+        if nav is None:
             pytest.skip("no hay Chromium usable en esta maquina")
-        pag = navegador.new_page()
-        yield pag, servidor
-        navegador.close()
+        yield nav
+        nav.close()
+
+
+@pytest.fixture(scope="module")
+def pagina(servidor: str, navegador):
+    pag = navegador.new_page()
+    yield pag, servidor
+    pag.close()
+
+
+# --------------------------------------------------------------- T-928 · el mapa
+#
+# Base APARTE de `base_grande`: el mapa necesita geometría real (aunque sea sintética) y
+# `base_grande` existe para medir RENDIMIENTO con 10.000 unidades, no para dibujar polígonos.
+# Mezclar los dos objetivos en una sola base habría hecho lento el gate de los 3 s por una
+# razón que no tiene nada que ver con lo que ese gate mide.
+
+MICROZONAS_MAPA = ("san-miguel/mapa-a", "la-florida/mapa-b", "nunoa/mapa-c")
+# Tres cuadrados bien separados en Santiago (no importa que no sean el barrio real: son
+# fixtures sintéticas, igual que el resto de este archivo).
+POLIGONOS_MAPA = {
+    "san-miguel/mapa-a": "POLYGON((-70.66 -33.50,-70.66 -33.49,-70.65 -33.49,-70.65 -33.50,-70.66 -33.50))",
+    "la-florida/mapa-b": "POLYGON((-70.60 -33.53,-70.60 -33.52,-70.59 -33.52,-70.59 -33.53,-70.60 -33.53))",
+    "nunoa/mapa-c": "POLYGON((-70.60 -33.46,-70.60 -33.45,-70.59 -33.45,-70.59 -33.46,-70.60 -33.46))",
+}
+
+
+@pytest.fixture(scope="module")
+def base_mapa(tmp_path_factory) -> Path:
+    """Tres microzonas con geometría sintética y suficientes unidades/comparables para
+    rankear, así `pie_flujo_cero_minimo` no sale `None` en ninguna."""
+    from shapely import wkb as shp_wkb
+    from shapely import wkt as shp_wkt
+
+    from flujocero import db
+    from flujocero.geo import microzona_geom as mg
+
+    ruta = tmp_path_factory.mktemp("e2e-mapa") / "mapa.duckdb"
+    con = duckdb.connect(str(ruta))
+    db.aplicar_esquema(con)
+
+    for c in sorted({m.split("/")[0] for m in MICROZONAS_MAPA}):
+        con.execute(
+            "INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES (?,?,'Metropolitana')",
+            (c, c),
+        )
+    for mz in MICROZONAS_MAPA:
+        con.execute(
+            "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?,?,?)",
+            (mz, mz.split("/")[0], mz.split("/")[1]),
+        )
+        con.execute(
+            "INSERT INTO agg_arriendo_microzona (microzona_id, tipologia, rango_m2, n, "
+            "arriendo_uf_mediana, calculado_en) VALUES (?,'1D1B','35-50', 20, 10.5, ?)",
+            (mz, AHORA),
+        )
+        for i in range(3):
+            con.execute(
+                "INSERT INTO fact_unidad_venta (unidad_key, microzona_id, tipologia, "
+                "m2_utiles, precio_uf, es_vivienda_nueva, antiguedad_anios, evidence_level, "
+                "valid_from, valid_to, source_id, source_url, fetched_at, parser_version, "
+                "raw_blob_path, robots_snapshot_sha) "
+                "VALUES (?,?,?,?,?,?,?,'V',?,NULL,?,?,?,?,?,?)",
+                (
+                    f"{mz.split('/')[1]}-{i}",
+                    mz,
+                    "1D1B",
+                    36.0 + i,
+                    2300.0 + i * 100,
+                    False,
+                    6,
+                    AHORA,
+                    "fuente_de_prueba",
+                    f"https://ejemplo.cl/{mz}-{i}",
+                    AHORA,
+                    "prueba/1.0.0",
+                    f"raw/{mz}-{i}.json.gz",
+                    "sha-de-prueba",
+                ),
+            )
+        manzent = f"MZ-{mz.split('/')[1]}"
+        con.execute(
+            "INSERT INTO dim_manzana (manzent, comuna, geom_wkb, source_id, source_url, "
+            "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+            "VALUES (?, ?, ?, 's', 'u', ?, 'v', 'p', 'x')",
+            (
+                manzent,
+                mz.split("/")[0].upper(),
+                shp_wkb.dumps(shp_wkt.loads(POLIGONOS_MAPA[mz])),
+                AHORA,
+            ),
+        )
+        con.execute(
+            "INSERT INTO map_microzona_manzana (manzent, microzona_id, calculado_en) "
+            "VALUES (?, ?, ?)",
+            (manzent, mz, AHORA),
+        )
+    res = mg.construir_geometria_microzonas(con, AHORA)
+    assert res.con_geometria == len(MICROZONAS_MAPA), f"la fixture no cargó geometría: {res}"
+    con.close()
+    return ruta
+
+
+@pytest.fixture(scope="module")
+def servidor_mapa(base_mapa: Path):
+    import uvicorn
+
+    from flujocero.api.app import crear_app
+    from flujocero.api.servicio import Servicio
+
+    svc = Servicio(base_mapa)
+    svc.foto()
+    app = crear_app(servicio=svc)
+
+    puerto = _puerto_libre()
+    config = uvicorn.Config(app, host="127.0.0.1", port=puerto, log_level="error")
+    server = uvicorn.Server(config)
+    hilo = threading.Thread(target=server.run, daemon=True)
+    hilo.start()
+
+    base_url = f"http://127.0.0.1:{puerto}"
+    import httpx
+
+    for _ in range(200):
+        try:
+            if httpx.get(f"{base_url}/api/salud", timeout=1).status_code == 200:
+                break
+        except Exception:  # noqa: BLE001 — el servidor todavia no levanta; se reintenta
+            pass
+        time.sleep(0.05)
+    else:
+        pytest.fail("el servidor no levantó")
+
+    yield base_url
+    server.should_exit = True
+    hilo.join(timeout=10)
+
+
+@pytest.fixture(scope="module")
+def pagina_mapa(servidor_mapa: str, navegador):
+    pag = navegador.new_page()
+    yield pag, servidor_mapa
+    pag.close()
+
+
+def test_el_mapa_dibuja_las_microzonas(pagina_mapa) -> None:
+    """§7.5: con geometría cargada (T-928), el mapa se dibuja de verdad. Reemplaza a
+    `test_el_tablero_dice_por_que_no_hay_mapa`, que fijaba la conducta correcta MIENTRAS no
+    había geometría — ya no es el caso con `dim_microzona.geom` poblada.
+
+    Dos verificaciones, no una: el `<canvas>` de MapLibre existe en el DOM Y la fuente
+    GeoJSON efectivamente cargó (via el hook `window.__flujoCeroMapa`, ver `index.html`) —
+    un canvas vacío sin datos "pasaría" la primera y no probaría nada.
+    """
+    pag, url = pagina_mapa
+    pag.goto(url)
+    pag.wait_for_selector("#cuerpo tr[data-key]")
+    pag.wait_for_function(
+        "() => window.__flujoCeroMapa && window.__flujoCeroMapa.listo === true", timeout=10_000
+    )
+    assert pag.locator("#mapa canvas.maplibregl-canvas").count() == 1
+    assert pag.evaluate("() => window.__flujoCeroMapa.features") == len(MICROZONAS_MAPA)
+
+    # El clic sobre una microzona abre un popup con su nombre y su pie mínimo, CON
+    # evidence_level (§7.5: ningún número sin él). El punto del clic se calcula proyectando
+    # el centro real de `san-miguel/mapa-a` con la API de MapLibre — adivinar una coordenada
+    # de pantalla fija es frágil (`fitBounds` puede acomodar el zoom distinto según la
+    # máquina) y podría hacer clic en el fondo en vez de en el polígono. `Locator.click` con
+    # `position` además hace scroll-into-view solo: el mapa puede quedar fuera del viewport
+    # inicial si la tabla de arriba es larga.
+    punto = pag.evaluate("() => mapaInstancia.project([-70.655, -33.495])")
+    pag.locator("#mapa").click(position={"x": punto["x"], "y": punto["y"]})
+    pag.wait_for_selector(".maplibregl-popup", timeout=5_000)
+    texto_popup = pag.locator(".maplibregl-popup").inner_text()
+    assert any(mz.split("/")[1] in texto_popup for mz in MICROZONAS_MAPA)
+    # La cifra del popup viaja envuelta por `cifra()` (vino de `/api/microzonas`, no del
+    # GeoJSON): tiene que traer su badge `.ev`, igual que cualquier número de mercado del §7.5.
+    assert 'class="ev ev-' in pag.locator(".maplibregl-popup").inner_html()
 
 
 # --------------------------------------------------------------- los cinco criterios
@@ -269,16 +455,17 @@ def test_ningun_numero_aparece_sin_su_evidence_level(pagina) -> None:
     assert not faltan, f"celdas numéricas sin evidence_level: {faltan[:5]}"
 
 
-def test_el_tablero_dice_por_que_no_hay_mapa(pagina) -> None:
-    """§7.5 pide que el mapa dibuje las microzonas. HOY NO SE PUEDE: `dim_microzona.geom`
-    está vacío y los avisos no traen coordenadas (T-014).
+def test_el_tablero_dice_por_que_no_hay_mapa_cuando_falta_geometria(pagina) -> None:
+    """§7.5 pide que el mapa dibuje las microzonas, y T-928 ya lo permite CUANDO hay
+    geometría cargada — ver `test_el_mapa_dibuja_las_microzonas`, arriba, con `base_mapa`.
 
-    Este test fija la conducta correcta mientras tanto: **decirlo**. Un mapa aproximado
-    sería peor que ninguno, porque el §2.4 dice que la microzona ES la unidad de análisis —
-    si está mal ubicada, el argumento entero del producto se cae.
-
-    Cuando entre la geometría, este test debe fallar y hay que reemplazarlo por uno que
-    verifique que el mapa se dibuja.
+    `base_grande` (esta fixture) sigue sin geometría a propósito: existe para medir
+    RENDIMIENTO con 10.000 unidades, no para ejercitar el mapa. Mientras
+    `dim_microzona.geom` esté vacía —acá o en cualquier base real sin
+    `cli cargar-geometria-microzonas` corrido— el tablero tiene que seguir diciéndolo en
+    vez de fingir que hay un mapa, y no dibujar ninguno aproximado: el §2.4 dice que la
+    microzona ES la unidad de análisis, así que una mal ubicada tumba el argumento entero
+    del producto.
     """
     pag, url = pagina
     pag.goto(url)
@@ -286,6 +473,8 @@ def test_el_tablero_dice_por_que_no_hay_mapa(pagina) -> None:
     avisos = pag.locator("#avisos").inner_text()
     assert "geometría" in avisos or "geometria" in avisos
     assert "T-014" in avisos
+    # Y el contenedor del mapa no se muestra: nada que fingir dibujando un mapa vacío.
+    assert not pag.locator("#mapa-caja").is_visible()
 
 
 # --------------------------------------------------------------- lo que no es del gate

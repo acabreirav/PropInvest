@@ -48,13 +48,7 @@ CELDAS = [
 ]
 
 
-@pytest.fixture(scope="module")
-def base(tmp_path_factory) -> Path:
-    """Una base DuckDB con el esquema real y datos sintéticos."""
-    ruta = tmp_path_factory.mktemp("api") / "prueba.duckdb"
-    con = duckdb.connect(str(ruta))
-    db.aplicar_esquema(con)
-
+def _poblar_datos_basicos(con: duckdb.DuckDBPyConnection) -> None:
     for cid, nombre in (("san-miguel", "San Miguel"), ("nunoa", "Ñuñoa"), ("macul", "Macul")):
         con.execute(
             "INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES (?,?,'Metropolitana')",
@@ -63,7 +57,7 @@ def base(tmp_path_factory) -> Path:
     for mz in ("san-miguel/gran-avenida", "nunoa/irarrazaval", "macul/sin-comparables"):
         con.execute(
             "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?,?,?)",
-            (mz, mz.split("/")[0], mz.split("/")[1]),
+            (mz, mz.split("/")[0], mz.split("/")[1].replace("-", " ").title()),
         )
 
     for key, mz, tip, m2, precio, nueva, ant in UNIDADES:
@@ -98,6 +92,15 @@ def base(tmp_path_factory) -> Path:
             "arriendo_uf_mediana, n) VALUES (?,?,?,?,?)",
             (mz, tip, rango, mediana, n),
         )
+
+
+@pytest.fixture(scope="module")
+def base(tmp_path_factory) -> Path:
+    """Una base DuckDB con el esquema real y datos sintéticos."""
+    ruta = tmp_path_factory.mktemp("api") / "prueba.duckdb"
+    con = duckdb.connect(str(ruta))
+    db.aplicar_esquema(con)
+    _poblar_datos_basicos(con)
     con.close()
     return ruta
 
@@ -105,6 +108,52 @@ def base(tmp_path_factory) -> Path:
 @pytest.fixture(scope="module")
 def cliente(base: Path) -> TestClient:
     return TestClient(crear_app(servicio=Servicio(base)))
+
+
+@pytest.fixture(scope="module")
+def base_con_mapa(tmp_path_factory) -> Path:
+    """T-928 · como `base`, pero con geometría real (sintética) para las dos microzonas
+    que rankean. Los mismos datos financieros de `base`, más el puente manzana→microzona
+    de dos cuadrados WKT chicos que `microzona_geom` une y simplifica."""
+    from shapely import wkb as shp_wkb
+    from shapely import wkt as shp_wkt
+
+    from flujocero.geo import microzona_geom as mg
+
+    ruta = tmp_path_factory.mktemp("api-mapa") / "prueba.duckdb"
+    con = duckdb.connect(str(ruta))
+    db.aplicar_esquema(con)
+    _poblar_datos_basicos(con)
+
+    # dos rectangulos separados, uno por microzona rankeable. `macul/sin-comparables` se
+    # deja SIN manzana a proposito: no rankea (T-005 no tiene comparables) y tampoco debe
+    # aparecer en el mapa por tener geometria "de sobra".
+    poligonos = {
+        "san-miguel/gran-avenida": "POLYGON((0 0,0 1,1 1,1 0,0 0))",
+        "nunoa/irarrazaval": "POLYGON((5 5,5 6,6 6,6 5,5 5))",
+    }
+    for i, (mz, wkt_texto) in enumerate(poligonos.items()):
+        manzent = f"MZ-MAPA-{i}"
+        con.execute(
+            "INSERT INTO dim_manzana (manzent, comuna, geom_wkb, source_id, source_url, "
+            "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
+            "VALUES (?, ?, ?, 's', 'u', ?, 'v', 'p', 'x')",
+            (manzent, mz.split("/")[0].upper(), shp_wkb.dumps(shp_wkt.loads(wkt_texto)), AHORA),
+        )
+        con.execute(
+            "INSERT INTO map_microzona_manzana (manzent, microzona_id, calculado_en) "
+            "VALUES (?, ?, ?)",
+            (manzent, mz, AHORA),
+        )
+    res = mg.construir_geometria_microzonas(con, AHORA)
+    assert res.con_geometria == 2, f"la fixture no cargó la geometría esperada: {res}"
+    con.close()
+    return ruta
+
+
+@pytest.fixture(scope="module")
+def cliente_con_mapa(base_con_mapa: Path) -> TestClient:
+    return TestClient(crear_app(servicio=Servicio(base_con_mapa)))
 
 
 # --------------------------------------------------------------- nivel de evidencia
@@ -306,6 +355,80 @@ def test_declara_que_no_puede_dibujar_el_mapa_y_por_que(cliente: TestClient) -> 
     assert d["capacidades"]["mapa"] is False
     assert "T-014" in d["capacidades"]["mapa_razon"]
     assert any("geometría" in a for a in d["advertencias"])
+
+
+# --------------------------------------------------------------- T-928 · el mapa
+
+
+def test_capacidades_mapa_pasa_a_true_con_geometria_cargada(cliente_con_mapa: TestClient) -> None:
+    d = cliente_con_mapa.get("/api/ranking?pie=0.3").json()
+    assert d["capacidades"]["mapa"] is True
+    assert d["capacidades"]["mapa_razon"] == ""
+
+
+def test_el_mapa_sirve_geojson_de_las_microzonas_con_geometria(
+    cliente_con_mapa: TestClient,
+) -> None:
+    d = cliente_con_mapa.get("/api/mapa?pie=0.3").json()
+    assert d["type"] == "FeatureCollection"
+    ids = {f["properties"]["microzona_id"] for f in d["features"]}
+    assert ids == {"san-miguel/gran-avenida", "nunoa/irarrazaval"}
+    for f in d["features"]:
+        assert f["type"] == "Feature"
+        assert f["geometry"]["type"] in ("Polygon", "MultiPolygon")
+        p = f["properties"]
+        assert p["nombre"]
+        assert p["comuna_id"]
+        assert p["n_unidades"] >= 1
+        # `pie_flujo_cero_minimo` viaja PLANO a propósito (para el paint expression de
+        # MapLibre): un objeto {valor, evidence_level} anidado no sobrevive el tileado
+        # interno de `geojson-vt` (ver docstring de `/api/mapa` en `app.py`). No hay
+        # `_cifra` acá: la versión CON evidencia se pide aparte a `/api/microzonas`.
+        assert "pie_flujo_cero_minimo_cifra" not in p
+        assert p["pie_flujo_cero_minimo"] is None or isinstance(p["pie_flujo_cero_minimo"], float)
+
+
+def test_el_mapa_y_microzonas_coinciden_en_el_valor_del_pie_minimo(
+    cliente_con_mapa: TestClient,
+) -> None:
+    """El número plano que colorea el mapa y el que trae `/api/microzonas` (con su
+    `evidence_level`, para el popup) tienen que ser el MISMO valor: son dos vistas del
+    mismo dato, no dos cálculos distintos que podrían divergir."""
+    mapa = cliente_con_mapa.get("/api/mapa?pie=0.3").json()
+    microzonas = {
+        m["microzona_id"]: m
+        for m in cliente_con_mapa.get("/api/microzonas?pie=0.3").json()["microzonas"]
+    }
+    for f in mapa["features"]:
+        p = f["properties"]
+        m = microzonas[p["microzona_id"]]
+        cif = m["pie_cero_minimo"]
+        if p["pie_flujo_cero_minimo"] is None:
+            assert cif is None
+        else:
+            assert cif["evidence_level"] == "E"
+            assert abs(Decimal(cif["valor"]) - Decimal(str(p["pie_flujo_cero_minimo"]))) < Decimal(
+                "0.0001"
+            )
+
+
+def test_el_mapa_no_incluye_microzonas_sin_geometria_y_cuenta_cuantas(
+    cliente_con_mapa: TestClient,
+) -> None:
+    """`macul/sin-comparables` no rankea (sin comparables de arriendo) y ademas no tiene
+    geometria en esta fixture: no puede aparecer, y el payload dice que falta."""
+    d = cliente_con_mapa.get("/api/mapa?pie=0.3").json()
+    ids = {f["properties"]["microzona_id"] for f in d["features"]}
+    assert "macul/sin-comparables" not in ids
+    assert isinstance(d["sin_geometria"], int)
+
+
+def test_el_mapa_sigue_diciendo_que_no_hay_geometria_sin_ella(cliente: TestClient) -> None:
+    """La misma honestidad que `capacidades.mapa`, aplicada al endpoint del mapa mismo:
+    sin geometría cargada, el FeatureCollection sale vacío, no con puntos inventados."""
+    d = cliente.get("/api/mapa?pie=0.3").json()
+    assert d["features"] == []
+    assert d["sin_geometria"] >= 1
 
 
 def test_avisa_que_un_cuarto_del_score_esta_inerte(cliente: TestClient) -> None:
