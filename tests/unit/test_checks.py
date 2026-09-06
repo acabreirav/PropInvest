@@ -218,6 +218,18 @@ def test_el_mismo_aviso_a_mas_de_30_dias_es_otro_arriendo() -> None:
     assert h.severidad is q.Severidad.OK
 
 
+def test_duplicados_sin_clave_evaluable_es_marca_no_ok() -> None:
+    """Verificador 06-sep: la base real no tiene `direccion_normalizada`, asi que el
+    check publicaba "sin avisos duplicados" sin haber mirado UNA fila. Un gate ciego
+    no dice OK."""
+    sin_clave = [comp(direccion_normalizada=None), comp(direccion_normalizada=None)]
+    h = q.duplicados_de_arriendo(sin_clave)
+    assert h.severidad is q.Severidad.MARCA
+    assert "no evaluable" in h.mensaje
+    # sin filas de entrada no hay nada que reprochar
+    assert q.duplicados_de_arriendo([]).severidad is q.Severidad.OK
+
+
 # --------------------------------------------------------------------- anclas
 
 

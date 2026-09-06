@@ -93,6 +93,32 @@ def test_la_primera_noticia_de_publicacion_y_la_primera_vista_no_se_pisan(con) -
     assert fetched.date() == MANANA.date(), "fetched_at si avanza: es la ultima vista"
 
 
+def test_el_replay_de_la_zona_cruda_da_lo_mismo_en_cualquier_orden(con) -> None:
+    """§3.6 + verificador M-5: `visto_primera_vez` y las fechas de publicacion guardan
+    lo MAS ANTIGUO (LEAST), no "lo primero que se proceso". Reconstruir desde data/raw/
+    en orden inverso tiene que dar la misma tabla."""
+
+    def cargar_par(orden):
+        c = duckdb.connect(":memory:")
+        db.aplicar_esquema(c)
+        for a in orden:
+            cargar_avisos(c, [a], "portal_busqueda", "v1")
+        fila = c.execute(
+            "SELECT visto_primera_vez, publicado_desde FROM fact_arriendo_comp "
+            "WHERE comp_id = 'MLC-A1'"
+        ).fetchone()
+        c.close()
+        return fila
+
+    viejo = AvisoArriendo("MLC-A1", 450000, HOY)
+    viejo.publicado_desde = HOY.date()
+    nuevo = AvisoArriendo("MLC-A1", 450000, MANANA)
+
+    asc, desc = cargar_par([viejo, nuevo]), cargar_par([nuevo, viejo])
+    assert asc == desc
+    assert asc[0].date() == HOY.date() and asc[1] == HOY.date()
+
+
 def test_un_comparable_nuevo_entre_confirmados_si_cuenta(con) -> None:
     cargar_avisos(con, [AvisoArriendo("MLC-A1", 450000)], "portal_busqueda", "v1")
     n = cargar_avisos(

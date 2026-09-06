@@ -425,6 +425,7 @@ def duplicados_de_arriendo(filas: list[dict[str, Any]]) -> Hallazgo:
     que es lo que decide si una microzona entra al ranking (n ≥ 8).
     """
     grupos: dict[tuple[Any, ...], list[tuple[int, Any]]] = {}
+    evaluables = 0
     for i, f in enumerate(filas):
         clave = (
             f.get("direccion_normalizada"),
@@ -434,7 +435,21 @@ def duplicados_de_arriendo(filas: list[dict[str, Any]]) -> Hallazgo:
         )
         if not all(v is not None for v in clave):
             continue
+        evaluables += 1
         grupos.setdefault(clave, []).append((i, f.get("publicado_en")))
+
+    # Verificador 06-sep: `direccion_normalizada` no existe como columna de
+    # fact_arriendo_comp, asi que este check llevaba meses publicando OK sin haber
+    # evaluado UNA fila. Un gate que no puede mirar no dice "sin duplicados": lo dice.
+    if filas and evaluables == 0:
+        return Hallazgo(
+            "duplicados_arriendo",
+            Severidad.MARCA,
+            f"no evaluable: ninguna de las {len(filas)} filas trae la clave completa "
+            "(falta `direccion_normalizada` en fact_arriendo_comp) — el umbral n>=8 de "
+            "microzona corre sin esta proteccion",
+            len(filas),
+        )
 
     dups: list[str] = []
     for clave, apariciones in grupos.items():

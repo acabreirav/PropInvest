@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from selectolax.parser import HTMLParser
@@ -66,6 +67,7 @@ from flujocero.sources.portal_comun import (
 log = logging.getLogger(__name__)
 
 SOURCE_ID = "portal_busqueda"
+TZ_CHILE = ZoneInfo("America/Santiago")
 PARSER_VERSION = "portal_busqueda/1.1.0"
 TIMEOUT = 30.0
 INTENTOS = 4
@@ -178,18 +180,25 @@ class Tarjeta:
     publicado_etiqueta: str | None = None
 
     @property
+    def _dia_captura_cl(self) -> date:
+        """El "HOY" del portal es un dia de calendario CHILENO, no UTC: una corrida a
+        las 02:00 UTC es "ayer" en Santiago y corria la fecha un dia (verificador
+        06-sep, m-8). El hecho de origen se fija en su zona; §11 aplica a la UI."""
+        return self.fetched_at.astimezone(TZ_CHILE).date()
+
+    @property
     def publicado_en(self) -> date | None:
         """Fecha exacta de publicacion, solo cuando el portal dice HOY."""
-        return self.fetched_at.date() if self.publicado_etiqueta == "hoy" else None
+        return self._dia_captura_cl if self.publicado_etiqueta == "hoy" else None
 
     @property
     def publicado_desde(self) -> date | None:
         """Cota inferior declarada de la fecha de publicacion: HOY => el mismo dia;
         ESTA SEMANA => a lo mas 7 dias antes de la captura. Sin etiqueta => ND."""
         if self.publicado_etiqueta == "hoy":
-            return self.fetched_at.date()
+            return self._dia_captura_cl
         if self.publicado_etiqueta == "esta_semana":
-            return (self.fetched_at - timedelta(days=7)).date()
+            return self._dia_captura_cl - timedelta(days=7)
         return None
 
     @property

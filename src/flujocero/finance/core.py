@@ -261,8 +261,10 @@ def tir(flujos: Sequence[Decimal], tol: Decimal = D("1e-10"), max_iter: int = 30
     lista = list(flujos)
     cambios = cambios_de_signo(lista)
     if cambios != 1:
+        # Sin dos puntos en el mensaje: el dashboard agrupa exclusiones por el texto
+        # hasta el primer ':' y un motivo con ':' interno parte el bucket a la mitad.
         raise TirNoDefinida(
-            f"{cambios} cambios de signo en los flujos: "
+            f"{cambios} cambios de signo en los flujos — "
             + ("la TIR no existe" if cambios == 0 else "la TIR no es única")
         )
 

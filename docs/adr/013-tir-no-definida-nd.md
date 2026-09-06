@@ -38,4 +38,17 @@ tasa de reinversión declarada — decisión §8.4, con el humano.
 
 - Ningún consumidor ve un −1: o hay TIR certificada, o la fila está excluida con motivo.
 - El golden 5b conserva el fallo ruidoso (`ValueError` sigue atrapando a la subclase).
-- La exclusión por ND pisa a la de D-012 si coinciden: es la más grave de las dos.
+
+## Precisiones del verificador §7.6 (06-sep, misma fecha)
+
+El verificador confirmó los números (20.000 vectores diferenciales: cero casos en que
+se rechace una TIR única certificable; barrido de 4.000 unidades: el ND es inalcanzable
+desde `evaluar()` hoy) y corrigió tres bordes de comportamiento, ya aplicados:
+
+1. **Solo excluye el horizonte que el score consume (10 años).** Un ND en el 20 o el 30
+   queda registrado en `tir_nd_motivo` pero no bota del ranking una TIR a 10 certificada.
+   Los motivos de varios horizontes se acumulan, no se pisan.
+2. **El motivo de D-012 no se borra**: el déficit en pesos es el hecho accionable; si
+   coinciden, se muestran los dos motivos juntos.
+3. **`saltar_exclusiones=True` se respeta** también en este bloque, y los mensajes van
+   sin `:` interno para no partir el bucket de `excluidas_por_regla` del dashboard.

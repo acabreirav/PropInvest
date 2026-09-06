@@ -45,6 +45,19 @@ COLUMNAS_AGREGADAS: tuple[tuple[str, str, str], ...] = (
     ("fact_arriendo_comp", "visto_primera_vez", "TIMESTAMPTZ"),
 )
 
+# Sentencias idempotentes que corren DESPUES de agregar columnas: rellenan lo que la
+# columna nueva puede afirmar sobre las filas viejas sin inventar nada.
+BACKFILLS: tuple[tuple[str, str], ...] = (
+    # T-924b/M-4: para una fila anterior a la migracion, su fetched_at ES una primera
+    # vista probada (blob crudo mediante). Sin esto, el proximo upsert pisa fetched_at
+    # y borra 125 dias de evidencia de "existe al menos desde".
+    (
+        "fact_arriendo_comp.visto_primera_vez",
+        "UPDATE fact_arriendo_comp SET visto_primera_vez = fetched_at "
+        "WHERE visto_primera_vez IS NULL AND fetched_at IS NOT NULL",
+    ),
+)
+
 
 def migrar(con: duckdb.DuckDBPyConnection) -> list[str]:
     """Agrega las columnas que `CREATE TABLE IF NOT EXISTS` no puede agregar sola.
@@ -60,6 +73,11 @@ def migrar(con: duckdb.DuckDBPyConnection) -> list[str]:
             # La tabla todavia no existe (base recien creada): el DDL ya la trae completa.
             continue
         aplicadas.append(f"{tabla}.{columna}")
+    for _nombre, sentencia in BACKFILLS:
+        try:
+            con.execute(sentencia)
+        except duckdb.Error:
+            continue  # base recien creada: la tabla no existe todavia y no hay que rellenar
     return aplicadas
 
 

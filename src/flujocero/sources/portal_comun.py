@@ -475,11 +475,16 @@ def _cargar_arriendo(conexion: Any, a: Any, source_id: str, parser_version: str)
         ON CONFLICT (comp_id) DO UPDATE SET
           arriendo_clp = excluded.arriendo_clp, arriendo_uf = excluded.arriendo_uf,
           fetched_at = excluded.fetched_at,
-          -- T-924b: la PRIMERA noticia gana. Una re-vista sin etiqueta trae NULL y no
-          -- borra lo declarado antes; `visto_primera_vez` ni aparece aca: no se pisa.
-          publicado_en = COALESCE(fact_arriendo_comp.publicado_en, excluded.publicado_en),
-          publicado_desde = COALESCE(
-            fact_arriendo_comp.publicado_desde, excluded.publicado_desde)
+          -- T-924b: gana lo MAS ANTIGUO, no "lo primero que se proceso" — LEAST ignora
+          -- NULLs en DuckDB, asi que una re-vista sin etiqueta no borra nada, y el
+          -- resultado es el mismo en cualquier orden de replay de la zona cruda (§3.6,
+          -- verificador 06-sep M-5/M-6). `visto_primera_vez` tambien: la fila vieja
+          -- conserva su primera vista aunque el replay llegue desordenado.
+          publicado_en = LEAST(fact_arriendo_comp.publicado_en, excluded.publicado_en),
+          publicado_desde = LEAST(
+            fact_arriendo_comp.publicado_desde, excluded.publicado_desde),
+          visto_primera_vez = LEAST(
+            fact_arriendo_comp.visto_primera_vez, excluded.visto_primera_vez)
         """,
         (
             a.portal_id,

@@ -496,7 +496,9 @@ def evaluar(
                 # indexado directo del score sigue reventando si alguien puntúa esta
                 # evaluación — y más abajo la fila se excluye del ranking con el
                 # motivo a la vista (ADR 013). MIRR quedó descartada ahí mismo.
-                ev.tir_nd_motivo = f"horizonte {n} años: {nd}"
+                # Los motivos se ACUMULAN: si fallan dos horizontes se ven los dos.
+                nuevo = f"horizonte {n} años — {nd}"
+                ev.tir_nd_motivo = f"{ev.tir_nd_motivo}; {nuevo}" if ev.tir_nd_motivo else nuevo
             if n == 10:
                 ev.van_uf = f.van(flujos, r)
 
@@ -512,11 +514,25 @@ def evaluar(
         )
 
     # T-943 · una TIR no definida también excluye DESPUÉS de calcular (mismo patrón
-    # D-012): la fila conserva sus métricas y el informe muestra por qué se cayó. Si
-    # además reventó el tope de caja, este motivo gana — es el más grave de los dos.
-    if ev.tir_nd_motivo is not None:
+    # D-012), con tres precisiones del verificador (06-sep):
+    #   - solo si falta el horizonte que el SCORE consume (10 años, §12): un ND en el
+    #     20 o el 30 es informativo pero no puede botar del ranking una TIR a 10 años
+    #     perfectamente certificada — queda registrado en `tir_nd_motivo` igual;
+    #   - el motivo de D-012 NO se pisa: el déficit en pesos es el hecho accionable,
+    #     los dos motivos se muestran juntos;
+    #   - respeta `saltar_exclusiones`, que es una petición explícita del caller.
+    horizonte_score = 10
+    if (
+        not saltar_exclusiones
+        and ev.tir_nd_motivo is not None
+        and calcular_tir
+        and horizonte_score not in ev.tir_real
+    ):
         ev.excluido = True
-        ev.motivo_exclusion = f"TIR no definida ({ev.tir_nd_motivo}) — ver ADR 013"
+        tir_txt = f"TIR no definida ({ev.tir_nd_motivo}) — ver ADR 013"
+        ev.motivo_exclusion = (
+            f"{ev.motivo_exclusion} · {tir_txt}" if ev.motivo_exclusion else tir_txt
+        )
     return ev
 
 

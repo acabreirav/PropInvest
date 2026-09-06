@@ -6,7 +6,8 @@ proxies medibles con la base que YA tenemos:
 
 1. **Liquidez de colocacion** (arriendo): edad del aviso activo — cuantos dias lleva
    publicado un arriendo sin arrendarse. Si las chicas se cuelgan mas, se arriendan
-   mas lento. `COALESCE(dias_en_mercado, fetched_at - publicado_en)`, mediana por tramo.
+   mas lento. Mediana de la edad DECLARADA (ver `_EDAD_DECLARADA`), mas la cota
+   inferior por primera vista propia y la fraccion vista fresca (T-924b).
 2. **Gastos comunes por m²** (arriendo): el portal publica `gastos_comunes_clp` por
    aviso — dato V, no supuesto. Si el GGCC/m² sube al achicar el depto, el opex real
    de una micro-unidad esta subestimado por el parametro plano de params.yml.
@@ -52,17 +53,24 @@ def _caso(col: str) -> str:
 class FilaArriendo:
     tramo: str
     n: int
-    edad_mediana_dias: float | None  # None = ningun aviso del tramo declara fecha (ND)
+    # Mediana de edad DECLARADA (dias_en_mercado, o publicado_en -> ultima vista). Un
+    # publicado_en igual al dia de su captura no entra: es 0 por construccion, no un
+    # dato de edad (verificador 06-sep M-3). Tampoco uno posterior a la primera vista
+    # propia: eso es un relisting, no la edad del aviso (M-6). `n_con_fecha` dice
+    # cuantas filas sostienen la mediana; None = ND.
+    edad_mediana_dias: float | None
+    n_con_fecha: int
     uf_m2_mediana: float | None
     ggcc_m2_mediana_clp: float | None
     n_con_ggcc: int
-    # T-924b · dos medidas nuevas, cada una con su naturaleza a la vista:
-    # cota INFERIOR de la edad (dias desde que ESTE sistema vio el aviso por primera
-    # vez — `visto_primera_vez`; mejora sola con las semanas de recoleccion), y cota
-    # inferior de la fraccion recien publicada (avisos cuya etiqueta del portal declara
-    # publicacion en los ultimos 7 dias; la ausencia de etiqueta es ND, no "viejo").
+    # T-924b · cota INFERIOR de la edad: dias desde que ESTE sistema vio el aviso por
+    # primera vez (`visto_primera_vez`; mejora sola con las semanas de recoleccion).
     edad_cota_inf_mediana_dias: float | None = None
-    pct_recien_publicado: float | None = None
+    # Fraccion de avisos que ALGUNA captura vio recien publicados (etiqueta del portal
+    # en SU momento — no depende del reloj de la medicion, verificador M-1/M-2). El
+    # nivel esta contaminado hacia abajo por capturas del parser <1.1.0, que era ciego
+    # a la etiqueta: comparar ENTRE tramos, como todo en este modulo.
+    pct_visto_fresco: float | None = None
     n_con_etiqueta: int = 0
 
 
@@ -74,41 +82,59 @@ class FilaVenta:
     pct_bajaron_precio: float
 
 
-def medir_arriendo(conexion: Any, ahora: datetime | None = None) -> list[FilaArriendo]:
-    """Colocacion y GGCC por tramo, sobre avisos activos no amoblados ni sospechosos
-    (los mismos filtros que la agregacion del §7.3 — medir con otra vara diria otra cosa).
+# Edad declarada de un aviso: dias_en_mercado si el portal lo dijera; si no, la
+# distancia publicado_en -> ultima vista, PERO solo cuando publicado_en aporta edad de
+# verdad: uno igual al dia de su captura es 0 por construccion (etiqueta "HOY", M-3) y
+# uno posterior a la primera vista propia es un relisting, no una publicacion (M-6).
+_EDAD_DECLARADA = """
+    CASE WHEN dias_en_mercado IS NOT NULL THEN dias_en_mercado
+         WHEN publicado_en IS NOT NULL
+              AND publicado_en < CAST(fetched_at AS DATE)
+              AND publicado_en <= CAST(COALESCE(visto_primera_vez, fetched_at) AS DATE)
+         THEN date_diff('day', publicado_en, CAST(fetched_at AS DATE)) END
+"""
 
-    Con `ahora` ademas calcula las dos cotas de T-924b; sin el (compatibilidad y tests
-    viejos) esas columnas quedan en ND, nunca en un cero inventado."""
-    con_cotas = ahora is not None
-    cotas_sql = (
-        f"""
-               median(date_diff('day',
-                      CAST(COALESCE(visto_primera_vez, fetched_at) AS DATE),
-                      DATE '{ahora:%Y-%m-%d}')),
-               avg(CASE WHEN publicado_desde >= DATE '{ahora:%Y-%m-%d}' - 7
-                        THEN 1.0 ELSE 0.0 END),
-               count(publicado_desde)
-        """
-        if con_cotas
-        else "NULL, NULL, 0"
+
+def medir_arriendo(conexion: Any, ahora: datetime | None = None) -> list[FilaArriendo]:
+    """Colocacion y GGCC por tramo, sobre avisos activos, no amoblados (el MISMO filtro
+    del §7.3: `no_comparable` sobre la URL — la columna `amoblado` nunca se puebla y
+    filtrar solo por ella era un no-op, verificador 06-sep m-7) ni sospechosos.
+
+    A diferencia del ranking, aca NO corre el gate de frescura de 21 dias: la
+    comparacion entre tramos usa todo el historico activo a proposito — mas historia,
+    mas n — y el nivel absoluto se lee con ese caveat, igual que en `medir_venta`.
+
+    Con `ahora` ademas calcula la cota inferior de edad de T-924b; sin el
+    (compatibilidad y tests viejos) esa columna queda en ND, nunca en un cero."""
+    from flujocero.quality.comparabilidad import NO_COMPARABLE
+
+    cota_sql = (
+        f"""median(date_diff('day',
+                   CAST(COALESCE(visto_primera_vez, fetched_at) AS DATE),
+                   DATE '{ahora:%Y-%m-%d}'))"""
+        if ahora is not None
+        else "NULL"
     )
     filas = conexion.execute(
         f"""
         SELECT {_caso("m2_utiles")} AS tramo,
                count(*) AS n,
-               median(COALESCE(dias_en_mercado,
-                               date_diff('day', publicado_en, CAST(fetched_at AS DATE)))),
+               median({_EDAD_DECLARADA}),
+               count({_EDAD_DECLARADA}),
                median(arriendo_uf / m2_utiles),
                median(CASE WHEN gastos_comunes_clp > 0
                            THEN gastos_comunes_clp / m2_utiles END),
                count(CASE WHEN gastos_comunes_clp > 0 THEN 1 END),
-               {cotas_sql}
+               {cota_sql},
+               avg(CASE WHEN publicado_desde IS NOT NULL THEN 1.0 ELSE 0.0 END),
+               count(publicado_desde)
         FROM fact_arriendo_comp
         WHERE activo AND NOT COALESCE(amoblado, FALSE) AND NOT COALESCE(sospechoso, FALSE)
+          AND NOT regexp_matches(lower(COALESCE(source_url, '')), ?)
           AND m2_utiles IS NOT NULL AND m2_utiles > 0
         GROUP BY 1
-        """
+        """,
+        (NO_COMPARABLE.pattern,),
     ).fetchall()
     orden = {nombre: i for i, (nombre, _, _) in enumerate(TRAMOS)}
     salida = [
@@ -116,16 +142,15 @@ def medir_arriendo(conexion: Any, ahora: datetime | None = None) -> list[FilaArr
             tramo=t,
             n=int(n),
             edad_mediana_dias=float(edad) if edad is not None else None,
+            n_con_fecha=int(n_fecha),
             uf_m2_mediana=float(ufm2) if ufm2 is not None else None,
             ggcc_m2_mediana_clp=float(ggcc) if ggcc is not None else None,
             n_con_ggcc=int(n_ggcc),
             edad_cota_inf_mediana_dias=float(cota) if cota is not None else None,
-            # cota INFERIOR: un aviso sin etiqueta cuenta 0 aunque pudiera ser fresco.
-            # `n_con_etiqueta` al lado dice cuanta declaracion sostiene el numero.
-            pct_recien_publicado=float(pct) if pct is not None else None,
+            pct_visto_fresco=float(pct) if pct is not None else None,
             n_con_etiqueta=int(n_eti),
         )
-        for t, n, edad, ufm2, ggcc, n_ggcc, cota, pct, n_eti in filas
+        for t, n, edad, n_fecha, ufm2, ggcc, n_ggcc, cota, pct, n_eti in filas
         if t is not None
     ]
     return sorted(salida, key=lambda f: orden[f.tramo])

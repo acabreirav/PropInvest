@@ -123,16 +123,22 @@ def test_parsea_una_tarjeta_de_unidad() -> None:
 def test_la_etiqueta_publicado_se_captura_y_sin_ella_queda_nd() -> None:
     """T-924b: el destacado `.poly-component__float-highlight` es lo unico que el listado
     permitido declara sobre la edad del aviso. HOY => fecha exacta; ESTA SEMANA => cota
-    captura-7; ausencia o cualquier otro destacado => ND, jamas un cero."""
+    captura-7; ausencia o cualquier otro destacado => ND, jamas un cero.
+
+    Las fechas van en dia CHILENO (verificador m-8): AHORA es 2026-08-29 00:00 UTC,
+    que en Santiago (UTC-4 en agosto) todavia es 28-ago — el "HOY" del portal."""
+    from datetime import date
+
+    dia_cl = date(2026, 8, 28)
     span = '<span class="poly-component__float-highlight">{}</span>'
     hoy = parsear(tarjeta_html(extra=span.format("PUBLICADO HOY")))[0]
     assert hoy.publicado_etiqueta == "hoy"
-    assert hoy.publicado_en == AHORA.date() and hoy.publicado_desde == AHORA.date()
+    assert hoy.publicado_en == dia_cl and hoy.publicado_desde == dia_cl
 
     semana = parsear(tarjeta_html(extra=span.format("Publicado esta semana")))[0]
     assert semana.publicado_etiqueta == "esta_semana"
     assert semana.publicado_en is None, "la fecha exacta NO se conoce: solo la cota"
-    assert semana.publicado_desde == (AHORA - timedelta(days=7)).date()
+    assert semana.publicado_desde == dia_cl - timedelta(days=7)
 
     sin = parsear(tarjeta_html())[0]
     destacado = parsear(tarjeta_html(extra=span.format("Destacado")))[0]

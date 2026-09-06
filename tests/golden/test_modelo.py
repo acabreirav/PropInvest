@@ -670,13 +670,48 @@ def test_tir_no_definida_excluye_con_motivo_y_sin_menos_uno(cfg, monkeypatch) ->
     from flujocero.finance import core
 
     def tir_rota(flujos, tol=D("1e-10"), max_iter=300):
-        raise core.TirNoDefinida("2 cambios de signo en los flujos: la TIR no es única")
+        raise core.TirNoDefinida("2 cambios de signo en los flujos — la TIR no es única")
 
     monkeypatch.setattr(core, "tir", tir_rota)
     ev = evaluar(unidad(), escenario(), p, inv)
     assert ev.excluido and ev.motivo_exclusion is not None
     assert "TIR no definida" in ev.motivo_exclusion and "ADR 013" in ev.motivo_exclusion
+    assert ":" not in ev.motivo_exclusion.split("—")[0], (
+        "el dashboard agrupa por el texto hasta el primer ':' — un ':' interno parte el bucket"
+    )
     assert ev.tir_real == {}  # ausente, no -1
     assert ev.tir_nd_motivo is not None and "no es única" in ev.tir_nd_motivo
+    # los TRES horizontes fallaron y los tres quedan a la vista, no solo el ultimo
+    assert ev.tir_nd_motivo.count("horizonte") == 3
     # las demas metricas sobreviven para que el informe muestre por que se cayo
     assert ev.noi_uf != D(0)
+
+
+def test_un_nd_en_horizonte_informativo_no_bota_la_tir_certificada(cfg, monkeypatch) -> None:
+    """Verificador 06-sep (m-9): el score solo consume la TIR a 10 años. Un ND en el 20
+    o el 30 queda registrado pero no excluye. Y `saltar_exclusiones=True` (m-12) es una
+    peticion explicita del caller que el bloque nuevo tambien respeta."""
+    p, inv = cfg
+    from flujocero.finance import core
+
+    tir_real = core.tir
+    llamada = {"n": 0}
+
+    def tir_falla_despues_del_primero(flujos, tol=D("1e-10"), max_iter=300):
+        llamada["n"] += 1
+        if llamada["n"] > 1:
+            raise core.TirNoDefinida("2 cambios de signo en los flujos — la TIR no es única")
+        return tir_real(flujos, tol, max_iter)
+
+    monkeypatch.setattr(core, "tir", tir_falla_despues_del_primero)
+    ev = evaluar(unidad(), escenario(), p, inv)
+    assert 10 in ev.tir_real and ev.tir_nd_motivo is not None
+    assert not ev.excluido, "la TIR a 10 esta certificada: el ND del 20/30 no bota la fila"
+
+    def tir_rota_siempre(flujos, tol=D("1e-10"), max_iter=300):
+        raise core.TirNoDefinida("0 cambios de signo en los flujos — la TIR no existe")
+
+    monkeypatch.setattr(core, "tir", tir_rota_siempre)
+    ev2 = evaluar(unidad(), escenario(), p, inv, saltar_exclusiones=True)
+    assert ev2.tir_nd_motivo is not None
+    assert not ev2.excluido, "saltar_exclusiones se pidio explicito: se respeta"

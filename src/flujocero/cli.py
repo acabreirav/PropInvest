@@ -2154,10 +2154,11 @@ def micro_unidades() -> None:
     finally:
         con.close()
 
-    typer.echo("  ARRIENDO · avisos activos (sin amoblados ni sospechosos):")
+    typer.echo("  ARRIENDO · avisos activos (sin amoblados ni sospechosos; sin gate de")
+    typer.echo("  frescura: todo el historico activo, para comparar ENTRE tramos):")
     typer.echo(
-        f"    {'tramo':<8}{'n':>6}{'edad med.':>11}{'edad>=':>8}{'% fresco':>10}"
-        f"{'UF/m²':>8}{'GGCC/m²':>10}{'n ggcc':>8}"
+        f"    {'tramo':<8}{'n':>6}{'edad med.':>11}{'n fecha':>9}{'edad>=':>8}"
+        f"{'% fresco':>10}{'n etiq':>8}{'UF/m²':>8}{'GGCC/m²':>10}{'n ggcc':>8}"
     )
     for f in arriendo:
         edad = f"{f.edad_mediana_dias:.0f} d" if f.edad_mediana_dias is not None else "ND"
@@ -2166,17 +2167,18 @@ def micro_unidades() -> None:
             if f.edad_cota_inf_mediana_dias is not None
             else "ND"
         )
-        fresco = f"{f.pct_recien_publicado:.0%}" if f.pct_recien_publicado is not None else "ND"
+        fresco = f"{f.pct_visto_fresco:.0%}" if f.pct_visto_fresco is not None else "ND"
         ufm2 = f"{f.uf_m2_mediana:.3f}" if f.uf_m2_mediana is not None else "ND"
         ggcc = f"${f.ggcc_m2_mediana_clp:,.0f}" if f.ggcc_m2_mediana_clp is not None else "ND"
         typer.echo(
-            f"    {f.tramo:<8}{f.n:>6}{edad:>11}{cota:>8}{fresco:>10}"
-            f"{ufm2:>8}{ggcc:>10}{f.n_con_ggcc:>8}"
+            f"    {f.tramo:<8}{f.n:>6}{edad:>11}{f.n_con_fecha:>9}{cota:>8}"
+            f"{fresco:>10}{f.n_con_etiqueta:>8}{ufm2:>8}{ggcc:>10}{f.n_con_ggcc:>8}"
         )
     typer.echo(
         "    (edad>= : cota inferior — dias desde la PRIMERA captura propia; mejora sola"
-        "\n     con las semanas. % fresco: cota inferior de avisos publicados hace <=7 dias"
-        "\n     segun la etiqueta del portal, T-924b.)"
+        "\n     con las semanas. % fresco: fraccion que ALGUNA captura vio recien publicada"
+        "\n     — etiqueta del portal en su momento; capturas del parser <1.1 eran ciegas a"
+        "\n     ella, asi que el nivel subestima parejo: comparar entre tramos. T-924b.)"
     )
 
     typer.echo("\n  VENTA · foto de mayo vs hoy (proxy de salida — comparar ENTRE tramos,")
