@@ -71,7 +71,7 @@ try {
         # Sin esto, el script decia "Informe listo" apuntando a un archivo inexistente
         # y el correo fallaba en silencio detras (25-sep-2026).
         Write-Output "!! ERROR: el informe NO se genero ($adjunto no existe)."
-        Write-Output "!! Revisa mas arriba en este log el paso 5/5 — el correo no se envia."
+        Write-Output "!! Revisa mas arriba en este log el paso 5/5 - el correo no se envia."
     } else {
         Write-Output "== correo (opcional: requiere secrets/smtp.json) =="
         uv run python scripts/enviar_informe.py --adjunto "$adjunto" --fecha $fecha
