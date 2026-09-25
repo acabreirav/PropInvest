@@ -12,7 +12,10 @@
 # y el log completo en Escritorio\FlujoCero\semanal-AAAA-MM-DD.log
 # Si existe secrets/smtp.json (ver secrets/smtp.ejemplo.json), ademas lo envia por
 # correo — 100% local, con contraseña de aplicacion de Google, nada sale del PC.
-param([string]$Destino = "$env:USERPROFILE\Desktop\FlujoCero")
+# El Escritorio REAL, no $env:USERPROFILE\Desktop: con OneDrive el escritorio visible
+# vive en ...\OneDrive\Escritorio y la ruta cruda es una carpeta fantasma que nadie
+# mira — el informe se generaba y "no aparecia" (medido 25-sep-2026).
+param([string]$Destino = (Join-Path ([Environment]::GetFolderPath("Desktop")) "FlujoCero"))
 
 $ErrorActionPreference = "Continue"
 # La consola de Windows usa cp1252 y cualquier caracter fuera de ese mapa (⚠, ², …)
@@ -64,10 +67,16 @@ try {
     }
     $adjunto = if (Test-Path $pdfPath) { $pdfPath } else { $htmlPath }
 
-    Write-Output "== correo (opcional: requiere secrets/smtp.json) =="
-    uv run python scripts/enviar_informe.py --adjunto "$adjunto" --fecha $fecha
-
-    Write-Output "Informe listo: $adjunto"
+    if (-not (Test-Path $adjunto)) {
+        # Sin esto, el script decia "Informe listo" apuntando a un archivo inexistente
+        # y el correo fallaba en silencio detras (25-sep-2026).
+        Write-Output "!! ERROR: el informe NO se genero ($adjunto no existe)."
+        Write-Output "!! Revisa mas arriba en este log el paso 5/5 — el correo no se envia."
+    } else {
+        Write-Output "== correo (opcional: requiere secrets/smtp.json) =="
+        uv run python scripts/enviar_informe.py --adjunto "$adjunto" --fecha $fecha
+        Write-Output "Informe listo: $adjunto"
+    }
 } finally {
     Stop-Transcript
 }

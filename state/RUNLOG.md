@@ -2927,3 +2927,19 @@ afirma a si mismo, segunda vez que esta leccion se paga. Las fixtures E2E quedar
 migradas a comparables vivos (8/8 verdes) y los gates completos re-corridos en
 serio sobre el arbol final ANTES de este commit.
 (*el hash exacto es el del commit "verificador de T-949: muere el respaldo...")
+
+
+## 2026-09-25 · El correo del domingo nunca existio — dos hoyos de operacion
+
+El usuario reporto: corrida manual completa sin correo ni informe visible, y NINGUN
+domingo llego el mail (el unico correo real fue la validacion manual del 03-sep).
+1. `semanal.ps1` escribia en `$env:USERPROFILE\Desktop`, que con OneDrive NO es el
+   escritorio visible: el informe podia generarse en una carpeta fantasma. Ahora usa
+   `[Environment]::GetFolderPath("Desktop")` y avisa FUERTE si el informe no se genero
+   (antes decia "Informe listo" apuntando a un archivo inexistente y el correo fallaba
+   con un mensaje que nadie leia).
+2. La tarea programada NUNCA estuvo registrada de forma reproducible: el repo no traia
+   instalador. Nace `scripts/instalar_tarea.ps1` (domingo 20:00, StartWhenAvailable
+   para notebooks apagados, WakeToRun, tope 3 h) — la automatizacion "validada" el
+   03-sep era el pipeline, no la instalacion de la tarea. Leccion: validar el cron es
+   validar que EL CRON dispara, no que el comando funciona a mano.
