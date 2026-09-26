@@ -26,7 +26,11 @@ from flujocero.api.app import cifra, crear_app, nivel_derivado  # noqa: E402
 from flujocero.api.servicio import Servicio  # noqa: E402
 from flujocero.sources.base import COLUMNAS_PROCEDENCIA  # noqa: E402
 
-AHORA = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
+# RELATIVO al reloj, no fijo: `servicio` filtra frescura §7.3 contra datetime.now()
+# de verdad (la API sirve "hoy"), asi que un fixture con fecha fija era una bomba de
+# tiempo — paso verde 3 semanas y despues los comparables "envejecieron" y el ranking
+# del fixture quedo vacio (10 tests rotos el 25-sep-2026 sin tocar nadie el codigo).
+AHORA = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
 
 # Cuatro unidades que emparejan y una que no, para que el conteo de descartes tenga algo que
 # contar. Precios y arriendos elegidos para caer dentro de los rangos plausibles del modelo.

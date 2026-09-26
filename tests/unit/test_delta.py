@@ -339,3 +339,48 @@ def test_el_informe_muestra_el_cambio_NETO_una_sola_vez(con) -> None:
     c = r.bajaron[0]
     assert c.precio_antes_uf == D("6000.00"), "se compara contra la mas antigua"
     assert c.precio_ahora_uf == D("5000.00")
+
+
+# ------------------------------------------- avisos en pesos (13-sep/25-sep, TypeError)
+
+
+def _uf_del_dia(con, fecha, valor):
+    con.execute(
+        "INSERT INTO dim_tiempo_financiero (fecha, serie, valor) VALUES (?, 'uf', ?)",
+        (fecha.date(), D(valor)),
+    )
+
+
+def _aviso_en_pesos(pid, clp, fecha):
+    a = Aviso(pid, "1", fecha)
+    a.precio_uf = None
+    a.precio_clp = clp
+    return a
+
+
+def test_un_aviso_en_pesos_no_revienta_el_delta_y_se_convierte_con_la_uf_de_su_dia(con) -> None:
+    """El crash real de las corridas del 13-sep y 25-sep-2026: Concepcion y otras comunas
+    publican en pesos, precio_uf queda NULL, y `variacion` hacia None - Decimal. La
+    conversion es la del §3.3 (UF de SU dia): un precio en pesos que no se movio mientras
+    la UF subio ES una baja real en UF."""
+    _uf_del_dia(con, MAYO, "39000")
+    _uf_del_dia(con, HOY, "40804")
+    cargar_avisos(con, [Aviso("MLC-1", "4000", MAYO)], "legado", "v1")
+    # la version nueva llega EN PESOS: 4000 x 39000 = 156M, que con la UF de hoy son
+    # ~3823 UF -> bajo un 4,4% en terminos reales sin que el vendedor tocara el numero
+    cargar_avisos(con, [_aviso_en_pesos("MLC-1", 156_000_000, HOY)], "portal_busqueda", "v1")
+
+    r = delta.comparar(con, HOY)
+    assert r.sin_conversion == 0
+    assert len(r.bajaron) == 1
+    assert r.bajaron[0].precio_ahora_uf == pytest.approx(D("156000000") / D("40804"))
+    str(r)  # el render completo tampoco revienta
+
+
+def test_sin_uf_del_dia_el_cambio_se_cuenta_aparte_no_se_esconde(con) -> None:
+    cargar_avisos(con, [Aviso("MLC-1", "4000", MAYO)], "legado", "v1")
+    cargar_avisos(con, [_aviso_en_pesos("MLC-1", 156_000_000, HOY)], "portal_busqueda", "v1")
+
+    r = delta.comparar(con, HOY)  # dim_tiempo_financiero vacia: no hay con que convertir
+    assert r.cambios == [] and r.sin_conversion == 1
+    assert "sin UF de su dia" in str(r)

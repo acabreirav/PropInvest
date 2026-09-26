@@ -28,7 +28,9 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-AHORA = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
+# Relativo al reloj: `servicio` filtra frescura contra datetime.now() real, y una
+# fecha fija aqui es la misma bomba de tiempo que pudrio test_api el 25-sep-2026.
+AHORA = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
 
 # El §7.5 pide medir con 10.000 unidades. Se generan sinteticamente: el objetivo es el
 # RENDIMIENTO de la pagina con un universo grande, no el valor de ningun numero.

@@ -64,6 +64,9 @@ class Reporte:
     # Cuantas fechas de captura distintas hay antes del corte. Cero significa que todo lo
     # cargado es de una sola foto y que el informe, aunque tenga numeros, no compara nada.
     capturas_previas: int = 0
+    # Unidades con cambio de version que no se pudieron llevar a UF (aviso en pesos sin
+    # UF de su dia en dim_tiempo_financiero). Se cuentan, no se esconden (§3.2).
+    sin_conversion: int = 0
 
     @property
     def comparable(self) -> bool:
@@ -110,6 +113,11 @@ class Reporte:
             f"  nuevas            : {self.nuevas}",
             f"\n  alcance: {self.microzonas_revisadas} microzonas re-revisadas.",
         ]
+        if self.sin_conversion:
+            lineas.append(
+                f"  {self.sin_conversion} cambios quedaron fuera del delta: aviso en pesos"
+                f" sin UF de su dia para convertir (corre `indicadores` para traerla)."
+            )
         if self.fuera_de_alcance:
             lineas.append(
                 f"  {self.fuera_de_alcance} unidades de la foto vieja quedaron FUERA de esa\n"
@@ -146,6 +154,8 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
     comunas y dos paginas de cada una. Un numero que mide el alcance de la corrida disfrazado
     de senal de mercado es peor que no tener el numero.
     """
+    from flujocero.agg.arriendo import serie_uf, uf_del_dia
+
     # Microzonas que la captura nueva efectivamente toco.
     alcance = {
         f[0]
@@ -156,24 +166,50 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
         ).fetchall()
     }
 
-    cambios = [
-        CambioDePrecio(*fila)
-        for fila in conexion.execute(
-            """
-            -- Una fila por unidad: el cambio NETO desde su version mas antigua hasta la
-            -- vigente. Sin el `QUALIFY`, una unidad con dos versiones cerradas aparecia dos
-            -- veces en la lista de bajadas, y se lee como dos oportunidades donde hay una.
-            SELECT v.unidad_key, n.microzona_id, n.m2_utiles,
-                   v.precio_uf, n.precio_uf, v.valid_from, n.valid_from
-            FROM fact_unidad_venta v
-            JOIN fact_unidad_venta n USING (unidad_key)
-            WHERE v.valid_to IS NOT NULL AND n.valid_to IS NULL
-              AND n.valid_from >= ?
-            QUALIFY row_number() OVER (PARTITION BY v.unidad_key ORDER BY v.valid_from) = 1
-            """,
-            (corte,),
-        ).fetchall()
-    ]
+    # Cada version se convierte a UF con la UF DE SU DIA (§3.3), igual que el
+    # emparejamiento: un aviso publicado en pesos tiene precio_uf NULL y el delta
+    # reventaba con TypeError al restarlo (medido 13-sep y 25-sep-2026 — Concepcion y
+    # las otras comunas en pesos entraron al historial y este cruce nunca los habia
+    # visto). Comparar en UF es ademas lo correcto: un precio en pesos que no se movio
+    # mientras la UF subio ES una baja real en UF. Lo inconvertible (sin UF de ese dia)
+    # se cuenta en `sin_conversion`, no se descarta en silencio (§3.2).
+    serie = serie_uf(conexion)
+    cambios: list[CambioDePrecio] = []
+    sin_conversion = 0
+    for fila in conexion.execute(
+        """
+        -- Una fila por unidad: el cambio NETO desde su version mas antigua hasta la
+        -- vigente. Sin el `QUALIFY`, una unidad con dos versiones cerradas aparecia dos
+        -- veces en la lista de bajadas, y se lee como dos oportunidades donde hay una.
+        SELECT v.unidad_key, n.microzona_id, n.m2_utiles,
+               v.precio_uf, n.precio_uf, v.valid_from, n.valid_from,
+               v.precio_clp, n.precio_clp
+        FROM fact_unidad_venta v
+        JOIN fact_unidad_venta n USING (unidad_key)
+        WHERE v.valid_to IS NOT NULL AND n.valid_to IS NULL
+          AND n.valid_from >= ?
+        QUALIFY row_number() OVER (PARTITION BY v.unidad_key ORDER BY v.valid_from) = 1
+        """,
+        (corte,),
+    ).fetchall():
+        key, mz, m2, antes_uf, ahora_uf, visto_antes, visto_ahora, antes_clp, ahora_clp = fila
+
+        def a_uf(uf: Any, clp: Any, visto: Any) -> Decimal | None:
+            if uf is not None:
+                return Decimal(str(uf))
+            if clp is None:
+                return None
+            del_dia = uf_del_dia(serie, visto) if visto else None
+            return Decimal(str(clp)) / del_dia if del_dia else None
+
+        antes, ahora = (
+            a_uf(antes_uf, antes_clp, visto_antes),
+            a_uf(ahora_uf, ahora_clp, visto_ahora),
+        )
+        if antes is None or ahora is None:
+            sin_conversion += 1
+            continue
+        cambios.append(CambioDePrecio(key, mz, m2, antes, ahora, visto_antes, visto_ahora))
 
     def contar(condicion: str, *extra: Any) -> int:
         return int(
@@ -199,6 +235,7 @@ def comparar(conexion: Any, corte: datetime) -> Reporte:
 
     return Reporte(
         cambios=cambios,
+        sin_conversion=sin_conversion,
         vistas_antes_en_alcance=contar_en_alcance("valid_from < ?"),
         vistas_ahora_en_alcance=contar_en_alcance("fetched_at >= ?"),
         # Estaba antes del corte, en una microzona QUE SI se volvio a revisar, y ninguna
