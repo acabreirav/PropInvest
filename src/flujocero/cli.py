@@ -1636,6 +1636,11 @@ def informe_semanal(
     carpeta: str = typer.Option("", help="carpeta de salida; vacío = data/informes"),
     top: int = typer.Option(15, help="cuántas oportunidades en el ranking"),
     dias_corte: int = typer.Option(7, help="ventana del delta, en días"),
+    precio_min_uf: float = typer.Option(
+        0.0,
+        help="vista filtrada: solo unidades con precio >= este umbral UF. "
+        "No escribe snapshot (no contamina la comparacion semanal).",
+    ),
 ) -> None:
     """T-930 · el informe semanal como DOCUMENTO: HTML + snapshot, no consola pegada.
 
@@ -1665,6 +1670,12 @@ def informe_semanal(
         evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
         vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
         vivos.sort(key=lambda x: -x[1].score)
+        # Vista filtrada por ticket (07-oct-2026): con 2 cupos DFL2 de por vida, el
+        # inversionista quiere ver el ranking de tickets grandes sin que los chicos
+        # (mejor yield, peor credito) acaparen el top. Es una VISTA: mismo motor,
+        # mismo score, sin snapshot.
+        if precio_min_uf > 0:
+            vivos = [x for x in vivos if float(x[0].precio_uf) >= precio_min_uf]
         uf = p.d("macro.valor_uf_clp")
         # nombres legibles para "por qué está arriba" (los 2 componentes §12 que más aportan)
         nombres_driver = {
@@ -1724,7 +1735,12 @@ def informe_semanal(
             )
             for u, ev in vivos[:top]
         ]
-        cambios = inf.comparar_top(inf._carpeta_snapshots(RAIZ), hoy, filas_top)
+        # El snapshot alimenta la comparacion de la proxima semana: una vista filtrada
+        # lo contaminaria (todo lo bajo el umbral apareceria como "salio del top").
+        if precio_min_uf > 0:
+            cambios = inf.CambiosTop()
+        else:
+            cambios = inf.comparar_top(inf._carpeta_snapshots(RAIZ), hoy, filas_top)
         bajas_nuevas = inf.bajas_oferta_nueva(con, corte)
         menores = inf.menores_desde_en_alcance(con, alcance.comunas)
         # T-931b: la oferta nueva pasada por el MISMO motor, al "desde", rotulada hipotetica
@@ -1736,6 +1752,12 @@ def informe_semanal(
         con.close()
 
     notas = []
+    if precio_min_uf > 0:
+        notas.append(
+            f"VISTA FILTRADA: solo unidades con precio >= UF {precio_min_uf:,.0f}. "
+            "Mismo motor y mismo score que el informe completo; sin snapshot ni "
+            "comparacion semanal."
+        )
     if not filas_top:
         notas.append("Sin unidades rankeables esta corrida: revisar frescura de la recoleccion.")
     html = inf.render_html(
@@ -1753,7 +1775,8 @@ def informe_semanal(
     )
     destino = _Path(carpeta).expanduser() if carpeta else RAIZ / "data" / "informes"
     destino.mkdir(parents=True, exist_ok=True)
-    ruta_html = destino / f"informe-{hoy}.html"
+    sufijo = f"-min{precio_min_uf:.0f}uf" if precio_min_uf > 0 else ""
+    ruta_html = destino / f"informe-{hoy}{sufijo}.html"
     ruta_html.write_text(html, encoding="utf-8")
 
     typer.echo(f"  top usadas: {len(filas_top)} filas")
