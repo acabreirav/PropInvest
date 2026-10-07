@@ -358,7 +358,11 @@ def _ingerir_gael(con: Any, ahora: Any, raiz_cruda: Any = None) -> bool:
 def ingest(
     fuente: str = typer.Option("cmf_indicadores", help="source_id a ejecutar"),
     desde: str = typer.Option("2024-01", help="AAAA-MM"),
-    hasta: str = typer.Option("2026-08", help="AAAA-MM"),
+    # Vacio = el MES ACTUAL, resuelto al correr. El tope fijo "2026-08" dejo la serie UF
+    # congelada en agosto: 5 semanas despues, ningun aviso en pesos se podia convertir
+    # (la conversion del §3.3 acepta UF de ±7 dias) y el ranking quedo en CERO filas sin
+    # que nadie mintiera — las reglas honestas apagaron el sistema (incidente 07-oct).
+    hasta: str = typer.Option("", help="AAAA-MM; vacio = mes actual"),
     sin_fallback: bool = typer.Option(
         False, "--sin-fallback", help="no intentar Gael Cloud si la CMF no responde"
     ),
@@ -385,6 +389,8 @@ def ingest(
         raise typer.Exit(2)
 
     load_dotenv(RAIZ / ".env")
+    if not hasta:
+        hasta = datetime.now(UTC).strftime("%Y-%m")
 
     if fuente == "gael_indicadores":
         con = duckdb.connect(str(db.ruta_db()))

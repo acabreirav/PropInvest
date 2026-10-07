@@ -43,20 +43,25 @@ function Paso([string]$Nombre, [scriptblock]$Cuerpo) {
 
 Start-Transcript -Path $log -Force
 try {
-    Paso "1/5 recolectar fase 1" { uv run python -m flujocero.cli recolectar-portal --paginas 4 }
-    Paso "1/5 recolectar fase 2" { uv run python -m flujocero.cli recolectar-portal --fase 2 --paginas 4 }
-    Paso "1/5 recolectar fase 3" { uv run python -m flujocero.cli recolectar-portal --fase 3 --paginas 4 }
+    # Sin la UF del dia, los avisos en pesos no se convierten (la conversion acepta
+    # UF de +-7 dias) y el ranking se apaga solo: la serie quedo congelada en agosto y
+    # el top salio con CERO filas el 07-oct. La UF se trae ANTES de recolectar.
+    Paso "0/6 indicadores (UF del dia, CMF con fallback Gael)" { uv run python -m flujocero.cli ingest --fuente cmf_indicadores }
 
-    Paso "2/5 recoleccion dirigida de arriendo" { uv run python -m flujocero.cli recolectar-portal --dirigida 6 }
+    Paso "1/6 recolectar fase 1" { uv run python -m flujocero.cli recolectar-portal --paginas 4 }
+    Paso "1/6 recolectar fase 2" { uv run python -m flujocero.cli recolectar-portal --fase 2 --paginas 4 }
+    Paso "1/6 recolectar fase 3" { uv run python -m flujocero.cli recolectar-portal --fase 3 --paginas 4 }
 
-    Paso "3/5 agregar-arriendo" { uv run python -m flujocero.cli agregar-arriendo }
+    Paso "2/6 recoleccion dirigida de arriendo" { uv run python -m flujocero.cli recolectar-portal --dirigida 6 }
+
+    Paso "3/6 agregar-arriendo" { uv run python -m flujocero.cli agregar-arriendo }
 
     foreach ($dominio in @("socovesa.cl", "pilares.cl", "fundamenta.cl", "iarmas.cl",
                            "rvc.cl", "ingevecinmobiliaria.cl")) {
-        Paso "4/5 censo wp-json $dominio" { uv run python -m flujocero.cli recolectar-wpjson --dominio $dominio }
+        Paso "4/6 censo wp-json $dominio" { uv run python -m flujocero.cli recolectar-wpjson --dominio $dominio }
     }
 
-    Paso "5/5 informe" { uv run python -m flujocero.cli informe-semanal --carpeta $Destino --top 15 }
+    Paso "5/6 informe" { uv run python -m flujocero.cli informe-semanal --carpeta $Destino --top 15 }
 
     # PDF via Edge headless (viene con Windows; si no esta, se adjunta el HTML)
     $htmlPath = Join-Path $Destino "informe-$fecha.html"
@@ -75,7 +80,7 @@ try {
 
     if (-not (Test-Path $adjunto)) {
         Write-Output "!! ERROR: el informe NO se genero ($adjunto no existe)."
-        Write-Output "!! Revisa el paso 5/5 mas arriba - el correo no se envia."
+        Write-Output "!! Revisa el paso 5/6 mas arriba - el correo no se envia."
     } else {
         Paso "correo (opcional: requiere secrets/smtp.json)" {
             uv run python scripts/enviar_informe.py --adjunto "$adjunto" --fecha $fecha

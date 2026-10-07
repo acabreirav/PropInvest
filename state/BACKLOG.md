@@ -1772,3 +1772,14 @@ contexto: verificador 06-sep (n9) — zonas.yml declara saturada solo
 criterio_de_aceptacion:
   - evidencia citada en 00-hallazgos y decision en zonas.yml (marcar o descartar con razon)
 gate: make gates
+
+## T-952 · La serie UF se congelo en agosto y apago el ranking completo
+estado: hecha  # 07-oct: top con CERO filas. Causa doble: (1) `ingest` tenia el tope
+  # hardcodeado en "2026-08" — la serie UF nunca paso de ahi aunque se corriera;
+  # (2) semanal.ps1 no tenia paso de indicadores. Con la conversion §3.3 aceptando
+  # UF de +-7 dias y la frescura §7.3 botando lo viejo, la interseccion
+  # convertible∩fresco quedo VACIA: cero comparables, cero unidades, top 0 — las
+  # reglas honestas prefirieron callar antes que valorizar con una UF de hace 5
+  # semanas. Arreglo: hasta="" = mes actual resuelto al correr, y paso 0/6 de
+  # indicadores (CMF con fallback Gael) en la semanal.
+agente: auditor-datos · fase: 2

@@ -2943,3 +2943,17 @@ domingo llego el mail (el unico correo real fue la validacion manual del 03-sep)
    para notebooks apagados, WakeToRun, tope 3 h) — la automatizacion "validada" el
    03-sep era el pipeline, no la instalacion de la tarea. Leccion: validar el cron es
    validar que EL CRON dispara, no que el comando funciona a mano.
+
+
+## 2026-10-07 · El ranking en cero: la anatomia de un apagon honesto
+
+`ver_top` entrego 0 filas. No habia bug de calculo: la serie UF estaba congelada en
+31-ago (tope "2026-08" HARDCODEADO en el default de `ingest`, y la semanal sin paso de
+indicadores), la conversion del §3.3 solo acepta UF de +-7 dias del aviso, y la
+frescura del §7.3 bota lo anterior a 21 dias. Interseccion de convertible y fresco:
+vacia. El sistema se apago solo antes de inventar una conversion — el §3.2 funcionando
+como se escribio. Dos arreglos (T-952): `hasta` vacio = mes actual resuelto al correr,
+y paso 0/6 de indicadores en semanal.ps1. Leccion doble: un default con fecha fija es
+una bomba de tiempo igual que un fixture con fecha fija (misma leccion que test_api el
+25-sep); y "el ranking esta vacio" tambien es un estado que el informe deberia explicar
+solo — hoy lo explico un humano leyendo cuatro pistas.
