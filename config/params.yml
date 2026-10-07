@@ -50,6 +50,14 @@ financiamiento:
   dividendo_max_pct_ingreso: {v: 0.25, evidence: V}
   carga_financiera_max_pct: {v: 0.45, evidence: V}
   pies_a_evaluar: [0.10, 0.15, 0.20]
+  # Los bancos no priorizan (y a veces no cursan) creditos hipotecarios chicos: el costo
+  # de originacion es fijo y un credito de UF 800 no lo paga. Dato de terreno del
+  # inversionista (07-oct-2026): le costo conseguir interes del banco por ~UF 800.
+  # El umbral exacto varia por banco y se verifica en la cotizacion; mutuarias y cajas
+  # suelen tomar montos menores. El informe MARCA las unidades cuyo credito queda bajo
+  # este umbral; NO cambia el ranking (si se quiere excluir o penalizar, es decision
+  # §8.4 con medicion de sensibilidad antes).
+  credito_minimo_banco_uf: {v: 1500, evidence: E, rango: [1000, 2000], nota: "verificar por banco; mutuarias/cajas toman montos menores"}
 
 subsidio_ley_21748:
   tope_valor_vivienda_uf: {v: 6000, evidence: V}

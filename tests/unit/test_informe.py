@@ -134,6 +134,50 @@ def test_render_html_es_autocontenido() -> None:
     assert "Por qué está arriba: déficit mensual bajo" in html
     assert "Sin bajas de precio en la oferta nueva" in html
     assert "delta de prueba" in html
+    # el monto del credito a la vista: UF 3.000 con pie 20% → UF 2.400
+    assert "Crédito (80%)" in html and "UF 2.400" in html
+
+
+def test_render_html_todo_el_top_como_ficha_y_alerta_de_credito_chico() -> None:
+    # 7 filas: TODAS salen como ficha (la tabla del "resto del top" murio el 07-oct-2026,
+    # porque escondia justo el detalle que decide la conversacion con el banco)
+    filas = [_fila(f"U{i}", 1000.0 + i) for i in range(7)]
+    html = inf.render_html(
+        "2026-10-07",
+        "2026-09-30",
+        filas,
+        inf.CambiosTop(),
+        [],
+        [],
+        "",
+        [],
+        credito_minimo_uf=1500.0,
+    )
+    assert "El top 7" in html
+    assert "El resto del top" not in html
+    for i in range(1, 8):
+        assert f"#{i} · " in html
+    # UF 1.000 con pie 20% → credito UF 800, bajo el umbral E de UF 1.500 → alerta
+    assert html.count("bajo las UF 1.500 que los bancos priorizan") == 7
+
+    # sin umbral (default 0) no hay alerta; con credito sobre el umbral tampoco
+    grande = _fila("G", 3000.0)  # credito UF 2.400 > 1.500
+    html2 = inf.render_html(
+        "2026-10-07",
+        "2026-09-30",
+        [grande],
+        inf.CambiosTop(),
+        [],
+        [],
+        "",
+        [],
+        credito_minimo_uf=1500.0,
+    )
+    assert "bancos priorizan" not in html2
+    html3 = inf.render_html(
+        "2026-10-07", "2026-09-30", [_fila("C", 1000.0)], inf.CambiosTop(), [], [], "", []
+    )
+    assert "bancos priorizan" not in html3
 
 
 # ------------------------------------------- T-931b · nuevas evaluadas al "desde"

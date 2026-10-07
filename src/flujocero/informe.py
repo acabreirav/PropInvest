@@ -357,6 +357,7 @@ def render_html(
     notas: list[str],
     nuevas_evaluadas: list[dict[str, Any]] | None = None,
     descartes_nuevas: dict[str, int] | None = None,
+    credito_minimo_uf: float = 0.0,
 ) -> str:
     entrantes = set(cambios.entraron)
 
@@ -373,6 +374,16 @@ def render_html(
             else f"{f.tasa_pct:.2%} <span class='mini'>sin subsidio (usada)</span>"
         )
         drivers = " · ".join(escape(d) for d in f.drivers) or "—"
+        # El monto del credito es lo que el banco MIRA antes que la tasa: bajo su minimo
+        # de originacion, el credito compite mal por aprobacion (dato de terreno del
+        # inversionista, 07-oct-2026; umbral E en params.yml, verificar por banco).
+        credito_uf = f.precio_uf * (1 - f.pie_pct)
+        alerta_credito = ""
+        if 0 < credito_uf < credito_minimo_uf:
+            alerta_credito = (
+                f" <span class='mini neg'>⚠ bajo las UF {_f(credito_minimo_uf)} que los bancos "
+                "priorizan (supuesto E) — cotizar también mutuaria/caja</span>"
+            )
         return f"""
 <div class="ficha">
   <div class="ficha-titulo">#{i} · {escape(f.microzona_id)} · {escape(f.tipologia)} ·
@@ -386,26 +397,12 @@ def render_html(
     <div><span>Dividendo</span><b>${_f(f.dividendo_clp)}/mes</b></div>
     <div><span>Flujo mensual</span>{flujo}</div>
     <div><span>Pie ({f.pie_pct:.0%})</span><b>${_f(f.pie_clp)}</b></div>
+    <div><span>Crédito ({1 - f.pie_pct:.0%})</span><b>UF {_f(credito_uf)}</b>{alerta_credito}</div>
     <div><span>Pie para flujo cero</span><b>{f.pie_cero}</b></div>
     <div><span>DFL2</span><b>{escape(f.dfl2)}</b></div>
   </div>
   <div class="mini">Por qué está arriba: {drivers}</div>
 </div>"""
-
-    def tabla_top(desde: int) -> str:
-        filas = ""
-        for i, f in enumerate(top_filas[desde:], desde + 1):
-            marca = " ▲" if f.unidad_key in entrantes else ""
-            filas += (
-                f"<tr><td>{i}</td><td>{escape(f.unidad_key)}{marca}</td>"
-                f"<td>{escape(f.microzona_id)}</td><td>{escape(f.tipologia)}</td>"
-                f"<td class='n'>{f.m2:.0f}</td><td class='n'>UF {_f(f.precio_uf)}</td>"
-                f"<td class='n'>{f.yield_bruto:.1%}</td>"
-                f"<td class='n'>${_f(f.tenencia_clp)}</td>"
-                f"<td class='n'>{f.pie_pct:.0%}</td><td class='n'>{f.pie_cero}</td>"
-                f"<td class='n'>{f.score:.1f}</td></tr>"
-            )
-        return filas
 
     def lista_cambios() -> str:
         if cambios.fecha_anterior is None:
@@ -531,27 +528,18 @@ def render_html(
 <h2>1 · Cambios desde el informe anterior{f" ({cambios.fecha_anterior})" if cambios.fecha_anterior else ""}</h2>
 {lista_cambios()}
 
-<h2>2 · Las 5 mejores oportunidades — stock USADO (precio real por unidad)</h2>
-{"".join(ficha(i, f) for i, f in enumerate(top_filas[:5], 1))}
+<h2>2 · El top {len(top_filas)} — stock USADO (precio real por unidad)</h2>
+{"".join(ficha(i, f) for i, f in enumerate(top_filas, 1))}
 <p class='nota'>*DFL2 "probable": el aviso no lo dice, pero la unidad cabe en los 140 m² y se
-aplica el supuesto declarado D-018. Los números de TODO el top (fichas y tabla) lo incluyen;
+aplica el supuesto declarado D-018. Los números de TODO el top lo incluyen;
 <b>verificar en la escritura antes de ofertar</b> es obligatorio. Recuerda además que la
 renta exenta aplica a un máximo de <b>2 viviendas por persona</b> (tienes tus 2 cupos
 libres): a partir de la tercera, estos flujos ya no son los tuyos.</p>
 
-<h2>3 · El resto del top</h2>
-<table>
-<tr><th>#</th><th>Unidad</th><th>Microzona</th><th>Tipo</th><th>m²</th><th>Precio</th>
-<th>Yield</th><th>Tenencia/mes</th><th>Pie</th><th>Pie flujo 0</th><th>Score</th></tr>
-{tabla_top(5)}
-</table>
-<p class='nota'>Tenencia/mes = lo que sale de tu bolsillo con el pie del escenario;
-"Pie flujo 0" = el pie con el que la unidad se paga sola. Score = suma ponderada del §12.</p>
-
-<h2>4 · Oferta NUEVA: bajas de "precio desde" esta semana (señal de compra)</h2>
+<h2>3 · Oferta NUEVA: bajas de "precio desde" esta semana (señal de compra)</h2>
 {tabla_bajas_nuevas()}
 
-<h2>5 · Oferta NUEVA evaluada al "desde" — HIPOTÉTICO, mismo motor que las usadas</h2>
+<h2>4 · Oferta NUEVA evaluada al "desde" — HIPOTÉTICO, mismo motor que las usadas</h2>
 {tabla_evaluadas()}
 <p class='nota'>Rotulado hipotético a propósito: el "desde" es el PISO del modelo (una
 unidad real del proyecto puede costar más) y los m²* son totales aproximando útiles.
@@ -560,13 +548,13 @@ Lo que sí es real: el arriendo es la mediana de arriendos efectivos de su micro
 la subsidiada cuando corresponde (primera venta, "✓sub") y el DFL2 va por D-018.
 Sirve para elegir a quién pedir cotización, no para ofertar.</p>
 
-<h2>6 · Oferta NUEVA: menores "desde" vigentes en comunas del alcance</h2>
+<h2>5 · Oferta NUEVA: menores "desde" vigentes en comunas del alcance</h2>
 <table><tr><th>Proyecto</th><th>Comuna</th><th>Modelo</th><th>Dorm.</th><th>m²</th>
 <th>Desde</th><th>Estado</th></tr>{tabla_nuevas(menores_nuevas)}</table>
 <p class='nota'>"Desde" = el piso del modelo, no el precio de una unidad: estas filas NO
 compiten en el ranking (regla B1); son el radar para pedir cotización dirigida.</p>
 
-<h2>7 · Delta del mercado usado (corte {corte})</h2>
+<h2>6 · Delta del mercado usado (corte {corte})</h2>
 <pre>{escape(delta_texto)}</pre>
 {notas_html}
 </body></html>

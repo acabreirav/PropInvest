@@ -1749,6 +1749,7 @@ def informe_semanal(
         notas,
         nuevas_evaluadas=evaluadas,
         descartes_nuevas=desc_nuevas,
+        credito_minimo_uf=float(p.d("financiamiento.credito_minimo_banco_uf")),
     )
     destino = _Path(carpeta).expanduser() if carpeta else RAIZ / "data" / "informes"
     destino.mkdir(parents=True, exist_ok=True)
