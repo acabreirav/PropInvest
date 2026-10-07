@@ -364,6 +364,17 @@ def render_html(
     def ficha(i: int, f: FilaTop) -> str:
         """Una oportunidad que se explica sola: qué es, cuánto cuesta, cuánto rinde."""
         marca = " <span class='badge'>▲ nueva en el top</span>" if f.unidad_key in entrantes else ""
+        # El codigo ML a la vista en cada ficha (pedido del 07-oct-2026): es la llave de
+        # `evaluar_aviso.py` y, para las usadas del portal, tambien su URL canonica
+        # (BASE_URL/{portal_id}, el mismo armado de sources.portal_comun.url_segura).
+        # Clic humano, no scraping: robots prohibe el fetch automatizado, no el navegador.
+        if f.unidad_key.startswith("MLC-"):
+            codigo = (
+                f"<a class='codigo' href='https://www.portalinmobiliario.com/{escape(f.unidad_key)}'>"
+                f"{escape(f.unidad_key)}</a>"
+            )
+        else:
+            codigo = f"<span class='codigo'>{escape(f.unidad_key)}</span>"
         if f.flujo_clp >= 0:
             flujo = f"<b class='pos'>+${_f(f.flujo_clp)}/mes</b> — se paga sola y sobra"
         else:
@@ -387,7 +398,7 @@ def render_html(
         return f"""
 <div class="ficha">
   <div class="ficha-titulo">#{i} · {escape(f.microzona_id)} · {escape(f.tipologia)} ·
-    {f.m2:.0f} m²{marca} <span class="score">score {f.score:.0f}</span></div>
+    {f.m2:.0f} m² · {codigo}{marca} <span class="score">score {f.score:.0f}</span></div>
   <div class="ficha-grid">
     <div><span>Precio</span><b>UF {_f(f.precio_uf)}</b> ≈ ${_f(f.precio_clp)}</div>
     <div><span>Arriendo estimado</span><b>${_f(f.arriendo_clp)}/mes</b>
@@ -522,6 +533,8 @@ def render_html(
   .badge {{ background: #E3EEE6; color: #2F7A58; font-size: 10px; padding: 1px 6px;
            border-radius: 8px; }}
   .score {{ float: right; color: #9C5527; }}
+  .codigo {{ font-family: Consolas, monospace; font-size: 10.5px; color: #555;
+            text-decoration: none; border-bottom: 1px dotted #999; }}
 </style></head><body>
 <h1>Flujo Cero — informe semanal {fecha}</h1>
 
@@ -535,6 +548,9 @@ aplica el supuesto declarado D-018. Los números de TODO el top lo incluyen;
 <b>verificar en la escritura antes de ofertar</b> es obligatorio. Recuerda además que la
 renta exenta aplica a un máximo de <b>2 viviendas por persona</b> (tienes tus 2 cupos
 libres): a partir de la tercera, estos flujos ya no son los tuyos.</p>
+<p class='nota'>El código de cada ficha es el aviso en el portal (clic para abrirlo). Ficha
+completa con historial de precio, vecinos y TIR:
+<code>uv run python scripts/evaluar_aviso.py &lt;código&gt;</code></p>
 
 <h2>3 · Oferta NUEVA: bajas de "precio desde" esta semana (señal de compra)</h2>
 {tabla_bajas_nuevas()}

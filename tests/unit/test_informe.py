@@ -136,6 +136,26 @@ def test_render_html_es_autocontenido() -> None:
     assert "delta de prueba" in html
     # el monto del credito a la vista: UF 3.000 con pie 20% → UF 2.400
     assert "Crédito (80%)" in html and "UF 2.400" in html
+    # una clave que no es del portal sale como codigo plano, sin link
+    assert "<span class='codigo'>A</span>" in html
+
+
+def test_render_html_codigo_ml_con_link_al_aviso() -> None:
+    # pedido del 07-oct-2026: el codigo ML en cada ficha, para traer la ficha completa
+    # con evaluar_aviso.py sin ir a buscarlo a la URL del aviso
+    html = inf.render_html(
+        "2026-10-07",
+        "2026-09-30",
+        [_fila("MLC-4418530726")],
+        inf.CambiosTop(),
+        [],
+        [],
+        "",
+        [],
+    )
+    assert "href='https://www.portalinmobiliario.com/MLC-4418530726'" in html
+    assert ">MLC-4418530726</a>" in html
+    assert "evaluar_aviso.py" in html
 
 
 def test_render_html_todo_el_top_como_ficha_y_alerta_de_credito_chico() -> None:
