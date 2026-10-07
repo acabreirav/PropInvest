@@ -92,13 +92,16 @@ def _poblar_datos_basicos(con: duckdb.DuckDBPyConnection) -> None:
         )
     for mz, tip, rango, mediana, n in CELDAS:
         lo, hi = (int(x) for x in rango.split("-"))
-        for i in range(n):  # T-949: comparables vivos, no la tabla agregada
+        for i in range(n):  # T-949: comparables vivos REPARTIDOS por el tramo — todos
+            # al punto medio dejaba a la unidad del borde con un pool descentrado, que
+            # el guard del 07-oct rechaza con razon (caso parque-brasil).
+            m2c = lo + 2 + i * (hi - lo - 4) / max(n - 1, 1)
             con.execute(
                 "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
                 "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
                 "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
                 "VALUES (?,?,?,?,?,TRUE,'V','s','u',?,'v','p','x')",
-                (f"{mz}-{tip}-{rango}-{i}", mz, tip, (lo + hi) / 2, mediana, AHORA),
+                (f"{mz}-{tip}-{rango}-{i}", mz, tip, m2c, mediana, AHORA),
             )
 
 

@@ -504,18 +504,20 @@ def test_el_arriendo_sale_de_los_vecinos_de_m2_no_del_tramo(con) -> None:
 
 
 def test_la_ventana_se_ensancha_antes_de_rendirse(con) -> None:
-    """±20% no junta n>=8 pero ±30% si: se usa la ancha y la procedencia dice cuanto.
-    Es el reemplazo del respaldo al tramo, que el verificador mato (M1): se disparaba
-    exactamente donde el sesgo del tramo era peor."""
-    for i in range(8):  # a 12 m² de distancia: fuera de ±8 (20%), dentro de ±12 (30%)
-        _comp_arr(con, f"V{i}", 52, "9.0")
+    """±20% no junta n>=8 pero ±30% si — con vecinos a AMBOS lados: se usa la ancha y
+    la procedencia dice cuanto. (La fixture original tenia los 8 comps a un solo lado
+    y el guard de descentrado del 07-oct la mata con razon: eso ya no es vecindario.)"""
+    for i in range(4):  # a 10 m² bajo la unidad: fuera de ±8 (20%), dentro de ±12 (30%)
+        _comp_arr(con, f"CH{i}", 30, "8.0")
+    for i in range(4):  # y a 10 m² sobre ella
+        _comp_arr(con, f"GR{i}", 50, "10.0")
     unidad(con, tip="2D1B", m2=40, precio="1500")
 
     r = op.emparejar(con, RANGOS)
     u = r.unidades[0]
-    assert u.arriendo_mensual_uf == D("9.0")
+    assert u.arriendo_mensual_uf == D("9.0")  # mediana interpolada de [8,8,8,8,10,10,10,10]
     origen, n, _ = r.procedencia_arriendo["U1"]
-    assert "±12" in origen and n == 8
+    assert "±12" in origen and "típico 40" in origen and n == 8
 
 
 def test_sin_vecinos_no_hay_arriendo_ni_respaldo_al_tramo(con) -> None:
@@ -562,3 +564,31 @@ def test_la_ventana_respeta_la_frescura_del_ranking(con) -> None:
 
     r = op.emparejar(con, RANGOS, ahora=AHORA)
     assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1
+
+
+def test_una_ventana_descentrada_no_es_vecindario(con) -> None:
+    """Caso medido 07-oct (antofagasta/parque-brasil): un 3D2B de 60 m² junto n>=8
+    recien a ±40%, con puros comparables de 79-84 m² — y subio a #1 con el arriendo
+    de deptos un tercio mas grandes. El m² TIPICO del pool tiene que quedar a ±20%
+    del m² de la unidad; si no, el resultado honesto es ND."""
+    for i in range(12):  # todos los vecinos viven a UN lado: 79-84 m²
+        _comp_arr(con, f"GR{i}", 79 + (i % 6), "30", tip="3D2B")
+    unidad(con, tip="3D2B", m2=60, precio="3000")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1
+
+
+def test_una_ventana_ancha_pero_centrada_si_sirve(con) -> None:
+    """Lo que el guard NO debe matar: vecinos repartidos a ambos lados. El mismo 60 m²
+    con comparables de 48-72 junta pool centrado y rankea."""
+    for i in range(5):
+        _comp_arr(con, f"CH{i}", 48 + i * 2, "9", tip="3D2B")
+    for i in range(5):
+        _comp_arr(con, f"GR{i}", 64 + i * 2, "11", tip="3D2B")
+    unidad(con, tip="3D2B", m2=60, precio="3000")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    origen, n, _ = r.procedencia_arriendo["U1"]
+    assert "típico" in origen and n == 10

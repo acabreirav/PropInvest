@@ -123,6 +123,9 @@ def celdas_de_arriendo(
 # con uniforme.
 VENTANAS_M2_REL = (D("0.20"), D("0.30"), D("0.40"))
 VENTANA_M2_MIN = D(3)
+# El m² TIPICO del pool no puede alejarse mas de esto del m² de la unidad (medido
+# 07-oct, caso parque-brasil): mas alla, los "vecinos" son otro producto.
+DESCENTRADO_MAX = D("0.20")
 
 
 def emparejar(
@@ -334,17 +337,29 @@ def emparejar(
 
         # T-949 · la ventana de vecinos por m², ensanchandose solo lo necesario. Sin
         # vecinos suficientes NO hay arriendo: ND antes que la mediana de otros (§3.2).
+        # Y la ventana ademas tiene que quedar CENTRADA: medido el 07-oct en
+        # antofagasta/parque-brasil, un 3D2B de 60 m² junto n>=8 recien a ±40% — puros
+        # comparables de 79-84 m² (no existe NINGUN 3D2B cercano a 60 ahi) — y subio a
+        # #1 del ranking con el arriendo de deptos un tercio mas grandes, +28% sobre el
+        # benchmark de la comuna. Una ventana ancha es aceptable; una ventana cuyos
+        # vecinos viven todos a un lado es el sesgo del tramo con otro nombre.
         grupo = vecinos.get((mz, tip), [])
         arriendo: Decimal | None = None
         n = 0
         metodo = ""
         for factor in VENTANAS_M2_REL:
             ventana = max(VENTANA_M2_MIN, m2 * factor)
-            pool = [arr for m2c, arr in grupo if abs(m2c - m2) <= ventana]
-            if len(pool) >= MIN_COMPARABLES:
-                arriendo, n = percentil(pool, D("0.5")), len(pool)
-                metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f}"
-                break
+            pool = [(m2c, arr) for m2c, arr in grupo if abs(m2c - m2) <= ventana]
+            if len(pool) < MIN_COMPARABLES:
+                continue
+            m2_tipico = percentil([m2c for m2c, _ in pool], D("0.5"))
+            if abs(m2_tipico - m2) > m2 * DESCENTRADO_MAX:
+                # pool descentrado: seguir ensanchando puede equilibrarlo (aparecen
+                # vecinos del otro lado) — y si nunca se equilibra, el final es ND.
+                continue
+            arriendo, n = percentil([a for _, a in pool], D("0.5")), len(pool)
+            metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f} (típico {m2_tipico:.0f})"
+            break
         if arriendo is None:
             # SIN caida a comuna ni al tramo, a proposito. Ver el docstring del modulo.
             r.descartes["sin_comparables"] += 1

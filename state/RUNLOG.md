@@ -2957,3 +2957,20 @@ y paso 0/6 de indicadores en semanal.ps1. Leccion doble: un default con fecha fi
 una bomba de tiempo igual que un fixture con fecha fija (misma leccion que test_api el
 25-sep); y "el ranking esta vacio" tambien es un estado que el informe deberia explicar
 solo — hoy lo explico un humano leyendo cuatro pistas.
+
+
+## 2026-10-07 · La auditoria de parque-brasil caza al #1: la ventana descentrada
+
+El usuario corrio `auditar_celda_arriendo.py parque-brasil` sobre el #1 del top nuevo
+(3D2B de 60 m², arriendo asignado $1,19M, +28% sobre el benchmark de Antofagasta) y la
+columna de m² lo dijo todo: NO existe ningun comparable 3D2B cercano a 60 m² — la
+ventana se ensancho a ±40% y junto puros deptos de 79-84 m². El sesgo del tramo (M1
+del verificador) resucitado por la puerta del ensanchamiento. Arreglo: el m² TIPICO
+del pool debe quedar a ±20% del m² de la unidad (DESCENTRADO_MAX); un pool unilateral
+no es vecindario y el resultado honesto es ND. La procedencia ahora imprime el tipico
+("vecinos ±24 m² de 60 (típico 80)" ya no puede pasar piola). Dos fixtures que
+sembraban comps a un solo lado o todos al punto medio del tramo murieron con el guard
+y se corrigieron a mercados repartidos. Leccion: cada relajacion del criterio de
+similitud (tramo -> ventana -> ventana ancha) reabre el mismo sesgo con otro nombre;
+el guard que sobrevive es sobre el RESULTADO (el pool que realmente se uso), no sobre
+el parametro.
