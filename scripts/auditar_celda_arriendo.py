@@ -51,10 +51,23 @@ print(f"== {len(filas)} comparables en microzonas ~ '{PATRON}' ==\n")
 print(f"{'tipo':<6}{'m²':>6}{'arriendo':>12}{'GGCC':>10}  {'señales':<28}{'ultima vista':<13}aviso")
 
 TRAMOS = ((0, 25, "<25"), (25, 35, "25-35"), (35, 50, "35-50"), (50, 70, "50-70"), (70, 9e9, "70+"))
+
+# La firma del multi-corredor (caso metro-las-torres 07-oct-2026): misma unidad, varios
+# MLC. El ranking los colapsa a uno (agg/arriendo); aca se marcan para verlos.
+repeticiones: dict[tuple, int] = defaultdict(int)
+for f in filas:
+    _mz, _tip, _m2, _clp, _uf, *_resto = f
+    # con microzona en la llave: el patron puede matchear varias y el ranking solo
+    # colapsa dentro de una (verificador D-021, hallazgo 5)
+    if _mz and _tip and _m2 and (_clp or _uf):
+        repeticiones[(_mz, _tip, _m2, _clp, _uf)] += 1
+
 celdas: dict[tuple[str, str], list[int]] = defaultdict(list)
 usados = descartados = 0
 for mz, tip, m2, clp, uf, ggcc, activo, sosp, pub_desde, visto, fetched, url, cid in filas:
     señales = []
+    if (reps := repeticiones.get((mz, tip, m2, clp, uf), 0)) > 1:
+        señales.append(f"relisting x{reps}")
     if no_comparable(url):
         señales.append("AMOBLADO/temporada")
     if dudoso(url):
@@ -78,7 +91,10 @@ for mz, tip, m2, clp, uf, ggcc, activo, sosp, pub_desde, visto, fetched, url, ci
     else:
         descartados += 1
 
-print(f"\n== medianas por celda (tipologia × tramo m²) — {usados} usados, {descartados} fuera ==")
+print(
+    f"\n== medianas por celda (tipologia × tramo m²) — {usados} usados, {descartados} fuera =="
+    "\n   (crudas, SIN colapsar relistings ni filtrar frescura: el ranking si hace ambas)"
+)
 for (tip, tramo), montos in sorted(celdas.items()):
     med = statistics.median(montos)
     print(

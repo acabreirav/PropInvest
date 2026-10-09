@@ -2974,3 +2974,42 @@ y se corrigieron a mercados repartidos. Leccion: cada relajacion del criterio de
 similitud (tramo -> ventana -> ventana ancha) reabre el mismo sesgo con otro nombre;
 el guard que sobrevive es sobre el RESULTADO (el pool que realmente se uso), no sobre
 el parametro.
+
+## 07-oct-2026 · D-021 colapso de relistings — con verificador §7.6 acatado
+
+**Origen:** el usuario contrastó la ficha #5 (metro-las-torres 3D2B 69 m², arriendo
+asignado $819.402) contra el portal: la mediana real de vecinos da ~$660k. Auditoría
+confirmó relistings multi-corredor en el pool fresco (96m²/$800k con TRES MLC;
+71/$850k y 75/$850k con dos c/u — 8 avisos, ~5 unidades) + sesgo de sobreviviente
+(los comps baratos salieron por frescura, probablemente arrendados).
+
+**Cambio:** colapso de relistings en `comparables_desde_duckdb` por llave proxy
+(mz, tip, m², precio exacto), DESPUÉS de filtrar; `Comparable.avisos` preserva el
+conteo para saturación; multifamily exento; `cli comparables` y
+`auditar_celda_arriendo.py` alineados (señales ≡ / relisting xN).
+
+**Verificador §7.6 (reporte completo, resumen):**
+1. MATERIAL — la 1ª redacción del ADR ("el colapso jamás infla una mediana") era
+   FALSA: con unidades distintas reales repetidas bajo la mediana, el colapso la sube
+   (+6,6% caso A, +3,6% caso B, medidos con el pipeline real vía el ensanche de
+   ventana y el guard de descentrado que deja pasar típico 62 para unidad de 59).
+   → ADR corregido; medición sobre base real pendiente con
+   `scripts/medir_colapso_relistings.py` (gatillo §8.4 si mueve >10% del ranking).
+2. MATERIAL — el colapso cambiaba `riesgo_microzona` (15% del score) en silencio:
+   `puente.calcular_riesgo` sumaba n (firmas únicas) como saturación; una torre con
+   20 idénticos contaba 1. → `avisos_activos` ahora suma AVISOS y el puente lee
+   coalesce(avisos_activos, n). Test nuevo lo fija.
+3. MENOR/MATERIAL — colapsar antes de filtrar mataba unidades reales según el orden
+   de captura (representante amoblado arrastraba a la copia pelada). → orden
+   invertido: filtro primero, colapso entre sobrevivientes. Test del caso C.
+4. MENOR — copias viejas contaban como relisting en vez de desactualizado (y mi test
+   fijaba el error). → corregido con el orden nuevo; test del caso G.
+5. MENOR — `cli comparables` no colapsaba (dos números para la misma celda, de nuevo)
+   y la señal del auditor no llevaba microzona en la llave. → ambos alineados.
+6. NOTA — igualdad DOUBLE/DECIMAL, tz de fetched_at, sospechoso pre-colapso y
+   "precio de mayo en UF de mayo": revisados, sin error material.
+
+**Pendiente antes de dar por cerrada la celda de decisiones:** correr
+`medir_colapso_relistings.py` sobre la base real (el contenedor no tiene datos) y
+pegar el resultado; T-953 (poblar edificio_multifamily) y T-946 (dirección) siguen
+abiertas como mitigación estructural.

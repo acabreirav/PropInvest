@@ -1696,6 +1696,11 @@ gate: make gates
 
 ## T-946 · El gate de dedup de arriendo nunca pudo evaluar: falta direccion_normalizada
 estado: pendiente
+avance_07oct2026: el criterio "redefinir la clave con columnas que existan" quedo
+  cubierto por D-021 — `comparables_desde_duckdb` colapsa relistings por
+  (microzona, tipologia, m2, precio exacto), caso metro-las-torres (3 MLC para la
+  misma unidad inflaron el arriendo del #5 en +24%). Queda pendiente SOLO capturar
+  direccion desde la tarjeta para la clave fina del §7.3.
 agente: colector
 fase: 2
 contexto: verificador 06-sep — `duplicados_de_arriendo` agrupa por una columna que
@@ -1783,3 +1788,18 @@ estado: hecha  # 07-oct: top con CERO filas. Causa doble: (1) `ingest` tenia el 
   # semanas. Arreglo: hasta="" = mes actual resuelto al correr, y paso 0/6 de
   # indicadores (CMF con fallback Gael) en la semanal.
 agente: auditor-datos · fase: 2
+
+## T-953 · Nadie puebla `edificio_multifamily` y la exencion de D-021 es letra muerta
+estado: pendiente
+agente: colector
+fase: 2
+contexto: el colapso de relistings (D-021) exime a los multifamily porque ahi N
+  unidades identicas al mismo precio son oferta real — pero ningun colector setea la
+  columna (grep 07-oct-2026: cero escrituras). Hoy un edificio Assetplan con 10
+  unidades iguales colapsa a 1 y su celda subestima profundidad. Assetplan ES la
+  fuente multifamily declarada de Capa 4: su colector deberia marcar TRUE de oficio.
+criterio_de_aceptacion:
+  - el colector de Assetplan (y quien corresponda) escribe edificio_multifamily
+  - un test fija que un comp multifamily no se colapsa aunque repita (m2, precio)
+  - medir cuantas filas quedan exentas y anotarlo en el RUNLOG
+gate: make gates

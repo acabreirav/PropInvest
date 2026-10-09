@@ -142,13 +142,15 @@ def _base_con(unidades):
             "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?,?,?)",
             (mz, comuna, mz.split("/")[1]),
         )
+        # m² con centesimas: unidades DISTINTAS (el colapso de relistings D-021 funde
+        # filas identicas y 20 iguales pesarian 1)
         for i in range(20):  # T-949: el emparejamiento lee comparables vivos, no la tabla agregada
             con.execute(
                 "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
                 "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
                 "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
-                "VALUES (?,?,'2D2B',60,12.0,TRUE,'V','s','u',?,'v','p','x')",
-                (f"{mz}-c{i}", mz, AHORA),
+                "VALUES (?,?,'2D2B',?,12.0,TRUE,'V','s','u',?,'v','p','x')",
+                (f"{mz}-c{i}", mz, 60 + i * 0.01, AHORA),
             )
     for key, mz in unidades:
         con.execute(

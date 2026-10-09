@@ -114,9 +114,14 @@ def calcular_riesgo(conexion: Any, p: Config, ahora: datetime) -> int:
         GROUP BY m.microzona_id
         """
     ).fetchall()
+    # `avisos_activos`, no `n`: desde D-021 `n` cuenta unidades unicas (relistings
+    # colapsados) y la saturacion mide presion de AVISOS — una torre que larga 20
+    # identicos al mismo precio es oferta real. En agregaciones previas al cambio
+    # ambas columnas traen lo mismo, asi que el coalesce es solo por snapshots viejos.
     avisos = dict(
         conexion.execute(
-            "SELECT microzona_id, sum(n) FROM agg_arriendo_microzona GROUP BY microzona_id"
+            "SELECT microzona_id, sum(coalesce(avisos_activos, n)) "
+            "FROM agg_arriendo_microzona GROUP BY microzona_id"
         ).fetchall()
     )
 

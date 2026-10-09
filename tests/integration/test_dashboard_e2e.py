@@ -110,7 +110,8 @@ def base_grande(tmp_path_factory) -> Path:
                 "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
                 "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
                 "VALUES (?,?,?,?,?,TRUE,'V','s','u',?,'v','p','x')",
-                (f"{mz}-c{i}", mz, "1D1B", 42, 10.5, AHORA),
+                # centesimas de m²: unidades distintas (colapso de relistings D-021)
+                (f"{mz}-c{i}", mz, "1D1B", 42 + i * 0.01, 10.5, AHORA),
             )
     con.close()
     return ruta
@@ -259,8 +260,9 @@ def base_mapa(tmp_path_factory) -> Path:
                 "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, "
                 "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
                 "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
-                "VALUES (?,?,'1D1B',37,10.5,TRUE,'V','s','u',?,'v','p','x')",
-                (f"{mz}-c{i}", mz, AHORA),
+                "VALUES (?,?,'1D1B',?,10.5,TRUE,'V','s','u',?,'v','p','x')",
+                # centesimas de m²: unidades distintas (colapso de relistings D-021)
+                (f"{mz}-c{i}", mz, 37 + i * 0.01, AHORA),
             )
         for i in range(3):
             con.execute(

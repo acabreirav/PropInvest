@@ -176,6 +176,147 @@ def test_un_arriendo_ya_publicado_en_UF_no_se_convierte() -> None:
     con.close()
 
 
+# ----------------------- colapso de relistings (caso metro-las-torres, 07-oct-2026)
+
+
+_CON_FECHA_DEFAULT = object()  # permite pasar fetched=None explicito (fila sin fecha)
+
+
+def _comp_crudo(
+    con, cid, m2=71, clp=850_000, fetched=_CON_FECHA_DEFAULT, multifamily=False, uf=None
+):
+    momento = datetime(2026, 5, 4, tzinfo=UTC) if fetched is _CON_FECHA_DEFAULT else fetched
+    con.execute(
+        "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+        "arriendo_clp, arriendo_uf, edificio_multifamily, activo, fetched_at) "
+        "VALUES (?, 'x/y', '3D2B', ?, ?, ?, ?, TRUE, ?)",
+        (cid, m2, clp, uf, multifamily, momento),
+    )
+
+
+def _con_uf_mayo():
+    con = base_con_microzona()
+    con.execute(
+        "INSERT INTO dim_tiempo_financiero (fecha, serie, valor, unidad, evidence_level) "
+        "VALUES (DATE '2026-05-04', 'uf', 39000, 'CLP', 'V')"
+    )
+    return con
+
+
+def test_la_misma_unidad_con_tres_mlc_pesa_una_vez() -> None:
+    """La firma del multi-corredor: mismos (microzona, tipologia, m2, precio exacto) con
+    comp_id distinto. Medido en vivo (metro-las-torres): 96 m²/$800.000 con TRES avisos y
+    la mediana del 3D2B de 69 m² salio $819k donde el portal muestra ~$660k."""
+    con = _con_uf_mayo()
+    for cid in ("MLC-1", "MLC-2", "MLC-3"):
+        _comp_crudo(con, cid)
+    _comp_crudo(con, "MLC-otro", clp=580_000)  # otro precio = otra unidad
+    comparables, descartes = agg.comparables_desde_duckdb(con)
+    assert len(comparables) == 2
+    assert descartes["relisting_colapsado"] == 2
+    con.close()
+
+
+def test_se_filtra_PRIMERO_y_se_colapsa_despues(con=None) -> None:
+    """Verificador de D-021, hallazgos 3 y 4: el colapso opera sobre las SOBREVIVIENTES.
+    La copia de mayo cuenta como `desactualizado` (que es lo que es), la fresca queda,
+    y la unidad sobrevive sin importar el orden de captura."""
+    con = _con_uf_mayo()
+    con.execute(
+        "INSERT INTO dim_tiempo_financiero (fecha, serie, valor, unidad, evidence_level) "
+        "VALUES (DATE '2026-08-28', 'uf', 40804, 'CLP', 'V')"
+    )
+    _comp_crudo(con, "MLC-viejo", fetched=datetime(2026, 5, 4, tzinfo=UTC))
+    _comp_crudo(con, "MLC-fresco", fetched=datetime(2026, 8, 28, tzinfo=UTC))
+    ahora = datetime(2026, 8, 29, tzinfo=UTC)  # mayo queda fuera de los 21 dias
+    comparables, descartes = agg.comparables_desde_duckdb(con, ahora)
+    assert len(comparables) == 1, "sobrevive via el avistamiento fresco"
+    assert descartes["desactualizado"] == 1, "la copia vieja es eso, no un relisting"
+    assert descartes["relisting_colapsado"] == 0
+    con.close()
+
+
+def test_un_representante_amoblado_no_arrastra_a_la_copia_pelada() -> None:
+    """Caso C del verificador: si el avistamiento MAS RECIENTE del grupo es amoblado,
+    colapsar antes de filtrar mataba a la unidad entera. Filtrando primero, la copia
+    pelada sobrevive sola."""
+    con = _con_uf_mayo()
+    con.execute(
+        "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+        "arriendo_clp, activo, fetched_at, source_url) "
+        "VALUES ('MLC-am', 'x/y', '3D2B', 71, 850000, TRUE, ?, "
+        "'https://p.cl/MLC-am-depto-amoblado-full')",
+        (datetime(2026, 5, 5, tzinfo=UTC),),
+    )
+    _comp_crudo(con, "MLC-pelado", fetched=datetime(2026, 5, 4, tzinfo=UTC))
+    comparables, descartes = agg.comparables_desde_duckdb(con)
+    assert len(comparables) == 1
+    assert descartes["amoblado"] == 1
+    assert descartes["relisting_colapsado"] == 0
+    con.close()
+
+
+def test_dos_copias_viejas_cuentan_como_desactualizadas_no_como_relisting() -> None:
+    """Caso G del verificador: `activo` nunca pasa a FALSE (T-945), asi que el colapso
+    veria todo el historico. Filtrando primero, las viejas se atribuyen a frescura y el
+    contador de relistings mide solo el efecto REAL sobre el pool fresco."""
+    con = _con_uf_mayo()
+    _comp_crudo(con, "MLC-a", fetched=datetime(2026, 5, 4, tzinfo=UTC))
+    _comp_crudo(con, "MLC-b", fetched=datetime(2026, 5, 4, tzinfo=UTC))
+    comparables, descartes = agg.comparables_desde_duckdb(con, datetime(2026, 8, 29, tzinfo=UTC))
+    assert comparables == []
+    assert descartes["desactualizado"] == 2
+    assert descartes["relisting_colapsado"] == 0
+    con.close()
+
+
+def test_el_comparable_colapsado_recuerda_cuantos_avisos_lo_respaldan() -> None:
+    """Hallazgo 2 del verificador: la saturacion del riesgo_microzona cuenta AVISOS
+    (presion de oferta), no firmas unicas. El colapso guarda el conteo en `avisos` y la
+    agregacion lo suma a `avisos_activos`."""
+    con = _con_uf_mayo()
+    for cid in ("MLC-1", "MLC-2", "MLC-3"):
+        _comp_crudo(con, cid)
+    _comp_crudo(con, "MLC-otro", clp=580_000)
+    comparables, _ = agg.comparables_desde_duckdb(con)
+    assert sorted(c.avisos for c in comparables) == [1, 3]
+    agregados = agg.agregar(comparables, RANGOS)
+    assert len(agregados) == 1
+    assert agregados[0].n == 2, "la mediana pesa unidades"
+    assert agregados[0].avisos == 4, "la saturacion pesa avisos"
+    con.close()
+
+
+def test_fetched_at_nulo_dentro_del_grupo_no_revienta_y_pierde() -> None:
+    con = _con_uf_mayo()
+    _comp_crudo(con, "MLC-sin-fecha", fetched=None, uf=22, clp=None)
+    _comp_crudo(con, "MLC-fechado", uf=22, clp=None)
+    comparables, descartes = agg.comparables_desde_duckdb(con)  # sin `ahora`: nada vence
+    assert len(comparables) == 1
+    assert descartes["relisting_colapsado"] == 1
+    con.close()
+
+
+def test_un_multifamily_no_se_colapsa_porque_sus_unidades_identicas_son_oferta_real() -> None:
+    con = _con_uf_mayo()
+    _comp_crudo(con, "AP-1", multifamily=True)
+    _comp_crudo(con, "AP-2", multifamily=True)
+    comparables, descartes = agg.comparables_desde_duckdb(con)
+    assert len(comparables) == 2
+    assert descartes["relisting_colapsado"] == 0
+    con.close()
+
+
+def test_precios_en_uf_y_en_clp_no_comparten_llave() -> None:
+    con = _con_uf_mayo()
+    _comp_crudo(con, "EN-CLP", clp=468_000)
+    _comp_crudo(con, "EN-UF", clp=None, uf=12)  # 468.000/39.000 = 12 UF, pero llave distinta
+    comparables, descartes = agg.comparables_desde_duckdb(con)
+    assert len(comparables) == 2
+    assert descartes["relisting_colapsado"] == 0
+    con.close()
+
+
 def test_recalcular_reemplaza_en_vez_de_acumular() -> None:
     """`agg_arriendo_microzona` es un derivado, no un historico: la historia vive en
     `fact_arriendo_comp`."""

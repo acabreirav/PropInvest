@@ -42,6 +42,9 @@ class Comparable:
     tipologia: str
     m2_utiles: Decimal
     arriendo_uf: Decimal
+    # cuantos avisos respaldan esta fila: >1 cuando el colapso de relistings (D-021)
+    # fundio copias identicas. La mediana pesa UNIDADES; la saturacion pesa AVISOS.
+    avisos: int = 1
 
     @property
     def arriendo_uf_m2(self) -> Decimal:
@@ -59,6 +62,8 @@ class Agregado:
     p75: Decimal
     uf_m2_mediana: Decimal
     m2_mediana: Decimal = D(0)
+    # avisos observados (con relistings): el insumo de saturacion. n = unidades unicas.
+    avisos: int = 0
 
     @property
     def suficiente(self) -> bool:
@@ -136,6 +141,7 @@ def agregar(comparables: list[Comparable], rangos: list[list[int]]) -> list[Agre
                 # `0-35` el 60% de los comparables mide 31-35, asi que la mediana de
                 # arriendo describe a un depto grande de la banda y no al chico.
                 m2_mediana=percentil([c.m2_utiles for c in items], D("0.5")),
+                avisos=sum(c.avisos for c in items),
             )
         )
     return salida
@@ -196,7 +202,7 @@ def uf_del_dia(serie: dict[date, Decimal], momento: datetime) -> Decimal | None:
 
 
 def comparables_desde_duckdb(
-    conexion: Any, ahora: datetime | None = None
+    conexion: Any, ahora: datetime | None = None, colapsar_relistings: bool = True
 ) -> tuple[list[Comparable], dict[str, int]]:
     """Lee `fact_arriendo_comp` y normaliza a UF. Devuelve `(comparables, descartes)`.
 
@@ -217,7 +223,7 @@ def comparables_desde_duckdb(
     # de cada fila que ya tenemos.
     filas = conexion.execute(
         "SELECT microzona_id, tipologia, m2_utiles, arriendo_uf, arriendo_clp, fetched_at, "
-        "source_url FROM fact_arriendo_comp "
+        "source_url, coalesce(edificio_multifamily, FALSE) FROM fact_arriendo_comp "
         "WHERE activo AND coalesce(sospechoso, FALSE) = FALSE"
     ).fetchall()
 
@@ -230,9 +236,13 @@ def comparables_desde_duckdb(
         "sin_fecha": 0,
         "amoblado": 0,
         "sin_uf_del_dia": 0,
+        "relisting_colapsado": 0,
     }
+
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
-    for mz, tip, m2, arr_uf, arr_clp, momento, url in filas:
+    # (mz, tip, m2, arr_uf, arr_clp, momento, multifamily, en_uf) ya filtradas y convertidas
+    vivas: list[tuple[Any, ...]] = []
+    for mz, tip, m2, arr_uf, arr_clp, momento, url, multifamily in filas:
         if limite is not None:
             if momento is None:
                 # El mismo hoyo que tenia el emparejamiento de venta: una fila sin
@@ -267,10 +277,55 @@ def comparables_desde_duckdb(
                 descartes["sin_uf_del_dia"] += 1
                 continue
             en_uf = Decimal(str(arr_clp)) / uf
+        vivas.append((mz, tip, m2, arr_uf, arr_clp, momento, multifamily, en_uf))
 
+    # Colapso de RELISTINGS (07-oct-2026, caso metro-las-torres): la misma unidad publicada
+    # por varios corredores entra con MLC distinto y pesa N veces en la mediana. Medido en
+    # vivo: 96 m²/$800.000 con TRES avisos, 71 m²/$850.000 y 75 m²/$850.000 con dos cada
+    # uno — 8 comps frescos que eran ~5 unidades reales, y la mediana del 3D2B de 69 m²
+    # salio $819k donde el portal muestra ~$660k. El §7.3 manda deduplicar por
+    # `(direccion_normalizada, m2, dormitorios, precio)`; la tabla aun no captura direccion
+    # (T-946), asi que la llave proxy es `(microzona, tipologia, m2, precio exacto)`.
+    # Decision y riesgos declarados en D-021. Tres reglas del verificador §7.6 (07-oct):
+    #   - se colapsa DESPUES de filtrar: un representante amoblado o inconvertible no
+    #     puede arrastrar a la copia buena, y las copias viejas cuentan como
+    #     `desactualizado`, que es lo que son (hallazgos 3 y 4);
+    #   - cada Comparable conserva en `avisos` cuantos avisos lo respaldan: la saturacion
+    #     del riesgo_microzona cuenta AVISOS, no firmas unicas (hallazgo 2);
+    #   - un edificio multifamily queda exento: N unidades identicas al mismo precio son
+    #     oferta real, no duplicado (hoy ningun colector puebla la columna — T-953).
+    _muy_viejo = datetime.min.replace(tzinfo=None)
+
+    def _instante(v: tuple[Any, ...]) -> Any:
+        m = v[5]
+        return m.replace(tzinfo=None) if m is not None else _muy_viejo
+
+    grupos: dict[tuple[Any, ...], list[tuple[Any, ...]]] = {}
+    for viva in vivas:
+        mz, tip, m2, arr_uf, arr_clp, _momento, multifamily, en_uf = viva
+        # `colapsar_relistings=False` existe SOLO para medir el efecto del colapso
+        # (scripts/medir_colapso_relistings.py, §8.4); el ranking siempre colapsa.
+        if multifamily or not colapsar_relistings:
+            comparables.append(
+                Comparable(
+                    microzona_id=mz, tipologia=tip, m2_utiles=Decimal(str(m2)), arriendo_uf=en_uf
+                )
+            )
+            continue
+        grupos.setdefault((mz, tip, m2, arr_uf, arr_clp), []).append(viva)
+
+    for grupo in grupos.values():
+        if len(grupo) > 1:
+            descartes["relisting_colapsado"] += len(grupo) - 1
+            grupo.sort(key=_instante)  # representa el avistamiento mas reciente
+        mz, tip, m2, _arr_uf, _arr_clp, _momento, _mf, en_uf = grupo[-1]
         comparables.append(
             Comparable(
-                microzona_id=mz, tipologia=tip, m2_utiles=Decimal(str(m2)), arriendo_uf=en_uf
+                microzona_id=mz,
+                tipologia=tip,
+                m2_utiles=Decimal(str(m2)),
+                arriendo_uf=en_uf,
+                avisos=len(grupo),
             )
         )
     return comparables, descartes
@@ -299,7 +354,10 @@ def cargar_en_duckdb(conexion: Any, agregados: list[Agregado], ahora: datetime) 
                 a.p75,
                 a.uf_m2_mediana,
                 a.m2_mediana,
-                a.n,
+                # saturacion = AVISOS observados, no unidades unicas: una torre que larga
+                # 20 identicos al mismo precio es presion de oferta real (verificador
+                # §7.6 de D-021, hallazgo 2)
+                a.avisos or a.n,
                 ahora,
             ),
         )

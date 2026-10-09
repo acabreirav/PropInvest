@@ -44,7 +44,9 @@ def celda(con, mz="sm/el-llano", tip="2D2B", rango="50-70", mediana="12.35", n=9
             "m2_utiles, arriendo_uf, activo, evidence_level, source_id, source_url, "
             "fetched_at, parser_version, raw_blob_path, robots_snapshot_sha) "
             "VALUES (?, ?, ?, ?, ?, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
-            (f"{mz}·{tip}·{rango}·{i}", mz, tip, (lo + hi) / 2, D(mediana), AHORA),
+            # centesimas de m² para que cada comp sea una unidad DISTINTA: desde el colapso
+            # de relistings (07-oct-2026), n filas identicas pesan 1 — como debe ser
+            (f"{mz}·{tip}·{rango}·{i}", mz, tip, (lo + hi) / 2 + i * 0.01, D(mediana), AHORA),
         )
 
 
@@ -507,10 +509,10 @@ def test_la_ventana_se_ensancha_antes_de_rendirse(con) -> None:
     """±20% no junta n>=8 pero ±30% si — con vecinos a AMBOS lados: se usa la ancha y
     la procedencia dice cuanto. (La fixture original tenia los 8 comps a un solo lado
     y el guard de descentrado del 07-oct la mata con razon: eso ya no es vecindario.)"""
-    for i in range(4):  # a 10 m² bajo la unidad: fuera de ±8 (20%), dentro de ±12 (30%)
-        _comp_arr(con, f"CH{i}", 30, "8.0")
-    for i in range(4):  # y a 10 m² sobre ella
-        _comp_arr(con, f"GR{i}", 50, "10.0")
+    for i in range(4):  # a ~10 m² bajo la unidad: fuera de ±8 (20%), dentro de ±12 (30%)
+        _comp_arr(con, f"CH{i}", 30 + i * 0.1, "8.0")
+    for i in range(4):  # y a ~10 m² sobre ella (m² distintos: el colapso funde identicos)
+        _comp_arr(con, f"GR{i}", 50 - i * 0.1, "10.0")
     unidad(con, tip="2D1B", m2=40, precio="1500")
 
     r = op.emparejar(con, RANGOS)
@@ -571,8 +573,8 @@ def test_una_ventana_descentrada_no_es_vecindario(con) -> None:
     recien a ±40%, con puros comparables de 79-84 m² — y subio a #1 con el arriendo
     de deptos un tercio mas grandes. El m² TIPICO del pool tiene que quedar a ±20%
     del m² de la unidad; si no, el resultado honesto es ND."""
-    for i in range(12):  # todos los vecinos viven a UN lado: 79-84 m²
-        _comp_arr(con, f"GR{i}", 79 + (i % 6), "30", tip="3D2B")
+    for i in range(12):  # todos los vecinos viven a UN lado: 79-83,4 m² (m² distintos)
+        _comp_arr(con, f"GR{i}", 79 + i * 0.4, "30", tip="3D2B")
     unidad(con, tip="3D2B", m2=60, precio="3000")
 
     r = op.emparejar(con, RANGOS)

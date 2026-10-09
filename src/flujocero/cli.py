@@ -3175,7 +3175,8 @@ def comparables(
             args.append(tipologia)
         filas = con.execute(
             "SELECT comp_id, tipologia, m2_utiles, arriendo_clp, arriendo_uf, fetched_at, "
-            f"source_url FROM fact_arriendo_comp WHERE {' AND '.join(condiciones)} "
+            "source_url, coalesce(edificio_multifamily, FALSE) "
+            f"FROM fact_arriendo_comp WHERE {' AND '.join(condiciones)} "
             "ORDER BY arriendo_clp",
             args,
         ).fetchall()
@@ -3204,19 +3205,35 @@ def comparables(
     def entra(f: Any) -> bool:
         return not no_comparable(f[6]) and f[5] is not None and f[5] >= limite
 
-    def senal(f: Any) -> str:
+    # D-021: el ranking colapsa relistings — misma (tipologia, m2, precio) exacta en la
+    # microzona = la misma unidad publicada por varios corredores. Este comando audita
+    # ESE numero, asi que colapsa igual: la copia extra se marca ≡ y no alimenta la
+    # mediana. Un multifamily (f[7]) no se colapsa: sus unidades identicas son reales.
+    grupos_relisting: dict[tuple[Any, ...], list[tuple[Any, int]]] = {}
+    for i, f in enumerate(filas):
+        if entra(f) and not f[7]:
+            grupos_relisting.setdefault((f[1], f[2], f[3], f[4]), []).append((f[5], i))
+    copias: set[int] = set()
+    for miembros in grupos_relisting.values():
+        if len(miembros) > 1:
+            miembros.sort()
+            copias.update(i for _, i in miembros[:-1])
+
+    def senal(i: int, f: Any) -> str:
         if no_comparable(f[6]):
             return "✗ "
         if f[5] is None or f[5] < limite:
             return "· "
+        if i in copias:
+            return "≡ "
         return "? " if dudoso(f[6]) else "  "
 
-    montos = sorted(f[3] for f in filas if entra(f))
+    montos = sorted(f[3] for i, f in enumerate(filas) if entra(f) and i not in copias)
     amoblados = sum(1 for f in filas if no_comparable(f[6]))
     viejos = sum(1 for f in filas if not no_comparable(f[6]) and (f[5] is None or f[5] < limite))
     cabecera = (
         f"  {len(filas)} avisos · {amoblados} amoblados · {viejos} de más de "
-        f"{FRESCURA_MAX_DIAS} días · "
+        f"{FRESCURA_MAX_DIAS} días · {len(copias)} relistings · "
     )
     if montos:
         mediana = (
@@ -3234,17 +3251,18 @@ def comparables(
             "    amoblado o vencido. Los avisos se listan igual porque son historia."
         )
     typer.echo(f"    {'arriendo':>12s} {'m2':>5s} {'$/m2':>7s} {'tipo':6s} {'visto':10s} aviso")
-    for fila in filas:
-        _cid, tip, m2, clp, _uf, visto, url = fila
+    for i, fila in enumerate(filas):
+        _cid, tip, m2, clp, _uf, visto, url, _mf = fila
         # `arriendo_clp` es DECIMAL y `m2_utiles` FLOAT: dividirlos directo revienta.
         por_m2 = f"{float(clp) / m2:>7,.0f}" if m2 else "      —"
         typer.echo(
-            f"  {senal(fila)}${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} "
+            f"  {senal(i, fila)}${clp:>11,.0f} {m2 or 0:>5.0f} {por_m2} {tip or '?':6s} "
             f"{visto:%Y-%m-%d} {url}"
         )
     typer.echo(
         "\n  ✗ = amoblado o estadia corta: otro producto.   · = de más de "
         f"{FRESCURA_MAX_DIAS} días: el §7.3 lo saca del ranking, se conserva como historia."
+        "\n  ≡ = relisting: mismo (m², precio) exacto ya contado una vez (D-021)."
         "\n  ? = merece una mirada (cocina equipada, gastos comunes incluidos)."
         f"\n  La mediana sale de los {len(montos)} marcados con espacio, "
         f"no de los {len(filas)} avisos."

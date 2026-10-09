@@ -446,8 +446,10 @@ def duplicados_de_arriendo(filas: list[dict[str, Any]]) -> Hallazgo:
             "duplicados_arriendo",
             Severidad.MARCA,
             f"no evaluable: ninguna de las {len(filas)} filas trae la clave completa "
-            "(falta `direccion_normalizada` en fact_arriendo_comp) — el umbral n>=8 de "
-            "microzona corre sin esta proteccion",
+            "(falta `direccion_normalizada` en fact_arriendo_comp). Mitigado desde el "
+            "07-oct-2026: la agregacion colapsa relistings por la llave proxy "
+            "(microzona, tipologia, m2, precio exacto) — ver D-021; la clave del §7.3 "
+            "con direccion sigue pendiente (T-946)",
             len(filas),
         )
 

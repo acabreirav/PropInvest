@@ -759,3 +759,44 @@ rankeable porque su ventana junta n>=8 donde su celda no llegaba (relajamiento d
 facto del §12, visible en el embudo); `desvio_m2` queda vacío (el sesgo que medía
 desapareció por construcción); `agg_arriendo_microzona` deja de ser fuente del
 emparejamiento y queda para diagnóstico/informe de nuevas (unificarla es T-950).
+
+## D-021 · Los relistings colapsan a una fila por la llave proxy (mz, tip, m², precio) — 07-oct-2026
+
+**Decisión (§8.4, tomada con el usuario mirando el caso; verificador §7.6 corrido y
+acatado):** `comparables_desde_duckdb` —el punto único por donde pasan la ventana de
+vecinos y las celdas— colapsa a UNA fila los comparables con idénticos
+`(microzona, tipologia, m2_utiles, precio exacto)`. El colapso opera **después** de los
+filtros (frescura, amoblado, conversión UF): un representante amoblado o inconvertible
+no puede arrastrar a la copia buena, y las copias viejas cuentan como `desactualizado`,
+que es lo que son. Se queda el avistamiento más reciente. Los colapsados se cuentan en
+`descartes["relisting_colapsado"]`. Cada `Comparable` conserva en `avisos` cuántos
+avisos lo respaldan y la **saturación del riesgo_microzona suma avisos, no firmas
+únicas** (`agg_arriendo_microzona.avisos_activos`): una torre que larga 20 idénticos al
+mismo precio es presión de oferta real. Un `edificio_multifamily` queda exento del
+colapso — hoy ningún colector puebla esa columna (T-953).
+
+**El caso que lo motivó (metro-las-torres, reportado por el usuario contra el portal):**
+el 3D2B de 69 m² (#5 del top) recibió arriendo $819.402 donde el portal muestra ~$660k.
+Auditado: el gate de frescura dejaba 8 comps, de los cuales 96 m²/$800.000 tenía TRES
+MLC distintos y 71/$850.000 y 75/$850.000 dos cada uno — 8 avisos, ~5 unidades reales.
+Encima, sesgo de sobreviviente: los comps baratos salieron del pool por frescura
+(probablemente arrendados) mientras los caros quedan colgados y se re-publican.
+
+**Por qué la llave proxy y no la del §7.3:** `fact_arriendo_comp` no captura dirección
+(T-946 sigue abierta para eso). La llave proxy es geográficamente más gruesa que una
+dirección, por eso el precio entra EXACTO al peso.
+
+**Riesgo declarado — y corregido por el verificador §7.6:** la primera redacción de este
+ADR afirmaba que el sesgo del colapso era "conservador, jamás infla una mediana".
+**Falso.** El verificador lo demostró con el pipeline real: si la firma repetida son
+unidades distintas reales BAJO la mediana (plantas idénticas a precio de lista), quitar
+sus copias SUBE la mediana (+6,6% en su caso A; +3,6% en el B), directamente o vía el
+ensanche de la ventana a vecinos más grandes y caros. Y las colisiones de unidades
+distintas se concentran justo ahí: torres nuevas en colocación, que suelen listar bajo
+la mediana. El colapso se mantiene porque el error contrario (contar 3 veces la misma
+unidad cara en un pool de 8) fabrica oportunidades falsas con nombre y apellido, pero el
+efecto es **bidireccional y queda pendiente de medición sobre la base real**:
+`scripts/medir_colapso_relistings.py` (mismo método que T-949) reporta cuántas unidades
+suben/bajan de arriendo, cuántas pasan a ND y cómo cambia el top. Si mueve >10% del
+ranking, se re-decide con el usuario (§8.4). La mitigación estructural real es T-953
+(marcar multifamily) + T-946 (dirección).
