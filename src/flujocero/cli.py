@@ -1688,6 +1688,7 @@ def informe_semanal(
         # nombres legibles para "por qué está arriba" (los 2 componentes §12 que más aportan)
         nombres_driver = {
             "deficit_flujo_mensual_uf": "déficit mensual bajo",
+            "costo_tenencia_mensual_uf": "costo de tenencia mensual bajo",
             "pie_minimo_flujo_cero": "pie de flujo cero bajo",
             "tir_real_apalancada_10a": "TIR real alta",
             "riesgo_microzona": "microzona de bajo riesgo",
