@@ -1741,6 +1741,13 @@ def informe_semanal(
                 dfl2=(("probable*" if ev.dfl2_es_supuesto else "sí") if ev.dfl2_aplicado else "no"),
                 drivers=_drivers(ev),
                 equilibrio_clp=int(eq * uf) if (eq := equilibrios.get(u.unidad_key)) else 0,
+                # la procedencia viene como "mz · tip · vecinos ±X ..."; la ficha ya dice
+                # mz y tip en el titulo, asi que viaja solo el metodo (con sus alertas)
+                arriendo_metodo=(
+                    r.procedencia_arriendo[u.unidad_key][0].split(" · ", 2)[-1]
+                    if u.unidad_key in r.procedencia_arriendo
+                    else ""
+                ),
             )
             for u, ev in vivos[:top]
         ]

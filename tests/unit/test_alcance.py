@@ -355,6 +355,19 @@ def test_cada_comuna_lleva_el_slug_de_region_que_usa_el_portal() -> None:
     assert a.region("antofagasta") != "metropolitana"
 
 
+def test_fase_4_cercania_esta_en_el_alcance_real() -> None:
+    """Decision del inversionista (11-oct-2026): V y VI region por cercania. Vina y
+    Valparaiso salieron de `excluidas` con sus alertas intactas en la entrada de fase."""
+    a = desde_config(cargar("zonas"))
+    for comuna in ("vina-del-mar", "valparaiso", "quilpue", "rancagua", "machali"):
+        assert a.en_alcance(comuna), comuna
+    # slug confirmado por el usuario en el portal (11-oct-2026)
+    assert a.region("rancagua") == "bernardo-ohiggins"
+    assert a.region("vina-del-mar") == "valparaiso"
+    pares = a.comunas_de_fase(4)
+    assert ("rancagua", "bernardo-ohiggins") in pares
+
+
 def test_las_comunas_de_fase_3_vienen_como_pares_para_el_colector() -> None:
     a = desde_config(cargar("zonas"))
     pares = a.comunas_de_fase(3)

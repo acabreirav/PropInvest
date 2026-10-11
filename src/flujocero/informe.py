@@ -53,6 +53,9 @@ class FilaTop:
     # el modelo completo (auditoría del top 1, 06-sep: sin esta vara, un arriendo de
     # celda sobreestimado no se puede contrastar con lo que se ve en terreno). 0 = ND.
     equilibrio_clp: int = 0
+    # D-022: la procedencia REAL del arriendo (ventana de vecinos + alertas como el ⚠ de
+    # monotonía), no la frase genérica. "" = snapshots viejos, cae a la frase de siempre.
+    arriendo_metodo: str = ""
 
 
 @dataclass
@@ -402,7 +405,11 @@ def render_html(
   <div class="ficha-grid">
     <div><span>Precio</span><b>UF {_f(f.precio_uf)}</b> ≈ ${_f(f.precio_clp)}</div>
     <div><span>Arriendo estimado</span><b>${_f(f.arriendo_clp)}/mes</b>
-      <span class="mini">mediana de {f.n_comparables} arriendos reales en su microzona</span></div>
+      <span class="mini">{
+            escape(f.arriendo_metodo) + f" · {f.n_comparables} arriendos reales"
+            if f.arriendo_metodo
+            else f"mediana de {f.n_comparables} arriendos reales en su microzona"
+        }</span></div>
     <div><span>Arriendo de equilibrio</span>{_equilibrio(f)}</div>
     <div><span>Tasa</span><b>{tasa}</b></div>
     <div><span>Dividendo</span><b>${_f(f.dividendo_clp)}/mes</b></div>

@@ -476,13 +476,13 @@ def test_sin_la_UF_de_su_dia_se_descarta_y_se_cuenta(con) -> None:
 # ------------------------------------------------------------- T-949 · vecinos por m²
 
 
-def _comp_arr(con, cid, m2, uf, mz="sm/el-llano", tip="2D1B"):
+def _comp_arr(con, cid, m2, uf, mz="sm/el-llano", tip="2D1B", url="u"):
     con.execute(
         "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
         "arriendo_uf, activo, evidence_level, source_id, source_url, fetched_at, "
         "parser_version, raw_blob_path, robots_snapshot_sha) "
-        "VALUES (?, ?, ?, ?, ?, TRUE, 'V', 's', 'u', ?, 'v', 'p', 'x')",
-        (cid, mz, tip, m2, D(str(uf)), AHORA),
+        "VALUES (?, ?, ?, ?, ?, TRUE, 'V', 's', ?, ?, 'v', 'p', 'x')",
+        (cid, mz, tip, m2, D(str(uf)), url, AHORA),
     )
 
 
@@ -579,6 +579,62 @@ def test_una_ventana_descentrada_no_es_vecindario(con) -> None:
 
     r = op.emparejar(con, RANGOS)
     assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1
+
+
+def test_una_ventana_en_mercado_de_temporada_es_ND(con) -> None:
+    """D-022, caso la-serena/puerta-del-mar (11-oct): el filtro de amoblados lee solo el
+    TITULO, y en balnearios el gemelo sin la palabra se cuela. Donde la fraccion marcada
+    del vecindario es alta, los "pelados" del segmento son el mismo producto: ND."""
+    for i in range(8):  # 8 limpios 74-88 m²
+        _comp_arr(con, f"P{i}", 74 + i * 2, "22", tip="3D2B")
+    for i in range(4):  # 4 marcados en el MISMO segmento: 4/12 = 33% >= 30%
+        _comp_arr(con, f"A{i}", 76 + i * 3, "25", tip="3D2B", url=f"depto-amoblado-playa-{i}")
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 0
+    assert r.descartes["mercado_temporada"] == 1
+    assert r.descartes["sin_comparables"] == 0
+
+
+def test_poca_contaminacion_de_temporada_no_apaga_la_ventana(con) -> None:
+    for i in range(8):
+        _comp_arr(con, f"P{i}", 74 + i * 2, "22", tip="3D2B")
+    _comp_arr(con, "A0", 80, "25", tip="3D2B", url="depto-amoblado-1")  # 1/9 = 11% < 30%
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    assert r.descartes["mercado_temporada"] == 0
+
+
+def test_el_tripwire_de_monotonia_marca_el_m2_invertido(con) -> None:
+    """D-022: el $/m² CAE con el tamanio en el mercado pelado. Una asignacion que supera
+    el $/m² mediano de los comparables mas chicos delata contaminacion que el guardia no
+    vio — se marca en la procedencia (y llega a la ficha), no se excluye."""
+    for i in range(5):  # chicos 62-64 m² a 13 UF → ~0,21 UF/m²
+        _comp_arr(con, f"CH{i}", 62 + i * 0.5, "13", tip="3D2B")
+    for i in range(7):  # grandes 80-92 m² a 28 UF → ~0,33 UF/m²
+        _comp_arr(con, f"GR{i}", 80 + i * 2, "28", tip="3D2B")
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    origen, _n, arr = r.procedencia_arriendo["U1"]
+    assert arr == D("28"), "la mediana del pool queda en el segmento grande"
+    assert "⚠ $/m² sobre el de los más chicos" in origen
+
+
+def test_sin_inversion_de_m2_no_hay_marca(con) -> None:
+    for i in range(5):
+        _comp_arr(con, f"CH{i}", 62 + i * 0.5, "13", tip="3D2B")
+    for i in range(7):
+        _comp_arr(con, f"GR{i}", 80 + i * 2, "14", tip="3D2B")  # grandes apenas mas caros
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    origen, _n, _arr = r.procedencia_arriendo["U1"]
+    assert "⚠" not in origen
 
 
 def test_una_ventana_ancha_pero_centrada_si_sirve(con) -> None:

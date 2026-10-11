@@ -800,3 +800,47 @@ efecto es **bidireccional y queda pendiente de medición sobre la base real**:
 suben/bajan de arriendo, cuántas pasan a ND y cómo cambia el top. Si mueve >10% del
 ranking, se re-decide con el usuario (§8.4). La mitigación estructural real es T-953
 (marcar multifamily) + T-946 (dirección).
+
+## D-022 · Guardia de mercado de temporada + tripwire de monotonía del $/m² — 11-oct-2026
+
+**El caso (la-serena/puerta-del-mar, cazado por el usuario a ojo):** la ficha #1 de la
+vista 3.000-8.000 asignó $844.926 a un 3D2B de 77 m². El filtro de amoblados lee solo
+el TÍTULO del aviso, y en los 74-110 m² de esa microzona conviven gemelos idénticos con
+y sin la marca (90 m²/$1.000.000 marcado y sin marcar): el mismo depto de temporada se
+publica a veces sin la palabra en el slug. La ventana del 77 m² quedó centrada en el
+segmento vacacional, pasó el guardia de descentrado (hay vecinos a ambos lados) y
+entregó la mediana de OTRO negocio. El arriendo pelado real ronda $650-690k: ~25% de
+sobreestimación. La señal que lo delató: el $/m² SUBÍA con el tamaño (8,7k en 62-68 m²
+vs 11k en 74-90), al revés de todo mercado de arriendo pelado.
+
+**Decisión 1 — guardia de contaminación (`TEMPORADA_MAX = 0.30`):** si en la ventana
+que se va a aceptar la fracción de avisos MARCADOS amoblado/temporada del mismo
+(microzona, tipología, ±m²) alcanza el 30%, los no marcados del segmento son
+sospechosos por asociación y la asignación es **ND con motivo**
+(`descartes["mercado_temporada"]`). No se ensancha para diluir: la dilución mete
+vecinos que no son vecinos. Población y frescura idénticas a las de los comparables.
+
+**Decisión 2 — tripwire de monotonía:** si el $/m² asignado supera la mediana de $/m²
+de los comparables más chicos (≤0,85× los m², mínimo 5) de su misma (microzona,
+tipología), la procedencia lo dice: "⚠ $/m² sobre el de los más chicos de la
+microzona" — y desde hoy la procedencia REAL (ventana + alertas) llega a la ficha del
+informe, en vez de la frase genérica. Marca, no excluye: es el detector de lo que el
+guardia no alcanzó a ver.
+
+**Umbral 0.30 es un `E` de regla, no de mercado:** queda como constante de código
+(mismo trato que `DESCENTRADO_MAX`), con sensibilidad pendiente de medir sobre la base
+real (cuántas unidades caen a ND por comuna). Expectativa declarada: va a apagar
+celdas enteras en La Serena, Antofagasta y la V región costera — y eso es lo honesto:
+en esos mercados el arriendo pelado de unidades grandes apenas existe como producto.
+
+**Decisión 3 — fase 4 del alcance (cercanía):** el inversionista vive en Santiago;
+administrar a 500 km tiene costo real no priceado. Entran V región (Viña, Valparaíso,
+Concón, Quilpué, Villa Alemana) y VI región (Rancagua, Machalí) como `fase_4`. Viña y
+Valparaíso SALEN de `excluidas` por decisión explícita del inversionista, con sus
+alertas de abr-2026 intactas en la entrada de fase (la evidencia no cambió; cambió la
+prioridad). El slug de la VI región es `bernardo-ohiggins`, confirmado por el usuario
+en el portal el 11-oct-2026; "valparaiso" sigue sin confirmar y `probar-comunas
+--fase 4` antes de la primera recolección sigue siendo obligatorio (también verifica
+que el filtro de COMUNA funcione — el caso biobio respondía 200 ignorándolo). La VI
+región no tiene ancla externa en docs/00-hallazgos.md: sus medianas nacen sin
+contraste (gate §7.3 cojo ahí hasta conseguir benchmark).

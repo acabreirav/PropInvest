@@ -111,7 +111,20 @@ class Bloqueado(ErrorDeFuente):
 # URL, no el nombre oficial de la region, y **no se adivina**: cada uno se verifica con
 # `cli probar-comunas` contra el sitio antes de recolectar. Un slug mal puesto no da error
 # obvio — el portal responde 200 con cero resultados y la corrida "funciona" sin traer nada.
-REGIONES = ("metropolitana", "bio-bio", "biobio", "coquimbo", "antofagasta", "valparaiso")
+# "bernardo-ohiggins" es el slug REAL de la VI region, confirmado por el usuario en el
+# portal el 11-oct-2026 (/venta/departamento/propiedades-usadas/bernardo-ohiggins).
+# OJO: va SOLO ese y no variantes como "ohiggins" — la comuna del patron de
+# `_comuna_de_url` es codiciosa, y con "ohiggins" tambien en la lista,
+# "rancagua-bernardo-ohiggins_Desde_" parsearia comuna "rancagua-bernardo".
+REGIONES = (
+    "metropolitana",
+    "bio-bio",
+    "biobio",
+    "coquimbo",
+    "antofagasta",
+    "valparaiso",
+    "bernardo-ohiggins",
+)
 
 
 def url_busqueda(

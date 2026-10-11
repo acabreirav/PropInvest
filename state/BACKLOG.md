@@ -1803,3 +1803,20 @@ criterio_de_aceptacion:
   - un test fija que un comp multifamily no se colapsa aunque repita (m2, precio)
   - medir cuantas filas quedan exentas y anotarlo en el RUNLOG
 gate: make gates
+
+## T-954 · Fase 4 (V y VI region): verificar slugs, conseguir ancla externa, medir temporada
+estado: pendiente
+agente: fuente-scout
+fase: 4
+contexto: D-022 decision 3 — el alcance crecio a vina-del-mar, valparaiso, concon,
+  quilpue, villa-alemana, rancagua y machali por cercania (decision del inversionista
+  11-oct-2026). Tres deudas nacen con el: (1) los region_slug "valparaiso" y "ohiggins"
+  no estan verificados contra el portal (modo de falla: 200 con cero resultados);
+  (2) la VI region no tiene benchmark en docs/00-hallazgos.md — el ancla externa del
+  gate 7.3 no la cubre; (3) la V costera es mercado de temporada: medir que fraccion
+  de celdas apaga el guardia TEMPORADA_MAX y si el umbral 0.30 esta bien puesto.
+criterio_de_aceptacion:
+  - probar-comunas --fase 4 verde para las 7 comunas (o slugs corregidos en zonas.yml)
+  - benchmark UF/m2 y arriendo para Rancagua/Machali y Gran Valparaiso con fuente citada
+  - medicion de celdas apagadas por mercado_temporada por comuna, pegada al RUNLOG
+gate: make gates

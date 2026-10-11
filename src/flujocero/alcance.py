@@ -28,8 +28,8 @@ esfuerzo.
 
 ## La regla
 
-`zonas.yml` es la fuente única. Una comuna está dentro si aparece en `fase_1`, `fase_2` o
-`fase_3`; está fuera si aparece en `excluidas`. Una comuna que no aparece en ninguna parte
+`zonas.yml` es la fuente única. Una comuna está dentro si aparece en alguna `fase_N` de
+`FASES`; está fuera si aparece en `excluidas`. Una comuna que no aparece en ninguna parte
 **está fuera**: el alcance es una lista blanca, no una lista negra. Es lo que corresponde
 cuando el colector puede traer cualquier comuna del portal y el contrato define un alcance
 explícito por fases (§10).
@@ -46,7 +46,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-FASES = ("fase_1", "fase_2", "fase_3")
+FASES = ("fase_1", "fase_2", "fase_3", "fase_4")
 
 
 @dataclass(frozen=True)

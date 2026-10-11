@@ -97,9 +97,46 @@ fase_3:
     razon: "cap rate neto 1D1B 4,5%, el más alto del país"
     saturadas: []
 
+# FASE 4 · cercanía (decisión del inversionista, 11-oct-2026): vive en Santiago y
+# administrar a 500+ km tiene un costo real que el modelo no pricea. El foco pasa a
+# RM + V región + VI región; las fases 3 se siguen recolectando como contraste.
+#
+# ANTES DE RECOLECTAR: `uv run python -m flujocero.cli probar-comunas --fase 4`.
+# Los region_slug de abajo NO están verificados (el contenedor no tiene salida a la
+# red chilena): un slug malo responde 200 con cero resultados y la corrida "funciona"
+# sin traer nada — exactamente el modo de falla documentado arriba para fase 3.
+# Candidatos probables si "ohiggins" falla: "libertador-b-ohiggins", "o-higgins".
+#
+# Viña y Valparaíso salen de `excluidas` POR DECISIÓN DEL INVERSIONISTA y entran con
+# sus alertas originales intactas. Ojo adicional D-022: la V región costera es mercado
+# de temporada — el guardia de contaminación amoblado/temporada va a apagar celdas
+# enteras ahí, y eso es lo honesto, no un bug.
+fase_4:
+  - ciudad: gran-valparaiso
+    region: valparaiso
+    region_slug: valparaiso       # VERIFICAR con probar-comunas antes de usar
+    comunas: [vina-del-mar, valparaiso, concon, quilpue, villa-alemana]
+    razon: "cercanía: 1,5 h de Santiago; decisión del inversionista 11-oct-2026"
+    riesgo: alto
+    alerta: >
+      Viña: absorción 24,6 meses (la peor del Gran Valparaíso), cap 2D2B 3,1%, mercado
+      estacional. Valparaíso: mediana 23,7 UF/m² con p25 de 9,5 = deterioro estructural.
+      Ambas estaban en `excluidas` con evidencia abr-2026; se incluyen por cercanía, no
+      porque esa evidencia haya cambiado. Quilpué/Villa Alemana: mercado interior, menos
+      estacional — probablemente lo más sano de la fase.
+    saturadas: []
+  - ciudad: rancagua-machali
+    region: ohiggins
+    # Slug confirmado por el usuario en el portal el 11-oct-2026:
+    # /venta/departamento/propiedades-usadas/bernardo-ohiggins
+    region_slug: bernardo-ohiggins
+    comunas: [rancagua, machali]
+    razon: "cercanía: 1 h de Santiago por Ruta 5; mercado de arriendo real (minería El Teniente + servicios); decisión del inversionista 11-oct-2026"
+    riesgo: medio
+    alerta: "sin benchmark de yield en docs/00-hallazgos.md: el ancla externa del gate §7.3 no cubre la VI región — las medianas solo se podrán contrastar contra sí mismas al principio"
+    saturadas: []
+
 excluidas:
-  - {zona: vina-del-mar, razon: "absorción 24,6 meses (la peor del Gran Valparaíso); ventas -6,4% s/s; cap 2D2B 3,1%; mercado estacional"}
-  - {zona: valparaiso, razon: "mediana 23,7 UF/m² con p25 de 9,5 = deterioro estructural, no oportunidad. Casi sin producto nuevo"}
   - {zona: san-joaquin, razon: "vacancia multifamily 42,1%. Revisar en 2029 con L9 a la vista"}
   - {zona: las-condes, razon: "ticket sobre el tope; vacancia MF 19,6%"}
   - {zona: vitacura, razon: "133 UF/m², fuera del tope UF 6.000"}

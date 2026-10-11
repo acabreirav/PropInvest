@@ -331,6 +331,40 @@ def comparables_desde_duckdb(
     return comparables, descartes
 
 
+def m2_amoblados_por_grupo(
+    conexion: Any, ahora: datetime | None = None
+) -> dict[tuple[str, str], list[Decimal]]:
+    """Los m² de los avisos AMOBLADO/temporada vigentes, por (microzona, tipología).
+
+    No son comparables — son el INDICADOR de contaminación del guardia D-022: el filtro
+    de amoblados lee solo el TÍTULO del aviso, y en mercados costeros/mineros el mismo
+    depto de temporada se publica a veces sin la palabra en el slug. Caso medido
+    (la-serena/puerta-del-mar, 11-oct-2026): en 74-110 m² conviven gemelos idénticos
+    con y sin marca (90 m²/$1.000.000 marcado y sin marcar), el $/m² SUBE con el tamaño
+    —al revés del mercado de arriendo pelado— y la ventana del 77 m² entregó $845k
+    donde el arriendo pelado real ronda $650-690k. Donde la fracción marcada del
+    vecindario es alta, los no marcados del mismo segmento son sospechosos por
+    asociación, y la asignación honesta es ND (§3.2).
+
+    Mismos filtros de población que `comparables_desde_duckdb` (activo, no sospechoso,
+    frescura §7.3) para que numerador y denominador del ratio hablen del mismo mercado.
+    """
+    filas = conexion.execute(
+        "SELECT microzona_id, tipologia, m2_utiles, fetched_at, source_url "
+        "FROM fact_arriendo_comp WHERE activo AND coalesce(sospechoso, FALSE) = FALSE"
+    ).fetchall()
+    limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
+    salida: dict[tuple[str, str], list[Decimal]] = {}
+    for mz, tip, m2, momento, url in filas:
+        if not (mz and tip and m2):
+            continue
+        if limite is not None and (momento is None or momento < limite):
+            continue
+        if no_comparable(url):
+            salida.setdefault((mz, tip), []).append(Decimal(str(m2)))
+    return salida
+
+
 def cargar_en_duckdb(conexion: Any, agregados: list[Agregado], ahora: datetime) -> int:
     """Reemplaza la tabla entera: es un derivado, no un histórico.
 

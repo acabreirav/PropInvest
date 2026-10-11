@@ -138,6 +138,12 @@ def test_render_html_es_autocontenido() -> None:
     assert "Crédito (80%)" in html and "UF 2.400" in html
     # una clave que no es del portal sale como codigo plano, sin link
     assert "<span class='codigo'>A</span>" in html
+    # D-022: con procedencia real, la ficha la muestra (alertas incluidas) en vez de la
+    # frase generica; sin ella (snapshots viejos), cae a la frase de siempre
+    ficha.arriendo_metodo = "vecinos ±15 m² de 77 (típico 76) · ⚠ $/m² sobre el de los más chicos"
+    html_m = inf.render_html("2026-09-03", "2026-08-27", [ficha], inf.CambiosTop(), [], [], "", [])
+    assert "vecinos ±15 m² de 77" in html_m and "⚠ $/m²" in html_m
+    assert "mediana de 12 arriendos reales en su microzona" not in html_m
 
 
 def test_render_html_codigo_ml_con_link_al_aviso() -> None:

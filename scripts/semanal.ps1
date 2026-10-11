@@ -51,6 +51,7 @@ try {
     Paso "1/6 recolectar fase 1" { uv run python -m flujocero.cli recolectar-portal --paginas 4 }
     Paso "1/6 recolectar fase 2" { uv run python -m flujocero.cli recolectar-portal --fase 2 --paginas 4 }
     Paso "1/6 recolectar fase 3" { uv run python -m flujocero.cli recolectar-portal --fase 3 --paginas 4 }
+    Paso "1/6 recolectar fase 4" { uv run python -m flujocero.cli recolectar-portal --fase 4 --paginas 4 }
 
     Paso "2/6 recoleccion dirigida de arriendo" { uv run python -m flujocero.cli recolectar-portal --dirigida 6 }
 

@@ -27,6 +27,7 @@ from flujocero.agg.arriendo import (
     MIN_COMPARABLES,
     comparables_desde_duckdb,
     etiqueta_rango,
+    m2_amoblados_por_grupo,
     percentil,
     serie_uf,
     uf_del_dia,
@@ -126,6 +127,21 @@ VENTANA_M2_MIN = D(3)
 # El m² TIPICO del pool no puede alejarse mas de esto del m² de la unidad (medido
 # 07-oct, caso parque-brasil): mas alla, los "vecinos" son otro producto.
 DESCENTRADO_MAX = D("0.20")
+# D-022 · guardia de mercado de temporada: si la fraccion de avisos MARCADOS
+# amoblado/temporada en la misma ventana (mz, tip, ±m²) alcanza este umbral, los no
+# marcados del segmento son sospechosos por asociacion (el filtro lee solo el titulo
+# y en balnearios/ciudades mineras el gemelo sin la palabra se cuela) y la asignacion
+# es ND, no un numero bonito. Medido 11-oct en la-serena/puerta-del-mar: la ventana
+# del 77 m² dio $845k (segmento vacacional) donde el arriendo pelado ronda $650-690k.
+# No se ensancha para "diluir" la contaminacion: la dilucion mete vecinos que no son
+# vecinos. Umbral conservador; sensibilidad pendiente de medir con la base real.
+TEMPORADA_MAX = D("0.30")
+# D-022 · tripwire de monotonia: el arriendo por m² CAE con el tamanio en el mercado
+# pelado. Una asignacion cuyo $/m² supera la mediana de los comparables MAS CHICOS de
+# su misma (microzona, tipologia) delata contaminacion que el guardia no alcanzo a
+# ver. No excluye: marca la procedencia, que ahora llega hasta la ficha del informe.
+MONOTONIA_MIN_CHICOS = 5
+MONOTONIA_FACTOR_CHICO = D("0.85")
 
 
 def emparejar(
@@ -173,6 +189,9 @@ def emparejar(
         if etiqueta_rango(c.m2_utiles, rangos) is None:
             continue
         vecinos.setdefault((c.microzona_id, c.tipologia), []).append((c.m2_utiles, c.arriendo_uf))
+    # D-022 · los m² de los avisos amoblado/temporada vigentes: el indicador de
+    # contaminacion del guardia. Misma poblacion y frescura que los comparables.
+    amoblados = m2_amoblados_por_grupo(conexion, ahora)
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
     riesgos: dict[str, Decimal] = {
@@ -204,6 +223,7 @@ def emparejar(
                 "precio_implausible",
                 "fuera_de_rango",
                 "sin_comparables",
+                "mercado_temporada",
                 "duplicado",
             ),
             0,
@@ -344,9 +364,11 @@ def emparejar(
         # benchmark de la comuna. Una ventana ancha es aceptable; una ventana cuyos
         # vecinos viven todos a un lado es el sesgo del tramo con otro nombre.
         grupo = vecinos.get((mz, tip), [])
+        amo_grupo = amoblados.get((mz, tip), [])
         arriendo: Decimal | None = None
         n = 0
         metodo = ""
+        temporada = False
         for factor in VENTANAS_M2_REL:
             ventana = max(VENTANA_M2_MIN, m2 * factor)
             pool = [(m2c, arr) for m2c, arr in grupo if abs(m2c - m2) <= ventana]
@@ -357,14 +379,35 @@ def emparejar(
                 # pool descentrado: seguir ensanchando puede equilibrarlo (aparecen
                 # vecinos del otro lado) — y si nunca se equilibra, el final es ND.
                 continue
+            # D-022 · guardia de temporada: la ventana que estamos por aceptar, ¿vive en
+            # un segmento donde una fraccion alta de los avisos es amoblado/temporada
+            # declarado? Entonces los "pelados" de ese segmento son gemelos sin la
+            # palabra en el titulo y la mediana es de OTRO negocio. ND, sin ensanchar:
+            # diluir la contaminacion mete vecinos que no son vecinos.
+            n_amo = sum(1 for ma in amo_grupo if abs(ma - m2) <= ventana)
+            if n_amo and D(n_amo) / (n_amo + len(pool)) >= TEMPORADA_MAX:
+                temporada = True
+                break
             arriendo, n = percentil([a for _, a in pool], D("0.5")), len(pool)
             metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f} (típico {m2_tipico:.0f})"
             break
+        if temporada:
+            r.descartes["mercado_temporada"] += 1
+            _anotar(r, comuna, "mercado_temporada")
+            continue
         if arriendo is None:
             # SIN caida a comuna ni al tramo, a proposito. Ver el docstring del modulo.
             r.descartes["sin_comparables"] += 1
             _anotar(r, comuna, "sin_comparables")
             continue
+        # D-022 · tripwire de monotonia: en el mercado pelado el $/m² cae con el tamanio.
+        # Si la asignacion supera el $/m² mediano de los comparables mas chicos de su
+        # misma (mz, tip), la procedencia lo dice — y la ficha del informe tambien.
+        ufm2_chicos = [arr / m2c for m2c, arr in grupo if m2c <= m2 * MONOTONIA_FACTOR_CHICO]
+        if len(ufm2_chicos) >= MONOTONIA_MIN_CHICOS and (arriendo / m2) > percentil(
+            ufm2_chicos, D("0.5")
+        ):
+            metodo += " · ⚠ $/m² sobre el de los más chicos de la microzona"
 
         firma = (mz, tip, m2, precio)
         if firma in vistos:
