@@ -298,13 +298,8 @@ class Servicio:
             capacidades = _capacidades(con)
             # ahora= activa el gate de frescura §7.3 — sin el, el dashboard servia
             # precios de mayo como si fueran de hoy (hallazgo del verificador, D-018)
-            emp = op.emparejar(
-                con,
-                p.crudo("ingresos.rangos_m2"),
-                alcance=desde_config(cargar("zonas")),
-                ahora=datetime.now(UTC),
-                temporada_max=p.d("calidad.contaminacion_temporada_max"),
-                balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
+            emp = op.emparejar_con_params(
+                con, p, alcance=desde_config(cargar("zonas")), ahora=datetime.now(UTC)
             )
         finally:
             con.close()
@@ -350,6 +345,25 @@ class Servicio:
             )
         if not capacidades["mapa"]:
             advertencias.append(capacidades["mapa_razon"])
+        # Auditoria 12-oct-2026: estos dos numeros existian en el JSON y ninguna UI los
+        # mostraba — con fase 4 recien abierta, el riesgo plano 0,5 y las celdas apagadas
+        # por los guardias tienen que verse, no inferirse.
+        if emp.riesgo_por_defecto:
+            advertencias.append(
+                f"{emp.riesgo_por_defecto} de {emp.riesgo_medido + emp.riesgo_por_defecto} unidades "
+                "rankean con riesgo de microzona POR DEFECTO (0,5): el puente censal no cubre "
+                "su zona (las comunas de fase 4 necesitan los shapefiles R05/R06 del INE — T-954)."
+            )
+        guardias = {
+            "mercado de temporada": emp.descartes.get("mercado_temporada", 0),
+            "ventana desbalanceada": emp.descartes.get("ventana_desbalanceada", 0),
+        }
+        if any(guardias.values()):
+            advertencias.append(
+                "Arriendo ND por guardias de calidad (D-022/D-023): "
+                + " · ".join(f"{k}: {v}" for k, v in guardias.items() if v)
+                + ". Antes ND que una mediana contaminada (§3.2)."
+            )
 
         cabeza = vivos[:15]
         chicas = [u for u, _ in cabeza if u.m2_utiles < 35]

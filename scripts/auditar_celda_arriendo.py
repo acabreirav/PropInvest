@@ -92,14 +92,17 @@ for mz, tip, m2, clp, uf, ggcc, activo, sosp, pub_desde, visto, fetched, url, ci
         descartados += 1
 
 print(
-    f"\n== medianas por celda (tipologia × tramo m²) — {usados} usados, {descartados} fuera =="
-    "\n   (crudas, SIN colapsar relistings ni filtrar frescura: el ranking si hace ambas)"
+    f"\n== medianas por tramo FIJO (solo orientacion) — {usados} usados, {descartados} fuera =="
+    "\n   OJO: el ranking NO usa estos tramos desde el 06-sep (D-020): asigna por ventana"
+    "\n   de vecinos ±20/30/40% del m² de cada unidad, con colapso de relistings,"
+    "\n   frescura, guardia de temporada y balance. Estas medianas son crudas, para"
+    "\n   mirar el terreno — la vara real de una unidad la da `evaluar_aviso.py <MLC>`."
 )
 for (tip, tramo), montos in sorted(celdas.items()):
     med = statistics.median(montos)
     print(
         f"  {tip:<6}{tramo:<7} n={len(montos):<4} mediana=${med:,.0f}".replace(",", ".")
-        + ("   <- n<8: la celda NO rankea" if len(montos) < 8 else "")
+        + ("   <- pocos avisos: tramo poco confiable" if len(montos) < 8 else "")
     )
 
 activos = sum(1 for f in filas if f[6])

@@ -1823,6 +1823,10 @@ contexto: D-022 decision 3 — el alcance crecio a vina-del-mar, valparaiso, con
   de celdas apaga el guardia TEMPORADA_MAX y si el umbral 0.30 esta bien puesto.
 criterio_de_aceptacion:
   - probar-comunas --fase 4 verde para las 7 comunas (o slugs corregidos en zonas.yml)
+  - shapefiles INE shp-apc2023-r05.zip y r06.zip en data/incoming/censo2024/ +
+    ingerir-censo + puente-censo (sin eso toda la fase 4 rankea con riesgo 0.5 plano;
+    OJO 8.4: el riesgo se normaliza min-max sobre todo el alcance, sumar regiones
+    re-escala el riesgo de TODAS las microzonas)
   - benchmark UF/m2 y arriendo para Rancagua/Machali y Gran Valparaiso con fuente citada
   - medicion de celdas apagadas por mercado_temporada por comuna, pegada al RUNLOG
 gate: make gates
@@ -1859,4 +1863,23 @@ criterio_de_aceptacion:
   - medicion de cada candidato sobre la base real (cuantas unidades cambian, cuantas
     caen a ND, efecto en el top) pegada al RUNLOG
   - decision 8.4 con el usuario y verificador 7.6 sobre el elegido
+gate: make gates
+
+## T-956 · Detector de parser roto: comparar la tasa por documento, no filas insertadas
+estado: pendiente
+agente: colector
+fase: 2
+contexto: auditoria 12-oct-2026 — la linea base es `filas_insertadas` (solo filas
+  nuevas/versionadas: en regimen estable es chica y el detector nunca dispara) y el
+  valor actual es `len(tarjetas)` parseadas: peras contra manzanas. Tras la primera
+  carga de una fase nueva, la base inflada bloqueaba la corrida siguiente con un
+  "cayo X%" falso (Exit 4). Stopgap aplicado: linea base separada por fase
+  (`portal_busqueda:faseN`). CMF tiene el mismo defecto (muestra de <=5 docs vs total
+  cargado). Ademas `filas_corrida_anterior=None` deja `delta_vs_corrida_anterior`
+  siempre NULL, y recolectar-wpjson/metro/barrios no escriben run_log.
+criterio_de_aceptacion:
+  - columna `filas_parseadas` en run_log (ALTER ... IF NOT EXISTS) y comparacion por
+    tasa filas_parseadas/docs_recolectados, independiente de fase, comunas y paginas
+  - CMF compara magnitudes homogeneas
+  - wpjson escribe run_log (minimo docs y filas)
 gate: make gates

@@ -3085,3 +3085,29 @@ Decision: guardias quedan (nunca inflan), medicion con
 scripts/medir_guardias_ventana.py sobre la base real decide el arreglo definitivo
 (incluido el candidato 3 que D-023 descarto prematuramente). Test nuevo fija que los
 defaults del codigo calcen con params.yml.
+
+## 12-oct-2026 (3) · Ola de cimientos (auditoria de codigo, aprobada por el usuario)
+
+7 arreglos chicos + 1 stopgap, todos de la auditoria fuera del numerador:
+  1. auditar_celda_arriendo: muere el "n<8: la celda NO rankea" por tramo (criterio
+     muerto desde D-020) — las medianas de tramo quedan rotuladas como orientacion.
+  2. alcance.py: los `except Exception` anchos pasan a `ErrorDeConfig` — una entrada
+     mal formada en zonas.yml ya no puede vaciar las exclusiones en silencio.
+  3. `gates` alimenta los checks SOLO con versiones vigentes (valid_to IS NULL):
+     la frescura ya puede dar OK y cobertura/outliers miden presente, no historia.
+  4. fuentes.yml: planok_cotizador deduplicado (quedo enabled:false, ADR 010),
+     inmobiliarias_wpjson duplicada eliminada, ine_censo_manzanas -> ine_censo2024.
+  5. Dashboard: la ficha muestra el arriendo de equilibrio REAL (biseccion) en vez de
+     la forma cerrada que subestima; advertencias nuevas con riesgo-por-defecto y
+     celdas apagadas por guardias (mercado_temporada / ventana_desbalanceada).
+  6. `emparejar_con_params`: la llamada canonica unica (estaba copiada en 9 sitios).
+  7. `sensibilidad` corre el emparejamiento POR configuracion: variar calidad.* ya
+     mide de verdad (antes imprimia "0 movidas · OK 8.4" sin medir nada); los
+     prefijos riesgo_microzona./catalizador. se rechazan con instruccion, no un
+     verde falso.
+  8. Stopgap: linea base del detector de parser roto separada por fase (el arreglo
+     real es T-956, creada).
+Pendientes de DATOS del usuario: shapefiles INE r05/r06 para que fase 4 tenga riesgo
+medido (hoy 0.5 plano) — anotado en T-954.
+Sin verificador 7.6 esta vez: la ola no toca motor ni score (plomeria, visualizacion
+y poblacion de gates); la suite completa es el gate.

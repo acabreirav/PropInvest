@@ -524,7 +524,9 @@ async function abrirFicha(key) {
     ["Pie aplicado", celda(f.pie_efectivo, (v) => pct(v, 0))],
     ["TIR real 10a", celda(f.tir_real_10a, (v) => pct(v, 2))],
     ["DSCR", celda(f.dscr, (v) => num(v, 2))],
-    ["Arriendo de equilibrio", celda(f.arriendo_equilibrio_uf, (v) => num(v, 2) + " UF")],
+    // el REAL (bisección sobre el modelo completo) cuando viene; la forma cerrada
+    // subestima porque 4 líneas de opex crecen con el arriendo (auditoría 12-oct)
+    ["Arriendo de equilibrio", celda(f.arriendo_equilibrio_real_uf || f.arriendo_equilibrio_uf, (v) => num(v, 2) + " UF")],
     ["Tasa aplicada", celda(f.tasa_aplicada, (v) => pct(v, 2))],
   ];
 

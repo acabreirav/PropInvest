@@ -154,6 +154,29 @@ MONOTONIA_FACTOR_CHICO = D("0.85")
 BALANCE_LADO_MAX = D("0.70")
 
 
+def emparejar_con_params(
+    conexion: Any,
+    params: Any,
+    alcance: Alcance | None = None,
+    ahora: datetime | None = None,
+) -> Emparejamiento:
+    """La llamada canónica: `emparejar` con TODOS los umbrales de calidad de params.yml.
+
+    La versión de 6 argumentos estaba copiada en 9 sitios y el verificador de D-023
+    advirtió lo inevitable: el próximo parámetro de guardia se olvidaría en alguno
+    (auditoría 12-oct-2026). Quien necesite variar un umbral (sensibilidad, scripts de
+    medición) llama a `emparejar` directo; todo lo demás pasa por acá.
+    """
+    return emparejar(
+        conexion,
+        params.crudo("ingresos.rangos_m2"),
+        alcance=alcance,
+        ahora=ahora,
+        temporada_max=params.d("calidad.contaminacion_temporada_max"),
+        balance_lado_max=params.d("calidad.ventana_balance_lado_max"),
+    )
+
+
 def emparejar(
     conexion: Any,
     rangos: list[list[int]],

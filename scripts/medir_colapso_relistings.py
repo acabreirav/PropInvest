@@ -41,14 +41,7 @@ def correr(colapsar: bool):
         c, a, colapsar_relistings=colapsar
     )
     try:
-        r = op.emparejar(
-            con,
-            rangos,
-            alcance=alcance,
-            ahora=ahora,
-            temporada_max=p.d("calidad.contaminacion_temporada_max"),
-            balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
-        )
+        r = op.emparejar_con_params(con, p, alcance=alcance, ahora=ahora)
     finally:
         op.comparables_desde_duckdb = original
     return {u.unidad_key: u for u in r.unidades}, r

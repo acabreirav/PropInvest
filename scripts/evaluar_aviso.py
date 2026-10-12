@@ -76,14 +76,7 @@ if len(versiones) > 1:
     print("      (una baja de precio es señal de compra, §11)")
 
 # --------------------------------------------------- el pipeline completo, no un atajo
-r = op.emparejar(
-    con,
-    p.crudo("ingresos.rangos_m2"),
-    alcance=alcance,
-    ahora=ahora,
-    temporada_max=p.d("calidad.contaminacion_temporada_max"),
-    balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
-)
+r = op.emparejar_con_params(con, p, alcance=alcance, ahora=ahora)
 evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
 vivos = sorted(
     ((u, e) for u, e in zip(r.unidades, evals) if not e.excluido), key=lambda x: -x[1].score

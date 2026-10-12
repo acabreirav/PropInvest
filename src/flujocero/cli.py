@@ -790,7 +790,11 @@ def recolectar_portal(
     # Una corrida dirigida es CHICA por diseño (solo arriendo, solo donde falta): compararla
     # contra la completa anterior disparaba el detector de parser roto del §7.1 con un
     # "cayo 65%" que no era un parser roto. Cada modo compara contra su propia historia.
-    id_bitacora = f"{col.id}:dirigida" if dirigida else col.id
+    # Y cada FASE tambien (12-oct-2026, stopgap de T-956): la primera carga de una fase
+    # nueva lo inserta todo, infla la linea base compartida, y la corrida siguiente de
+    # cualquier fase abortaba con un "cayo X%" falso. El arreglo real —comparar la tasa
+    # filas_parseadas/doc, que no depende de fase ni paginas— es T-956.
+    id_bitacora = f"{col.id}:dirigida" if dirigida else f"{col.id}:fase{fase}"
     corrida = bitacora.abrir(id_bitacora)
     try:
         anterior = bitacora.filas_de_la_ultima_corrida_exitosa(con, id_bitacora)
@@ -1102,13 +1106,8 @@ def oportunidades(
     p, inv = cargar("params"), cargar("inversionista")
     con = duckdb.connect(str(db.crear()))
     try:
-        r = op.emparejar(
-            con,
-            p.crudo("ingresos.rangos_m2"),
-            alcance=desde_config(cargar("zonas")),
-            ahora=datetime.now(UTC),
-            temporada_max=p.d("calidad.contaminacion_temporada_max"),
-            balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
+        r = op.emparejar_con_params(
+            con, p, alcance=desde_config(cargar("zonas")), ahora=datetime.now(UTC)
         )
     finally:
         con.close()
@@ -1674,14 +1673,7 @@ def informe_semanal(
     alcance = desde_config(cargar("zonas"))
     con = duckdb.connect(str(db.crear()))
     try:
-        r = op.emparejar(
-            con,
-            p.crudo("ingresos.rangos_m2"),
-            alcance=alcance,
-            ahora=ahora,
-            temporada_max=p.d("calidad.contaminacion_temporada_max"),
-            balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
-        )
+        r = op.emparejar_con_params(con, p, alcance=alcance, ahora=ahora)
         evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
         vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
         vivos.sort(key=lambda x: -x[1].score)
@@ -2585,10 +2577,18 @@ def gates() -> None:
 
     con = duckdb.connect(str(ruta))
     try:
+        # Solo las versiones VIGENTES (auditoria 12-oct-2026): los gates median la
+        # poblacion que alimenta al ranking, y el SCD guarda ademas todas las versiones
+        # cerradas — viejas POR DEFINICION. Con ellas adentro, la frescura jamas podia
+        # dar OK (gates siempre "PARCIAL", alerta permanente que nadie leia) y cobertura,
+        # outliers e implausibles median historia en vez de presente. La historia se
+        # audita aparte (delta, SCD); el gate mide lo vigente.
         unidades = (
             [
                 dict(zip([d[0] for d in con.description], fila, strict=True))
-                for fila in con.execute("SELECT * FROM fact_unidad_venta").fetchall()
+                for fila in con.execute(
+                    "SELECT * FROM fact_unidad_venta WHERE valid_to IS NULL"
+                ).fetchall()
             ]
             if con.execute("SELECT count(*) FROM fact_unidad_venta").fetchone()[0]
             else []
@@ -3347,15 +3347,7 @@ def embudo(
     alc = desde_config(cargar("zonas"))
     con = duckdb.connect(str(db.crear()))
     try:
-        _p = cargar("params")
-        r = op.emparejar(
-            con,
-            _p.crudo("ingresos.rangos_m2"),
-            alcance=alc,
-            ahora=datetime.now(UTC),
-            temporada_max=_p.d("calidad.contaminacion_temporada_max"),
-            balance_lado_max=_p.d("calidad.ventana_balance_lado_max"),
-        )
+        r = op.emparejar_con_params(con, cargar("params"), alcance=alc, ahora=datetime.now(UTC))
     finally:
         con.close()
 
@@ -3522,28 +3514,35 @@ def sensibilidad(
         typer.echo(f"\n  {len(aplicados)} supuestos cambian A LA VEZ. El efecto es del conjunto.")
     typer.echo("")
 
+    # El emparejamiento corre POR configuracion (auditoria 12-oct-2026): con un solo
+    # emparejar fijo en base_cfg, variar `calidad.*` (los guardias de D-022/D-023)
+    # imprimia "0 movidas - OK 8.4" sin haber medido nada. Los umbrales de riesgo y
+    # catalizador siguen fuera de alcance de este comando: viven precalculados en
+    # `agg_riesgo_microzona` (puente-censo) y variarlos aqui seria otro verde falso.
+    for parametro, _a, _v in aplicados:
+        if parametro.startswith(("riesgo_microzona.", "catalizador.")):
+            typer.echo(
+                f"  ✗ {parametro}: este supuesto se consume en `puente-censo`, no en la"
+                "\n    evaluacion — variarlo aqui no mediria nada. Re-corre el puente con"
+                "\n    el valor propuesto y compara los dos rankings completos."
+            )
+            raise typer.Exit(2)
+    alcance_s = desde_config(cargar("zonas"))
+    ahora_s = datetime.now(UTC)
     con = duckdb.connect(str(db.crear()))
+    salidas = {}
     try:
-        r = op.emparejar(
-            con,
-            base_cfg.crudo("ingresos.rangos_m2"),
-            alcance=desde_config(cargar("zonas")),
-            ahora=datetime.now(UTC),
-            temporada_max=base_cfg.d("calidad.contaminacion_temporada_max"),
-            balance_lado_max=base_cfg.d("calidad.ventana_balance_lado_max"),
-        )
+        for etiqueta, cfg in (("hoy", base_cfg), ("propuesto", prop_cfg)):
+            r = op.emparejar_con_params(con, cfg, alcance=alcance_s, ahora=ahora_s)
+            if etiqueta == "hoy" and not r.unidades:
+                typer.echo("  No hay unidades rankeables: no hay nada que medir.")
+                raise typer.Exit(1)
+            evals = evaluar_universo(r.unidades, escenario_base(cfg, inv), cfg, inv)
+            vivos = [ev for ev in evals if not ev.excluido]
+            orden = [ev.unidad_key for ev in sorted(vivos, key=lambda x: -x.score)]
+            salidas[etiqueta] = (evals, vivos, orden)
     finally:
         con.close()
-    if not r.unidades:
-        typer.echo("  No hay unidades rankeables: no hay nada que medir.")
-        raise typer.Exit(1)
-
-    salidas = {}
-    for etiqueta, cfg in (("hoy", base_cfg), ("propuesto", prop_cfg)):
-        evals = evaluar_universo(r.unidades, escenario_base(cfg, inv), cfg, inv)
-        vivos = [ev for ev in evals if not ev.excluido]
-        orden = [ev.unidad_key for ev in sorted(vivos, key=lambda x: -x.score)]
-        salidas[etiqueta] = (evals, vivos, orden)
 
     for etiqueta in ("hoy", "propuesto"):
         evals, vivos, _ = salidas[etiqueta]

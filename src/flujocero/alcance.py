@@ -46,6 +46,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from flujocero.config import ErrorDeConfig
+
 FASES = ("fase_1", "fase_2", "fase_3", "fase_4")
 
 
@@ -126,10 +128,14 @@ def desde_config(zonas: Any) -> Alcance:
     fase_de: dict[str, int] = {}
     region_de: dict[str, str] = {}
 
+    # Solo `ErrorDeConfig` (clave ausente) es benigno. El `except Exception` ancho que
+    # habia aqui era el patron prohibido del §11: una entrada mal formada en zonas.yml
+    # vaciaba fases o exclusiones EN SILENCIO — y una exclusion vaciada devuelve Las
+    # Condes al ranking sin que nadie lo decida (auditoria 12-oct-2026).
     for numero, clave in enumerate(FASES, start=1):
         try:
             entradas = zonas.crudo(clave)
-        except Exception:  # noqa: BLE001 — una fase ausente es valida, no un error
+        except ErrorDeConfig:  # una fase ausente es valida, no un error
             continue
         for entrada in entradas or []:
             propias = _comunas_de(entrada)
@@ -150,12 +156,13 @@ def desde_config(zonas: Any) -> Alcance:
 
     excluidas: dict[str, str] = {}
     try:
-        for entrada in zonas.crudo("excluidas") or []:
-            zona = entrada.get("zona")
-            if zona:
-                excluidas[zona] = entrada.get("razon", "sin razon registrada")
-    except Exception:  # noqa: BLE001 — sin bloque `excluidas` no hay nada que excluir
-        pass
+        entradas_excluidas = zonas.crudo("excluidas") or []
+    except ErrorDeConfig:  # sin bloque `excluidas` no hay nada que excluir
+        entradas_excluidas = []
+    for entrada in entradas_excluidas:
+        zona = entrada.get("zona")
+        if zona:
+            excluidas[zona] = entrada.get("razon", "sin razon registrada")
 
     # Una comuna en las dos listas es una contradiccion del YAML, no algo que resolver en
     # silencio: gana la exclusion, que es el lado conservador, y queda visible en el conteo.

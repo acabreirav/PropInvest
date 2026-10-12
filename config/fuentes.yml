@@ -208,25 +208,6 @@ fuentes:
       excluye como `evidence_level: E`, y usarlo como comparable sesgaría la mediana de
       arriendo hacia abajo de forma sistemática — justo en el numerador del yield.
 
-  - id: planok_cotizador
-    capa: 3
-    legal_tier: json_publico
-    enabled: true
-    base: "https://cotizador.saladeventasdigital.com/cotizador/"
-    descubrimiento: "enumerar key={slug_inmobiliaria} x id_subagrupaciones={etapa}"
-    produce: "precio POR UNIDAD + estacionamiento + bodega"
-    a_verificar: "método y payload de datos.php; universo de valores key"
-    cadencia: semanal
-
-  - id: inmobiliarias_wpjson
-    capa: 3
-    legal_tier: json_publico
-    enabled: true
-    procedimiento: "GET /wp-json/wp/v2/types -> CPT proyecto -> ?per_page=100&_embed -> si acf vacío, JSON-LD"
-    dominios_verificados: [socovesa.cl, fundamenta.cl, exxacon.cl, rvc.cl, py.cl, imagina.cl]
-    dominios_por_verificar: [almagro.cl, pazcorp.com, isinergia.cl, simonetti.cl, ecomac.cl, ictinos.cl, hogares.cl, aconcagua.cl, manquehue.cl]
-    cadencia: semanal
-
   - id: pabellon
     capa: 3
     legal_tier: html_permitido
@@ -259,7 +240,7 @@ fuentes:
     layout: "docs/01-fuentes.md §D — BRORGA2441N_NAC / BRORGA2441NL_NAC, TAB, sin headers"
     cadencia: anual
 
-  - id: ine_censo_manzanas
+  - id: ine_censo2024   # antes 'ine_censo_manzanas': no calzaba con el SOURCE_ID real
     capa: 1
     legal_tier: json_publico
     enabled: false
