@@ -1826,3 +1826,29 @@ criterio_de_aceptacion:
   - benchmark UF/m2 y arriendo para Rancagua/Machali y Gran Valparaiso con fuente citada
   - medicion de celdas apagadas por mercado_temporada por comuna, pegada al RUNLOG
 gate: make gates
+
+## T-955 · Ventana ancha al borde del centrado con pool bimodal de tamanio
+estado: pendiente
+agente: motor-financiero
+fase: 2
+contexto: auditoria del peor caso de la medicion 8.4 (12-oct-2026, MLC-4510753650,
+  san-pedro-de-la-paz/huertos-familiares 3D2B 75 m²). El colapso D-021 dejo la
+  ventana ±20% en n=7 — UNO bajo el umbral — y el sistema salto a ±40% (n=13),
+  donde CINCO comps de 105 m² (+40% de tamanio) empujan la mediana a $755k cuando
+  los vecinos de 70-76 m² arriendan $545-676k (~$600-650k honesto para 75 m²):
+  +20% de sobreestimacion. El guardia de descentrado NO salta (tipico 87 = 16% < 20%,
+  justo al borde) y el tripwire de monotonia tampoco (solo 4 comps bajo 0,85x,
+  minimo actual 5). La ventana angosta con n=7 era mas honesta que la ancha con 13.
+  El trio +23,8% de la medicion es exactamente esto, y quedo en el puesto ~548:
+  no fabrico oportunidad falsa en el top, pero el mecanismo existe.
+candidatos_a_medir (8.4: medir ANTES de elegir):
+  - bajar MONOTONIA_MIN_CHICOS de 5 a 3 (habria marcado este caso)
+  - exigir balance de lados en la ventana ancha (no solo tipico a ±20%: tambien
+    que ningun lado aporte >60-70% del pool)
+  - preferir ND cuando la ventana angosta queda a 1 comp del umbral y la ancha
+    mueve la mediana >15% respecto de la mediana angosta
+criterio_de_aceptacion:
+  - medicion de cada candidato sobre la base real (cuantas unidades cambian, cuantas
+    caen a ND, efecto en el top) pegada al RUNLOG
+  - decision 8.4 con el usuario y verificador 7.6 sobre el elegido
+gate: make gates
