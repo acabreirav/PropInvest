@@ -3013,3 +3013,36 @@ conteo para saturación; multifamily exento; `cli comparables` y
 `medir_colapso_relistings.py` sobre la base real (el contenedor no tiene datos) y
 pegar el resultado; T-953 (poblar edificio_multifamily) y T-946 (dirección) siguen
 abiertas como mitigación estructural.
+
+## 11-oct-2026 · D-022 guardia de temporada + fase 4 — verificador §7.6 acatado
+
+**Origen:** el usuario cazo a ojo la sobreestimacion del #1 de la vista 3.000-8.000
+(la-serena/puerta-del-mar 77 m², $845k asignado vs ~$650-690k pelado real). Mecanismo:
+amoblados de temporada sin la palabra en el titulo, delatados por el $/m² SUBIENDO con
+el tamanio y por gemelos identicos con y sin marca en la auditoria.
+
+**Verificador §7.6 — 4 materiales, todos acatados o decididos:**
+1. M1 (material): el guardia contaba marcados pero el gemelo EXACTO sin marca entraba
+   igual bajo el umbral. → descarte determinista: firma (mz,tip,m²,precio) identica a
+   un amoblado vigente = `gemelo_de_amoblado`, contado. Exencion multifamily (D-021).
+2. M2 (material): el tripwire de monotonia avisa pero la unidad rankea igual. →
+   DECISION ABIERTA con el usuario (§8.4): ¿marca basta, o cuarentena/exclusion?
+   Por defecto queda como marca visible en la ficha.
+3. M3 (material): CLAUDE.md §10 contradecia el alcance nuevo y los campos alerta/
+   riesgo de zonas.yml no los lee ningun codigo. → §10 actualizado con la decision
+   del inversionista; el riesgo-por-defecto 0.5 en V/VI sin puente censal queda
+   anotado en T-954 (el patron §13.3 "Cerro Navia" es el riesgo concreto en Valpo).
+4. M4 (material): TEMPORADA_MAX=0.30 era un E sin entrada en params.yml (§3.2). →
+   `calidad.contaminacion_temporada_max` {v:0.30, rango:[0.20,0.50]} con plumbing a
+   todos los llamadores de emparejar; sensibilidad pendiente en T-954.
+Menores acatados: H5 (numerador ahora colapsa relistings de amoblados y excluye >140;
+el umbral efectivo era ~21% por la asimetria), H6 (el guardia se evalua en CADA ancho
+probado, con piso de 2 marcados — la ventana angosta contaminada ya no se diluye
+ensanchando), N14 (textos viejos de slugs). H7 quedo anotado en T-950 (la oferta
+nueva "al desde" sigue sin ventana ni guardia; el embudo y faltantes divergen). H8:
+semanal.ps1 recolecta fase 4 — probar-comunas --fase 4 sigue siendo el primer comando.
+N9-N11 (sospechosos fuera del numerador, estacionalidad, celdas n<8 reportadas como
+sin_comparables) quedan como limitaciones declaradas del guardia.
+
+**Pendiente:** medicion T-954 sobre base real (celdas apagadas por comuna, umbral) y
+la decision M2 con el usuario.

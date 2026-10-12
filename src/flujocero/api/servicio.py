@@ -303,6 +303,7 @@ class Servicio:
                 p.crudo("ingresos.rangos_m2"),
                 alcance=desde_config(cargar("zonas")),
                 ahora=datetime.now(UTC),
+                temporada_max=p.d("calidad.contaminacion_temporada_max"),
             )
         finally:
             con.close()

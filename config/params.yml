@@ -279,3 +279,13 @@ indicadores_objetivo:
   cap_rate_neto_excelente: 0.060
   dscr_esperado_90ltv: {v: 0.70, evidence: E, rango: [0.55, 0.80], nota: "flujo negativo es lo normal en Chile"}
   horizontes_tir_anios: [10, 20, 30]
+
+# Reglas de CALIDAD del numerador con supuesto numerico (§3.2: un E sin entrada aqui
+# es un bug — verificador D-022 M4). Los umbrales estructurales sin dimension de
+# mercado (DESCENTRADO_MAX, ventanas de m²) siguen en el codigo.
+calidad:
+  # D-022: fraccion de avisos MARCADOS amoblado/temporada en la ventana de vecinos
+  # sobre la cual los no marcados del segmento se consideran gemelos sin la palabra
+  # en el titulo y la asignacion es ND. Sensibilidad PENDIENTE de medir sobre la base
+  # real (T-954): cuantas celdas apaga por comuna en cada punta del rango.
+  contaminacion_temporada_max: {v: 0.30, evidence: E, rango: [0.20, 0.50], nota: "medir con T-954; verificador D-022 estimo que sin la simetria H5 el umbral efectivo era ~0.21"}

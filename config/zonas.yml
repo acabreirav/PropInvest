@@ -102,10 +102,10 @@ fase_3:
 # RM + V región + VI región; las fases 3 se siguen recolectando como contraste.
 #
 # ANTES DE RECOLECTAR: `uv run python -m flujocero.cli probar-comunas --fase 4`.
-# Los region_slug de abajo NO están verificados (el contenedor no tiene salida a la
-# red chilena): un slug malo responde 200 con cero resultados y la corrida "funciona"
-# sin traer nada — exactamente el modo de falla documentado arriba para fase 3.
-# Candidatos probables si "ohiggins" falla: "libertador-b-ohiggins", "o-higgins".
+# "bernardo-ohiggins" fue confirmado por el usuario en el portal (11-oct-2026);
+# "valparaiso" sigue sin confirmar, y probar-comunas ademas verifica que el filtro
+# POR COMUNA funcione (el caso biobio respondia 200 ignorandolo — mismas 47 tarjetas
+# para 5 comunas; un slug malo responde 200 con cero resultados).
 #
 # Viña y Valparaíso salen de `excluidas` POR DECISIÓN DEL INVERSIONISTA y entran con
 # sus alertas originales intactas. Ojo adicional D-022: la V región costera es mercado

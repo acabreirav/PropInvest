@@ -1755,6 +1755,11 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-950 · La oferta nueva del informe sigue tomando arriendo de tramo
+nota_11oct2026: agravada por D-022 (verificador H7) — `nuevas_evaluadas_al_desde` no
+  pasa por la ventana de vecinos NI por el guardia de temporada: en fase 3/4 costeras
+  va a mostrar arriendos de temporada que el ranking de usadas ya rechaza. Y
+  `faltantes.diagnosticar` cuenta como rankeable lo que D-022 deja en ND: el embudo
+  y el diagnostico dicen cosas distintas hasta unificar criterio.
 estado: pendiente
 agente: dashboard
 fase: 2
@@ -1810,8 +1815,9 @@ agente: fuente-scout
 fase: 4
 contexto: D-022 decision 3 — el alcance crecio a vina-del-mar, valparaiso, concon,
   quilpue, villa-alemana, rancagua y machali por cercania (decision del inversionista
-  11-oct-2026). Tres deudas nacen con el: (1) los region_slug "valparaiso" y "ohiggins"
-  no estan verificados contra el portal (modo de falla: 200 con cero resultados);
+  11-oct-2026). Tres deudas nacen con el: (1) "bernardo-ohiggins" quedo confirmado por
+  el usuario en el portal; falta "valparaiso" y que el filtro POR COMUNA funcione en
+  ambas regiones (modo de falla biobio: 200 ignorando la comuna);
   (2) la VI region no tiene benchmark en docs/00-hallazgos.md — el ancla externa del
   gate 7.3 no la cubre; (3) la V costera es mercado de temporada: medir que fraccion
   de celdas apaga el guardia TEMPORADA_MAX y si el umbral 0.30 esta bien puesto.

@@ -608,6 +608,65 @@ def test_poca_contaminacion_de_temporada_no_apaga_la_ventana(con) -> None:
     assert r.descartes["mercado_temporada"] == 0
 
 
+def test_el_gemelo_sin_marca_de_un_amoblado_no_cuenta_como_pelado(con) -> None:
+    """Verificador D-022 M1: un aviso 'pelado' con la MISMA firma (mz, tip, m², precio)
+    que uno marcado amoblado es el mismo aviso por otro corredor que si puso la palabra
+    en el titulo. Sin este descarte, el gemelo entraba a la mediana bajo el umbral del
+    guardia (el caso exacto del ADR: 90 m²/$1.000.000 marcado y sin marcar)."""
+    for i in range(5):  # pelados reales, mas chicos y baratos
+        _comp_arr(con, f"P{i}", 70 + i, "16", tip="3D2B")
+    # un aviso de temporada con su gemelo sin marca: misma firma exacta
+    _comp_arr(con, "AM", 85, "22", tip="3D2B", url="depto-amoblado-vista-mar")
+    _comp_arr(con, "GEMELO", 85, "22", tip="3D2B")
+    # y 4 "pelados" caros mas, para que el pool llegue a n>=8 si el gemelo contara
+    for i in range(4):
+        _comp_arr(con, f"G{i}", 80 + i, "17", tip="3D2B")
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    _o, n, arr = r.procedencia_arriendo["U1"]
+    assert n == 9, "5 pelados + 4 caros; el gemelo quedo fuera"
+    assert arr == D("16"), "sin el gemelo de 22 UF la mediana es la de los pelados"
+
+
+def test_el_numerador_del_guardia_colapsa_relistings_de_amoblados(con) -> None:
+    """Verificador D-022 H5: un amoblado publicado por 3 corredores contaba triple
+    contra un pool ya colapsado y el umbral efectivo bajaba a ~21% — ND falsos en
+    celdas sanas. El numerador colapsa por la misma firma D-021."""
+    for i in range(8):
+        _comp_arr(con, f"P{i}", 70 + i * 2, "16", tip="3D2B")
+    # UN amoblado real publicado 3 veces (misma firma): cuenta 1, no 3
+    for cid in ("A1", "A2", "A3"):
+        _comp_arr(con, cid, 80, "25", tip="3D2B", url=f"amoblado-{cid}")
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    # 1/(1+8) = 11% < 30% -> rankea; sin el colapso del numerador era 3/11 = 27%... y
+    # con un segundo amoblado repetido se pasaba del umbral con UNA sola unidad real
+    assert len(r.unidades) == 1
+    assert r.descartes["mercado_temporada"] == 0
+
+
+def test_la_ventana_angosta_contaminada_no_se_diluye_ensanchando(con) -> None:
+    """Verificador D-022 H6: el guardia se evalua en CADA ancho probado. Antes, una
+    ventana ±20% contaminada pero con n<8 hacia `continue` y la ±30% la diluia con
+    vecinos que no son vecinos."""
+    # nucleo ±20% de 50 (±10): 4 pelados + 4 amoblados distintos = 50% contaminado
+    for i in range(4):
+        _comp_arr(con, f"P{i}", 46 + i * 2, "20", tip="3D2B")
+    for i in range(4):
+        _comp_arr(con, f"A{i}", 47 + i * 2, "24", tip="3D2B", url=f"amoblado-playa-{i}")
+    # y 8 pelados lejos (±30%: 35-65), que antes diluian el ratio a 4/12
+    for i in range(8):
+        _comp_arr(con, f"L{i}", 36 + i, "13", tip="3D2B")
+    unidad(con, tip="3D2B", m2=50, precio="2500")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 0
+    assert r.descartes["mercado_temporada"] == 1
+
+
 def test_el_tripwire_de_monotonia_marca_el_m2_invertido(con) -> None:
     """D-022: el $/m² CAE con el tamanio en el mercado pelado. Una asignacion que supera
     el $/m² mediano de los comparables mas chicos delata contaminacion que el guardia no

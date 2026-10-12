@@ -237,14 +237,15 @@ def test_se_filtra_PRIMERO_y_se_colapsa_despues(con=None) -> None:
 
 
 def test_un_representante_amoblado_no_arrastra_a_la_copia_pelada() -> None:
-    """Caso C del verificador: si el avistamiento MAS RECIENTE del grupo es amoblado,
-    colapsar antes de filtrar mataba a la unidad entera. Filtrando primero, la copia
-    pelada sobrevive sola."""
+    """Caso C del verificador de D-021: si el avistamiento MAS RECIENTE del grupo es
+    amoblado, colapsar antes de filtrar mataba a la unidad entera. Filtrando primero,
+    la copia pelada sobrevive sola. OJO: a precio DISTINTO — a precio identico seria
+    un gemelo de amoblado y el descarte M1 de D-022 es el comportamiento correcto."""
     con = _con_uf_mayo()
     con.execute(
         "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
         "arriendo_clp, activo, fetched_at, source_url) "
-        "VALUES ('MLC-am', 'x/y', '3D2B', 71, 850000, TRUE, ?, "
+        "VALUES ('MLC-am', 'x/y', '3D2B', 71, 880000, TRUE, ?, "
         "'https://p.cl/MLC-am-depto-amoblado-full')",
         (datetime(2026, 5, 5, tzinfo=UTC),),
     )
@@ -253,6 +254,25 @@ def test_un_representante_amoblado_no_arrastra_a_la_copia_pelada() -> None:
     assert len(comparables) == 1
     assert descartes["amoblado"] == 1
     assert descartes["relisting_colapsado"] == 0
+    con.close()
+
+
+def test_el_gemelo_exacto_de_un_amoblado_se_descarta_contado() -> None:
+    """D-022 M1: misma firma (mz, tip, m², precio) que un aviso marcado = el mismo
+    aviso por otro corredor sin la palabra en el titulo. No entra como pelado."""
+    con = _con_uf_mayo()
+    con.execute(
+        "INSERT INTO fact_arriendo_comp (comp_id, microzona_id, tipologia, m2_utiles, "
+        "arriendo_clp, activo, fetched_at, source_url) "
+        "VALUES ('MLC-am', 'x/y', '3D2B', 71, 850000, TRUE, ?, "
+        "'https://p.cl/MLC-am-depto-amoblado-full')",
+        (datetime(2026, 5, 4, tzinfo=UTC),),
+    )
+    _comp_crudo(con, "MLC-gemelo")  # 71 m² / $850.000: la misma firma
+    comparables, descartes = agg.comparables_desde_duckdb(con)
+    assert comparables == []
+    assert descartes["gemelo_de_amoblado"] == 1
+    assert descartes["amoblado"] == 1
     con.close()
 
 

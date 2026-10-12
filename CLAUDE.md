@@ -446,8 +446,15 @@ nunca Santa Isabel**; el nuevo PRC de 12 pisos corta la oferta futura).
 82% de las ventas bajo UF 4.000; **el único mercado del alcance donde el pie de equilibrio baja a ~32%**)
 · `La Serena` · `Antofagasta`.
 
-**Excluidos de v1, con razón registrada:** Viña del Mar (absorción 24,6 meses, la peor del Gran
-Valparaíso), Valparaíso (deterioro estructural del stock), San Joaquín (vacancia MF 42,1%),
+**Fase 4 — cercanía (decisión del inversionista, 11-oct-2026 · D-022):** `Viña del Mar` ·
+`Valparaíso` · `Concón` · `Quilpué` · `Villa Alemana` (V región) · `Rancagua` · `Machalí`
+(VI región, slug del portal `bernardo-ohiggins`). Viña y Valparaíso **salen de los excluidos
+por prioridad de cercanía, no porque su evidencia haya cambiado** — sus alertas de abr-2026
+siguen en `config/zonas.yml` (Viña: absorción 24,6 meses, mercado estacional; Valparaíso:
+deterioro estructural). En la costa V el guardia de temporada (D-022) apagará celdas enteras:
+es lo esperado. La VI región no tiene ancla externa de yield todavía (T-954).
+
+**Excluidos de v1, con razón registrada:** San Joaquín (vacancia MF 42,1%),
 Las Condes/Vitacura/Lo Barnechea/Providencia (ticket sobre el tope, yields 3,0–3,8%),
 Cerro Navia/Lo Prado/La Pintana (los "13,3% de rentabilidad" son stock usado de UF 700–1.400;
 no existe producto nuevo ahí).

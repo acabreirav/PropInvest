@@ -237,11 +237,18 @@ def comparables_desde_duckdb(
         "amoblado": 0,
         "sin_uf_del_dia": 0,
         "relisting_colapsado": 0,
+        "gemelo_de_amoblado": 0,
     }
 
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
     # (mz, tip, m2, arr_uf, arr_clp, momento, multifamily, en_uf) ya filtradas y convertidas
     vivas: list[tuple[Any, ...]] = []
+    # D-022/M1 (verificador 11-oct): un aviso "pelado" con la MISMA firma exacta
+    # (mz, tip, m2, precio) que un aviso marcado amoblado/temporada es el mismo aviso
+    # publicado por otro corredor que si puso la palabra en el titulo. No es inferencia:
+    # es la identidad que D-021 ya usa para relistings. Se recolectan las firmas de los
+    # amoblados VIGENTES y los gemelos limpios se descartan contados.
+    firmas_amobladas: set[tuple[Any, ...]] = set()
     for mz, tip, m2, arr_uf, arr_clp, momento, url, multifamily in filas:
         if limite is not None:
             if momento is None:
@@ -258,6 +265,8 @@ def comparables_desde_duckdb(
             # meses en vez de anios, y el arrendador repone muebles. Este inversionista
             # arrienda pelado a 30 anios. Ver `quality/comparabilidad.py`.
             descartes["amoblado"] += 1
+            if mz and tip and m2 and (arr_uf is not None or arr_clp is not None):
+                firmas_amobladas.add((mz, tip, m2, arr_uf, arr_clp))
             continue
         if not mz:
             descartes["sin_microzona"] += 1
@@ -303,6 +312,12 @@ def comparables_desde_duckdb(
     grupos: dict[tuple[Any, ...], list[tuple[Any, ...]]] = {}
     for viva in vivas:
         mz, tip, m2, arr_uf, arr_clp, _momento, multifamily, en_uf = viva
+        if not multifamily and (mz, tip, m2, arr_uf, arr_clp) in firmas_amobladas:
+            # M1: el gemelo del amoblado — mismo aviso, otro corredor, titulo sin la
+            # palabra. En un multifamily una variante amoblada al mismo precio no
+            # desmiente a las peladas (misma logica que la exencion D-021).
+            descartes["gemelo_de_amoblado"] += 1
+            continue
         # `colapsar_relistings=False` existe SOLO para medir el efecto del colapso
         # (scripts/medir_colapso_relistings.py, §8.4); el ranking siempre colapsa.
         if multifamily or not colapsar_relistings:
@@ -348,20 +363,35 @@ def m2_amoblados_por_grupo(
 
     Mismos filtros de población que `comparables_desde_duckdb` (activo, no sospechoso,
     frescura §7.3) para que numerador y denominador del ratio hablen del mismo mercado.
+    Verificador D-022 (H5): el numerador ademas COLAPSA relistings por la misma firma
+    de D-021 y excluye >140 m² — sin eso, un amoblado publicado por 3 corredores
+    contaba triple contra un pool ya colapsado y el umbral efectivo bajaba a ~21%,
+    fabricando ND en celdas sanas.
     """
     filas = conexion.execute(
-        "SELECT microzona_id, tipologia, m2_utiles, fetched_at, source_url "
+        "SELECT microzona_id, tipologia, m2_utiles, arriendo_uf, arriendo_clp, "
+        "fetched_at, source_url "
         "FROM fact_arriendo_comp WHERE activo AND coalesce(sospechoso, FALSE) = FALSE"
     ).fetchall()
     limite = ahora - timedelta(days=FRESCURA_MAX_DIAS) if ahora is not None else None
+    # tope del §12: sobre 140 m² se pierde el DFL2, el pool limpio nunca los tiene de
+    # vecinos (etiqueta_rango) y el numerador tampoco debe contarlos
+    tope_m2 = D(140)
     salida: dict[tuple[str, str], list[Decimal]] = {}
-    for mz, tip, m2, momento, url in filas:
-        if not (mz and tip and m2):
+    firmas: set[tuple[Any, ...]] = set()
+    for mz, tip, m2, arr_uf, arr_clp, momento, url in filas:
+        if not (mz and tip and m2) or Decimal(str(m2)) >= tope_m2:
             continue
         if limite is not None and (momento is None or momento < limite):
             continue
-        if no_comparable(url):
-            salida.setdefault((mz, tip), []).append(Decimal(str(m2)))
+        if not no_comparable(url):
+            continue
+        if arr_uf is not None or arr_clp is not None:
+            firma = (mz, tip, m2, arr_uf, arr_clp)
+            if firma in firmas:
+                continue  # relisting del mismo amoblado: cuenta una vez
+            firmas.add(firma)
+        salida.setdefault((mz, tip), []).append(Decimal(str(m2)))
     return salida
 
 

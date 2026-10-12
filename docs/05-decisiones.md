@@ -844,3 +844,12 @@ en el portal el 11-oct-2026; "valparaiso" sigue sin confirmar y `probar-comunas
 que el filtro de COMUNA funcione — el caso biobio respondía 200 ignorándolo). La VI
 región no tiene ancla externa en docs/00-hallazgos.md: sus medianas nacen sin
 contraste (gate §7.3 cojo ahí hasta conseguir benchmark).
+
+**Addendum post-verificador (mismo dia):** cuatro hallazgos materiales acatados — (M1)
+el gemelo exacto de un amoblado se descarta por firma (`gemelo_de_amoblado`); (M4) el
+umbral vive en `config/params.yml` como `calidad.contaminacion_temporada_max` (E con
+rango); (H5) el numerador colapsa relistings de amoblados y excluye >140 m² (el umbral
+efectivo era ~21% por la asimetria); (H6) el guardia se evalua en cada ancho probado
+con piso de 2 marcados. (M2) queda ABIERTO con el usuario: el tripwire de monotonia
+hoy marca y no excluye. (M3) CLAUDE.md §10 registra la decision de fase 4. Reporte
+completo en state/RUNLOG.md 11-oct-2026.

@@ -149,6 +149,7 @@ def emparejar(
     rangos: list[list[int]],
     alcance: Alcance | None = None,
     ahora: datetime | None = None,
+    temporada_max: Decimal | None = None,
 ) -> Emparejamiento:
     """Cruza `fact_unidad_venta` vigente contra `agg_arriendo_microzona`.
 
@@ -192,6 +193,10 @@ def emparejar(
     # D-022 · los m² de los avisos amoblado/temporada vigentes: el indicador de
     # contaminacion del guardia. Misma poblacion y frescura que los comparables.
     amoblados = m2_amoblados_por_grupo(conexion, ahora)
+    # El umbral vive en config/params.yml (calidad.contaminacion_temporada_max, un `E`
+    # declarado con rango — verificador D-022 M4); la constante es el respaldo de los
+    # caminos sin params a mano.
+    tope_temporada = TEMPORADA_MAX if temporada_max is None else temporada_max
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
     riesgos: dict[str, Decimal] = {
@@ -372,6 +377,17 @@ def emparejar(
         for factor in VENTANAS_M2_REL:
             ventana = max(VENTANA_M2_MIN, m2 * factor)
             pool = [(m2c, arr) for m2c, arr in grupo if abs(m2c - m2) <= ventana]
+            # D-022 · guardia de temporada, evaluado en CADA ancho probado y no solo en
+            # el aceptado (verificador H6: una ventana angosta contaminada con n<8 se
+            # "diluia" ensanchando — la dilucion mete vecinos que no son vecinos). Si
+            # una fraccion alta de los avisos del segmento es amoblado/temporada
+            # declarado, los "pelados" restantes son gemelos sin la palabra en el
+            # titulo y la mediana es de OTRO negocio: ND. Se exigen >=2 marcados para
+            # que un solo aviso no apague una celda chica por ruido.
+            n_amo = sum(1 for ma in amo_grupo if abs(ma - m2) <= ventana)
+            if n_amo >= 2 and D(n_amo) / (n_amo + len(pool)) >= tope_temporada:
+                temporada = True
+                break
             if len(pool) < MIN_COMPARABLES:
                 continue
             m2_tipico = percentil([m2c for m2c, _ in pool], D("0.5"))
@@ -379,15 +395,6 @@ def emparejar(
                 # pool descentrado: seguir ensanchando puede equilibrarlo (aparecen
                 # vecinos del otro lado) — y si nunca se equilibra, el final es ND.
                 continue
-            # D-022 · guardia de temporada: la ventana que estamos por aceptar, ¿vive en
-            # un segmento donde una fraccion alta de los avisos es amoblado/temporada
-            # declarado? Entonces los "pelados" de ese segmento son gemelos sin la
-            # palabra en el titulo y la mediana es de OTRO negocio. ND, sin ensanchar:
-            # diluir la contaminacion mete vecinos que no son vecinos.
-            n_amo = sum(1 for ma in amo_grupo if abs(ma - m2) <= ventana)
-            if n_amo and D(n_amo) / (n_amo + len(pool)) >= TEMPORADA_MAX:
-                temporada = True
-                break
             arriendo, n = percentil([a for _, a in pool], D("0.5")), len(pool)
             metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f} (típico {m2_tipico:.0f})"
             break

@@ -1107,6 +1107,7 @@ def oportunidades(
             p.crudo("ingresos.rangos_m2"),
             alcance=desde_config(cargar("zonas")),
             ahora=datetime.now(UTC),
+            temporada_max=p.d("calidad.contaminacion_temporada_max"),
         )
     finally:
         con.close()
@@ -1672,7 +1673,13 @@ def informe_semanal(
     alcance = desde_config(cargar("zonas"))
     con = duckdb.connect(str(db.crear()))
     try:
-        r = op.emparejar(con, p.crudo("ingresos.rangos_m2"), alcance=alcance, ahora=ahora)
+        r = op.emparejar(
+            con,
+            p.crudo("ingresos.rangos_m2"),
+            alcance=alcance,
+            ahora=ahora,
+            temporada_max=p.d("calidad.contaminacion_temporada_max"),
+        )
         evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
         vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
         vivos.sort(key=lambda x: -x[1].score)
@@ -3334,8 +3341,13 @@ def embudo(
     alc = desde_config(cargar("zonas"))
     con = duckdb.connect(str(db.crear()))
     try:
+        _p = cargar("params")
         r = op.emparejar(
-            con, cargar("params").crudo("ingresos.rangos_m2"), alcance=alc, ahora=datetime.now(UTC)
+            con,
+            _p.crudo("ingresos.rangos_m2"),
+            alcance=alc,
+            ahora=datetime.now(UTC),
+            temporada_max=_p.d("calidad.contaminacion_temporada_max"),
         )
     finally:
         con.close()
@@ -3510,6 +3522,7 @@ def sensibilidad(
             base_cfg.crudo("ingresos.rangos_m2"),
             alcance=desde_config(cargar("zonas")),
             ahora=datetime.now(UTC),
+            temporada_max=base_cfg.d("calidad.contaminacion_temporada_max"),
         )
     finally:
         con.close()
