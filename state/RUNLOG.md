@@ -3069,3 +3069,19 @@ DECISION (§8.4, con el usuario en el loop): el colapso QUEDA activo. El error q
 elimina (contar 3 veces la misma unidad cara en pools chicos) fabrica oportunidades
 falsas; el que introduce es chico (1,3% >10%), mayormente a la baja, y su mitigacion
 estructural es T-953 (poblar edificio_multifamily) + T-946 (direccion).
+
+## 12-oct-2026 (2) · Verificador de D-023: acatado, T-955 reabierta
+
+3 materiales: (1) el balance de lados no mide danio (el caso real pasa con 9/13 o
+con umbral 0.80); (2) el descentrado es VACUO en la ±20% (limite = ancho de la
+ventana) y la exencion deja pasar +14% sin alarma, con el tripwire mudo justo para
+la unidad mas chica del cluster; (3) T-955 no podia ser `hecha` sin medicion, y
+`cli sensibilidad` no varia estos parametros. Menores: ensanchar-para-equilibrar
+legitima comps de otra clase (danio acotado), el test del caso real no modelaba el
+gradiente de arriendo, monotonia-3 puede dar alarmas falsas (direccion conservadora),
+etiqueta desbalanceada/descentrada puede mezclarse entre anchos, diagnostico de
+evaluar_aviso desactualizado (corregido). Plumbing verificado OK (7 llamadores).
+Decision: guardias quedan (nunca inflan), medicion con
+scripts/medir_guardias_ventana.py sobre la base real decide el arreglo definitivo
+(incluido el candidato 3 que D-023 descarto prematuramente). Test nuevo fija que los
+defaults del codigo calcen con params.yml.

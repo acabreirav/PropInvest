@@ -1108,6 +1108,7 @@ def oportunidades(
             alcance=desde_config(cargar("zonas")),
             ahora=datetime.now(UTC),
             temporada_max=p.d("calidad.contaminacion_temporada_max"),
+            balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
         )
     finally:
         con.close()
@@ -1679,6 +1680,7 @@ def informe_semanal(
             alcance=alcance,
             ahora=ahora,
             temporada_max=p.d("calidad.contaminacion_temporada_max"),
+            balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
         )
         evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
         vivos = [(u, ev) for u, ev in zip(r.unidades, evals, strict=True) if not ev.excluido]
@@ -3352,6 +3354,7 @@ def embudo(
             alcance=alc,
             ahora=datetime.now(UTC),
             temporada_max=_p.d("calidad.contaminacion_temporada_max"),
+            balance_lado_max=_p.d("calidad.ventana_balance_lado_max"),
         )
     finally:
         con.close()
@@ -3527,6 +3530,7 @@ def sensibilidad(
             alcance=desde_config(cargar("zonas")),
             ahora=datetime.now(UTC),
             temporada_max=base_cfg.d("calidad.contaminacion_temporada_max"),
+            balance_lado_max=base_cfg.d("calidad.ventana_balance_lado_max"),
         )
     finally:
         con.close()

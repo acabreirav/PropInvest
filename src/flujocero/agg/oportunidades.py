@@ -140,8 +140,18 @@ TEMPORADA_MAX = D("0.30")
 # pelado. Una asignacion cuyo $/m² supera la mediana de los comparables MAS CHICOS de
 # su misma (microzona, tipologia) delata contaminacion que el guardia no alcanzo a
 # ver. No excluye: marca la procedencia, que ahora llega hasta la ficha del informe.
-MONOTONIA_MIN_CHICOS = 5
+# T-955 (12-oct): el minimo bajo de 5 a 3 — en el caso real de huertos-familiares la
+# inversion era clara con 4 chicos y el tripwire quedo mudo por un comp de diferencia.
+MONOTONIA_MIN_CHICOS = 3
 MONOTONIA_FACTOR_CHICO = D("0.85")
+# T-955 · balance de lados en ventanas ENSANCHADAS (±30/±40): el centrado del tipico
+# no basta cuando el pool es bimodal — en huertos-familiares, 5 de 13 comps eran de
+# 105 m² para una unidad de 75 (tipico 87: paso el guardia justo al borde) y la
+# mediana subio +20%. Si un solo lado aporta mas que este tope del pool, la ventana
+# no es vecindario: se sigue ensanchando (puede equilibrarse) y si nunca equilibra,
+# ND con motivo propio. La ±20% queda exenta: es homogenea por construccion.
+# Umbral E declarado en config/params.yml (calidad.ventana_balance_lado_max).
+BALANCE_LADO_MAX = D("0.70")
 
 
 def emparejar(
@@ -150,6 +160,7 @@ def emparejar(
     alcance: Alcance | None = None,
     ahora: datetime | None = None,
     temporada_max: Decimal | None = None,
+    balance_lado_max: Decimal | None = None,
 ) -> Emparejamiento:
     """Cruza `fact_unidad_venta` vigente contra `agg_arriendo_microzona`.
 
@@ -197,6 +208,7 @@ def emparejar(
     # declarado con rango — verificador D-022 M4); la constante es el respaldo de los
     # caminos sin params a mano.
     tope_temporada = TEMPORADA_MAX if temporada_max is None else temporada_max
+    tope_balance = BALANCE_LADO_MAX if balance_lado_max is None else balance_lado_max
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
     riesgos: dict[str, Decimal] = {
@@ -229,6 +241,7 @@ def emparejar(
                 "fuera_de_rango",
                 "sin_comparables",
                 "mercado_temporada",
+                "ventana_desbalanceada",
                 "duplicado",
             ),
             0,
@@ -374,7 +387,8 @@ def emparejar(
         n = 0
         metodo = ""
         temporada = False
-        for factor in VENTANAS_M2_REL:
+        desbalanceada = False
+        for i_factor, factor in enumerate(VENTANAS_M2_REL):
             ventana = max(VENTANA_M2_MIN, m2 * factor)
             pool = [(m2c, arr) for m2c, arr in grupo if abs(m2c - m2) <= ventana]
             # D-022 · guardia de temporada, evaluado en CADA ancho probado y no solo en
@@ -395,6 +409,16 @@ def emparejar(
                 # pool descentrado: seguir ensanchando puede equilibrarlo (aparecen
                 # vecinos del otro lado) — y si nunca se equilibra, el final es ND.
                 continue
+            if i_factor > 0:
+                # T-955 · balance de lados, solo en ventanas ensanchadas: el tipico
+                # puede quedar a ±20% con un pool donde un solo lado (otra clase de
+                # tamanio) pone casi toda la mediana. Caso real: 75 m² con 10 de 13
+                # comps sobre el, cinco de 105 m² — tipico 87, +20% de arriendo.
+                lado_chico = sum(1 for m2c, _ in pool if m2c < m2)
+                lado_grande = sum(1 for m2c, _ in pool if m2c > m2)
+                if max(lado_chico, lado_grande) > len(pool) * tope_balance:
+                    desbalanceada = True
+                    continue
             arriendo, n = percentil([a for _, a in pool], D("0.5")), len(pool)
             metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f} (típico {m2_tipico:.0f})"
             break
@@ -403,6 +427,12 @@ def emparejar(
             _anotar(r, comuna, "mercado_temporada")
             continue
         if arriendo is None:
+            if desbalanceada:
+                # T-955: hubo pool suficiente y centrado pero con un solo lado
+                # dominante en toda ventana ancha — otro motivo que "no hay vecinos".
+                r.descartes["ventana_desbalanceada"] += 1
+                _anotar(r, comuna, "ventana_desbalanceada")
+                continue
             # SIN caida a comuna ni al tramo, a proposito. Ver el docstring del modulo.
             r.descartes["sin_comparables"] += 1
             _anotar(r, comuna, "sin_comparables")

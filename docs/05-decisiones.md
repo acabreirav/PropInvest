@@ -853,3 +853,43 @@ efectivo era ~21% por la asimetria); (H6) el guardia se evalua en cada ancho pro
 con piso de 2 marcados. (M2) queda ABIERTO con el usuario: el tripwire de monotonia
 hoy marca y no excluye. (M3) CLAUDE.md §10 registra la decision de fase 4. Reporte
 completo en state/RUNLOG.md 11-oct-2026.
+
+## D-023 · Balance de lados en ventanas ensanchadas + tripwire a 3 chicos — 12-oct-2026
+
+**Decisión (§8.4, directa del inversionista — "dale con esos arreglos" — sobre el
+hallazgo T-955):** dos de los tres candidatos de T-955 se implementan; el tercero
+(ND cuando la angosta queda a 1 comp y la ancha mueve la mediana >15%) se descarta
+por redundante con el balance, que ataca la causa.
+
+1. **Balance de lados** (`calidad.ventana_balance_lado_max = 0.70`, E con rango
+   0,60-0,80): en una ventana ENSANCHADA (±30/±40), ningún lado —comps más chicos o
+   más grandes que la unidad— puede aportar más del 70% del pool. Si nunca se
+   equilibra, ND con motivo propio (`ventana_desbalanceada`). La ±20% queda exenta:
+   es homogénea por construcción, y una unidad al borde chico de un cluster sano no
+   debe morir por eso.
+2. **Tripwire de monotonía a mínimo 3 chicos** (antes 5): en el caso real la
+   inversión era clara con 4 comps y el tripwire quedó mudo por uno de diferencia.
+
+**El caso que lo motivó** (auditoría del peor caso de la medición §8.4 del colapso):
+huertos-familiares 3D2B 75 m² — el colapso dejó la ±20% en n=7, el salto a ±40% tomó
+cinco comps de 105 m², el típico (87) pasó el descentrado justo al borde y la mediana
+subió +20% ($755k vs ~$600-650k honesto). Quedó en el puesto 548: el mecanismo no
+fabricó oportunidad falsa en el top, pero existía.
+
+**Medición de impacto:** no hubo medición previa sobre la base real (decisión directa
+del usuario); el impacto queda OBSERVABLE en cada corrida vía el descarte
+`ventana_desbalanceada` del embudo, y se revisa con los datos de la próxima semana.
+
+**Addendum post-verificador de D-023 (mismo día):** tres materiales. (1) El balance
+cuenta lados y no mide daño: el caso real queda a 1 comp de colarse (9/13 < 0,70) y
+con umbral 0,80 —dentro del rango declarado— pasa entero. (2) La exención de la ±20%
+descansa en una premisa falsa: `DESCENTRADO_MAX` = ancho de la ventana ⇒ el guardia
+es VACUO en la ±20%, y un 75 m² puede rankear con 8 comps de 85-90 (+14%) sin alarma
+— el tripwire además es estructuralmente mudo para la unidad más chica de un cluster,
+que es justo la que el ranking por yield sube. (3) T-955 no podía quedar `hecha` sin
+la medición de su criterio, y `cli sensibilidad` no varía estos parámetros. Acciones:
+T-955 reabierta; los guardias quedan (su peor falla es no proteger, nunca inflar);
+`scripts/medir_guardias_ventana.py` mide sobre la base real el barrido del umbral, el
+daño ancha-vs-angosta (candidato 3, descartado prematuramente) y la carga de lados en
+las ±20% rankeadas — con esa salida se elige el arreglo definitivo. Reporte completo
+en RUNLOG 12-oct.

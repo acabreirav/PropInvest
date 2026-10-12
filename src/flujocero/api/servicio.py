@@ -304,6 +304,7 @@ class Servicio:
                 alcance=desde_config(cargar("zonas")),
                 ahora=datetime.now(UTC),
                 temporada_max=p.d("calidad.contaminacion_temporada_max"),
+                balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
             )
         finally:
             con.close()

@@ -82,6 +82,7 @@ r = op.emparejar(
     alcance=alcance,
     ahora=ahora,
     temporada_max=p.d("calidad.contaminacion_temporada_max"),
+    balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
 )
 evals = evaluar_universo(r.unidades, escenario_base(p, inv), p, inv) if r.unidades else []
 vivos = sorted(
@@ -104,7 +105,8 @@ if clave not in por_clave:
         print(f"    · comuna {mz.split('/')[0]} fuera del alcance (§10)")
     if not (mz and tip and m2):
         print("    · le falta microzona, tipología o m²")
-    print("    · o su ventana de vecinos no junta n>=8 (ver comparables abajo)")
+    print("    · o su ventana de vecinos no junta n>=8, quedo descentrada/desbalanceada")
+    print("      (T-955) o su segmento es mercado de temporada (D-022) — ver abajo")
 else:
     u, e = por_clave[clave]
     puesto = next((i for i, (x, _) in enumerate(vivos, 1) if x.unidad_key == clave), None)

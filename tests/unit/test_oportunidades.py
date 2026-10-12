@@ -667,6 +667,45 @@ def test_la_ventana_angosta_contaminada_no_se_diluye_ensanchando(con) -> None:
     assert r.descartes["mercado_temporada"] == 1
 
 
+def test_los_defaults_del_codigo_calzan_con_params_yml() -> None:
+    """Verificador D-023: todos los tests usan los defaults del codigo, asi que una
+    divergencia con config/params.yml pasaria piola — este test la caza."""
+    from flujocero.config import cargar
+
+    p = cargar("params")
+    assert op.TEMPORADA_MAX == p.d("calidad.contaminacion_temporada_max")
+    assert op.BALANCE_LADO_MAX == p.d("calidad.ventana_balance_lado_max")
+
+
+def test_una_ventana_ancha_con_un_solo_lado_dominante_es_ND(con) -> None:
+    """T-955, caso real (huertos-familiares, 12-oct): el colapso dejo la ±20% en n=7,
+    el salto a ±40% tomo CINCO comps de 105 m² para una unidad de 75 — el tipico (87)
+    paso el descentrado justo al borde y la mediana subio +20%. Un solo lado no puede
+    aportar mas del 70% de una ventana ensanchada."""
+    for m2c, cid in ((70, "A"), (71, "B"), (74, "C"), (76, "D"), (84, "E"), (85, "F"), (87, "G")):
+        _comp_arr(con, cid, m2c, "15", tip="3D2B")
+    for i in range(6):  # la otra clase de tamanio, toda a un lado
+        _comp_arr(con, f"XL{i}", 105 - i * 0.01, "20", tip="3D2B")
+    unidad(con, tip="3D2B", m2=75, precio="4000")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 0
+    assert r.descartes["ventana_desbalanceada"] == 1
+    assert r.descartes["sin_comparables"] == 0, "el motivo es el desbalance, no la falta"
+
+
+def test_la_ventana_de_20_pct_queda_exenta_del_balance(con) -> None:
+    """La ±20% es homogenea por construccion: una unidad al borde chico de un cluster
+    sano (comps 74-88 para un 77) rankea aunque el lado grande domine."""
+    for i in range(8):
+        _comp_arr(con, f"P{i}", 74 + i * 2, "22", tip="3D2B")
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    assert r.descartes["ventana_desbalanceada"] == 0
+
+
 def test_el_tripwire_de_monotonia_marca_el_m2_invertido(con) -> None:
     """D-022: el $/m² CAE con el tamanio en el mercado pelado. Una asignacion que supera
     el $/m² mediano de los comparables mas chicos delata contaminacion que el guardia no
@@ -681,6 +720,21 @@ def test_el_tripwire_de_monotonia_marca_el_m2_invertido(con) -> None:
     assert len(r.unidades) == 1
     origen, _n, arr = r.procedencia_arriendo["U1"]
     assert arr == D("28"), "la mediana del pool queda en el segmento grande"
+    assert "⚠ $/m² sobre el de los más chicos" in origen
+
+
+def test_el_tripwire_salta_con_tres_chicos(con) -> None:
+    """T-955: el minimo bajo de 5 a 3 — en huertos-familiares la inversion era clara
+    con 4 comps chicos y el tripwire quedo mudo por un comp de diferencia."""
+    for i in range(3):
+        _comp_arr(con, f"CH{i}", 62 + i, "13", tip="3D2B")
+    for i in range(8):
+        _comp_arr(con, f"GR{i}", 78 + i, "28", tip="3D2B")
+    unidad(con, tip="3D2B", m2=77, precio="3100")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    origen, _n, _arr = r.procedencia_arriendo["U1"]
     assert "⚠ $/m² sobre el de los más chicos" in origen
 
 

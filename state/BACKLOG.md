@@ -1828,7 +1828,15 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-955 · Ventana ancha al borde del centrado con pool bimodal de tamanio
-estado: pendiente
+estado: en_curso (reabierta 12-oct por el verificador de D-023: el balance de lados
+  cuenta cabezas y no mide el DANIO — el caso real pasa con 9/13 o con umbral 0.80 —
+  y la ±20% exenta puede cargarse entera a un lado porque el descentrado es VACUO ahi
+  (su limite es igual al ancho de la ventana). Los guardias implementados se quedan
+  (protegen sin inflar jamas), pero el arreglo definitivo se elige con
+  `scripts/medir_guardias_ventana.py` sobre la base real: barrido del umbral, danio
+  observado ancha-vs-angosta (el candidato 3 que D-023 descarto mal), y cuantas ±20%
+  rankean cargadas a un lado. `cli sensibilidad` NO sirve para estos parametros: no
+  los varia — otra deuda que el verificador dejo anotada.)
 agente: motor-financiero
 fase: 2
 contexto: auditoria del peor caso de la medicion 8.4 (12-oct-2026, MLC-4510753650,

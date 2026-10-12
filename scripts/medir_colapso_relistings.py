@@ -47,6 +47,7 @@ def correr(colapsar: bool):
             alcance=alcance,
             ahora=ahora,
             temporada_max=p.d("calidad.contaminacion_temporada_max"),
+            balance_lado_max=p.d("calidad.ventana_balance_lado_max"),
         )
     finally:
         op.comparables_desde_duckdb = original
