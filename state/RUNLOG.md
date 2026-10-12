@@ -3046,3 +3046,26 @@ sin_comparables) quedan como limitaciones declaradas del guardia.
 
 **Pendiente:** medicion T-954 sobre base real (celdas apagadas por comuna, umbral) y
 la decision M2 con el usuario.
+
+## 12-oct-2026 · Medicion §8.4 del colapso de relistings (cierra lo pendiente de D-021/D-022)
+
+Corrida por el usuario sobre la base real (scripts/medir_colapso_relistings.py):
+  - 2.093 unidades comparables: 549 SUBEN de arriendo con el colapso, 832 BAJAN,
+    712 igual — BIDIRECCIONAL con mayoria a la baja, como corrigio el verificador
+    (la 1ª redaccion del ADR que decia "jamas infla" era falsa; la medicion lo
+    confirma y tambien confirma que el sesgo neto es conservador).
+  - 110 unidades pasan a ND (pool fresco < 8 tras quitar duplicados): perdida honesta.
+  - 16 rankean SOLO con colapso: el colapso tambien re-CENTRA pools (quita copias de
+    un lado y el m2 tipico vuelve a ±20%): esperable, no un bug.
+  - Solo 28 de 2.093 (1,3%) cambian el arriendo >10%. Top-10: 7 de 10 se mantienen;
+    el #1 sin colapso (MLC-2242406261) y MLC-3851802904 (-11%) salen — eran los
+    inflados por doble conteo.
+  - Caso a auditar (unico cluster grande al ALZA): 3 unidades de la misma celda
+    suben +23,8% (14,95 → 18,51 UF) — MLC-4510753650 / 4311266726 / 2211365591.
+    Si lo que se colapso ahi eran unidades DISTINTAS reales a precio de lista
+    (multifamily sin marcar, T-953), el colapso les subio el arriendo de mas.
+
+DECISION (§8.4, con el usuario en el loop): el colapso QUEDA activo. El error que
+elimina (contar 3 veces la misma unidad cara en pools chicos) fabrica oportunidades
+falsas; el que introduce es chico (1,3% >10%), mayormente a la baja, y su mitigacion
+estructural es T-953 (poblar edificio_multifamily) + T-946 (direccion).

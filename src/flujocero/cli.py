@@ -1814,7 +1814,11 @@ def informe_semanal(
     ruta_html.write_text(html, encoding="utf-8")
 
     typer.echo(f"  top usadas: {len(filas_top)} filas")
-    if cambios.fecha_anterior:
+    if precio_min_uf > 0 or precio_max_uf > 0:
+        # Mentia "primer snapshot" en las vistas filtradas (visto en vivo 12-oct):
+        # una vista NO escribe snapshot ni compara, y el eco tiene que decir eso.
+        typer.echo("  vista filtrada: sin snapshot ni comparacion semanal")
+    elif cambios.fecha_anterior:
         typer.echo(
             f"  cambios vs {cambios.fecha_anterior}: {len(cambios.entraron)} entraron, "
             f"{len(cambios.salieron)} salieron, {len(cambios.bajas_precio)} bajas en el top"
