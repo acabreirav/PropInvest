@@ -65,8 +65,19 @@ try {
     Paso "5/6 informe" { uv run python -m flujocero.cli informe-semanal --carpeta $Destino --top 15 }
 
     # PDF via Edge headless (viene con Windows; si no esta, se adjunta el HTML)
-    $htmlPath = Join-Path $Destino "informe-$fecha.html"
-    $pdfPath  = Join-Path $Destino "informe-$fecha.pdf"
+    # El HTML se busca por ULTIMA MODIFICACION y no por $fecha: una corrida que cruza
+    # la medianoche (visto en vivo 12->13-oct-2026) genera informe-<dia siguiente>.html
+    # y con la fecha fija el PDF y el correo apuntaban al archivo de AYER.
+    $htmlItem = Get-ChildItem -Path (Join-Path $Destino "informe-*.html") -ErrorAction SilentlyContinue |
+                Where-Object { $_.BaseName -match '^informe-\d{4}-\d{2}-\d{2}$' } |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($htmlItem) {
+        $fecha = $htmlItem.BaseName -replace '^informe-', ''
+        $htmlPath = $htmlItem.FullName
+    } else {
+        $htmlPath = Join-Path $Destino "informe-$fecha.html"
+    }
+    $pdfPath = Join-Path $Destino "informe-$fecha.pdf"
     $edge = @("$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
               "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe") |
             Where-Object { Test-Path $_ } | Select-Object -First 1
