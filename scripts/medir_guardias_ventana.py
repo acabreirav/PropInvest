@@ -105,6 +105,42 @@ if anchas:
             f"    {k:<18} ±20%={m20:>7.2f} UF → asignado={asig:>7.2f}  ({'+' if asig > m20 else '-'}{d:.1%})"
         )
 
+# El número que faltaba para la decisión (corrida 13-oct): la sección 2 mide solo las
+# anchas que PASARON el guardia. Acá se mide el daño de las que el guardia APAGA: con
+# el guardia desactivado, ¿cuánto se desvía su asignación de su propio núcleo ±20%?
+# Si estas desviaciones también son chicas, el guardia de conteo se reemplaza por el
+# de desplazamiento de mediana (candidato 3 de T-955) y esas unidades vuelven honestas.
+bloqueadas: list[tuple[D, str, D, D]] = []
+sin_nucleo = 0
+for u in apagado.unidades:
+    if u.unidad_key not in solo_sin_guardia:
+        continue
+    m2, asignado = u.m2_utiles, u.arriendo_mensual_uf
+    grupo = grupos.get((u.microzona_id, u.tipologia), [])
+    ventana20 = max(D(3), m2 * D("0.20"))
+    pool20 = [a for m2c, a in grupo if abs(m2c - m2) <= ventana20]
+    if len(pool20) >= 3 and asignado:
+        m20 = percentil(pool20, D("0.5"))
+        if m20:
+            bloqueadas.append((abs((asignado - m20) / m20), u.unidad_key, m20, asignado))
+            continue
+    sin_nucleo += 1
+
+print(f"\n== 2b · las {len(solo_sin_guardia)} que el guardia 0.70 apaga: su daño SIN guardia ==")
+if bloqueadas:
+    for umbral in (D("0.10"), D("0.15"), D("0.20")):
+        n = sum(1 for d, *_ in bloqueadas if d > umbral)
+        print(f"  desviación > {umbral:.0%}: {n}  ({n / len(bloqueadas):.0%} de las medibles)")
+    print(f"  sin núcleo ±20% medible (n<3): {sin_nucleo}")
+    print("  las 15 peores (asignado vs mediana de su ±20%):")
+    for d, k, m20, asig in sorted(bloqueadas, reverse=True)[:15]:
+        print(
+            f"    {k:<18} ±20%={m20:>7.2f} UF → asignado={asig:>7.2f}  "
+            f"({'+' if asig > m20 else '-'}{d:.1%})"
+        )
+else:
+    print(f"  ninguna medible (sin núcleo ±20% con n>=3: {sin_nucleo})")
+
 print(
     f"\n== 3 · unidades rankeadas en ±20% con un lado >70% del pool: {veinte_cargadas} de {veinte_total} =="
 )

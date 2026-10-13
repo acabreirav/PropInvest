@@ -3111,3 +3111,24 @@ Pendientes de DATOS del usuario: shapefiles INE r05/r06 para que fase 4 tenga ri
 medido (hoy 0.5 plano) — anotado en T-954.
 Sin verificador 7.6 esta vez: la ola no toca motor ni score (plomeria, visualizacion
 y poblacion de gates); la suite completa es el gate.
+
+## 13-oct-2026 · Censo fase 4 cargado + primera medicion de guardias de ventana
+
+CENSO: r05 y r06 ingeridos (38.310 poligonos nuevos, 27.085 calzan); 233 microzonas
+con centro; puente a 232 microzonas con riesgo MEDIDO. Convergencia notable: el top
+de riesgo censal es la costa de temporada (la-serena/avenida-del-mar 60% de
+viviendas desocupadas, coquimbo/costanera 53%, concon 51%, renaca 45%) — el guardia
+D-022 (titulos de avisos) y el censo (viviendas vacias) apuntan a los mismos lugares
+desde fuentes independientes. cerrillos/parque-bicentenario: riesgo 0.57 por la
+saturacion mas alta del alcance (0.16 avisos/hogar arrendatario) — la celda mas
+profunda lo es por el boom multifamily que compite. independencia/hospitales:
+catalizador 1.00 (Metro a 146 m).
+
+MEDICION T-955 (parcial): barrido del balance 0.60/0.70/0.80/apagado =
+2118/2166/2213/2299 rankeadas; el 0.70 apaga 133. Dano observado en anchas que
+PASARON: de 119 medibles, solo 3 se desvian >10% de su nucleo ±20% y CERO >15% —
+los guardias de contaminacion (colapso+gemelos+temporada: 369 celdas apagadas) ya
+mataron a los culpables. Hallazgo 2 dimensionado: 813 de 2.047 rankeadas (40%)
+viven en ±20% con un lado >70% — es estructura del mercado, no patologia: extender
+el guardia ahi mataria medio ranking. FALTA un numero para decidir: el dano de las
+133 bloqueadas (seccion 2b agregada al script; re-correr).
