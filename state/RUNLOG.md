@@ -3413,3 +3413,24 @@ vio. El gate §7.3 lo toleraba hasta el 20-oct sin decirlo: la marca "visto hace
 (commit 0194682) cierra la mitad visible; T-960 (re-confirmar el top con paginas altas
 antes de emitir) queda en el backlog para la mitad estructural. Nota de mercado: que el
 #1 se venda en ~2 semanas es senal de que el ranking apunta donde el mercado tambien.
+
+## 14-oct-2026 · T-960 implementada: `informe-semanal --reconfirmar`
+- Pasada previa barata (mismo emparejar+motor) para saber que comunas mira el top*2
+  provisorio (colchon: si la re-recoleccion bota filas, los suplentes ya vienen de
+  comunas cubiertas); re-recoleccion de SOLO esas comunas (venta, 12 paginas c/u por
+  defecto, ruta _Desde_ permitida — la ficha directa sigue prohibida §13.6); y el
+  informe se emite recien despues con el veredicto en cada ficha: "re-confirmada hoy",
+  "no reaparecio: probablemente vendida" (⚠ rojo), o la escalera de edad si su comuna
+  no se cubrio. Nota del informe y eco reportan el conteo (ok/caidas/sin cubrir).
+- Robustez: si la recoleccion falla (sin USER_AGENT, portal caido, selftest rojo), el
+  informe SE EMITE IGUAL sin fingir re-confirmacion, y lo dice. Bitacora propia
+  (`portal_busqueda:reconfirmacion`, sufijo nuevo de recolectar-portal) para no
+  compararse contra la corrida semanal completa ni inflarle la linea base (leccion
+  T-956). `--comunas` de recolectar-portal ahora acepta 'comuna:region_slug' — sin
+  eso una comuna fuera de la RM pedida a mano armaba la URL '-metropolitana' que
+  responde 200 con cero resultados (la trampa de T-049).
+- Sin verificador 7.6 completo: no toca motor ni score — no cambia NINGUN numero del
+  ranking; solo trae datos mas frescos (la misma recoleccion de siempre) y rotula.
+  Tests: comunas_del_top (dedup/orden/region/tope) y el render de los tres veredictos.
+- Pendiente: primera corrida real del usuario mide costo (minutos/paginas) y beneficio
+  (cuantas fichas re-confirmadas vs caidas) -> decidir si pasa al semanal por defecto.

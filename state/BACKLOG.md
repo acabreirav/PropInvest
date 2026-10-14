@@ -1959,7 +1959,12 @@ comando_usuario: uv run python scripts/backtest_modelo_arriendo.py
 
 
 ## T-960 · Re-confirmar el TOP contra el portal antes de emitir el informe
-estado: pendiente
+estado: implementada; esperando la PRIMERA corrida real para medir costo/beneficio y
+  decidir si pasa a ser el default del semanal (hoy es opt-in: `informe-semanal
+  --reconfirmar`, 12 paginas/comuna, solo venta, comunas del top*2 provisorio, bitacora
+  propia `portal_busqueda:reconfirmacion`). La ficha dice el veredicto: "re-confirmada
+  hoy" / "no reaparecio: probablemente vendida" / escalera de edad si su comuna no se
+  cubrio. Si la recoleccion falla, el informe se emite igual y lo dice.
 agente: colector
 fase: 2
 origen: hallazgo del usuario (14-oct-2026) — el #1 del informe (MLC-4073503306,

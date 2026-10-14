@@ -695,7 +695,11 @@ def ingerir_legado(
 
 @app.command()
 def recolectar_portal(
-    comunas: str = typer.Option("", help="separadas por coma. Vacio = las de config/zonas.yml"),
+    comunas: str = typer.Option(
+        "",
+        help="separadas por coma; una comuna fuera de la RM viaja como 'comuna:region_slug' "
+        "(ej. 'concepcion:biobio'). Vacio = las de config/zonas.yml",
+    ),
     fase: int = typer.Option(
         0, help="recolecta todas las comunas de una fase del alcance (§10). 3 = fuera de la RM"
     ),
@@ -706,6 +710,11 @@ def recolectar_portal(
         0,
         "--dirigida",
         help="recolecta ARRIENDO en las N comunas con mas unidades esperando (ver `faltantes`)",
+    ),
+    bitacora_sufijo: str = typer.Option(
+        "",
+        help="linea base PROPIA en la bitacora (T-960: una corrida chica de re-confirmacion "
+        "no debe compararse contra la semanal completa ni inflarle la linea base)",
     ),
 ) -> None:
     """T-920 · recolecta Portal Inmobiliario por la ruta que el robots.txt PERMITE.
@@ -773,7 +782,16 @@ def recolectar_portal(
         typer.echo("  Si nunca corriste `probar-comunas --fase %d`, hacelo primero: un slug" % fase)
         typer.echo("  de region malo devuelve 200 con cero avisos y no da error.\n")
     else:
-        lista = [c.strip() for c in comunas.split(",") if c.strip()] or [
+
+        def _con_region(crudo: str) -> str | tuple[str, str]:
+            # 'concepcion:biobio' -> tupla con el slug de region que el colector come;
+            # sin ':' queda como string (metropolitana). Sin esto, una comuna fuera de
+            # la RM pedida por --comunas armaba una URL '-metropolitana' que el portal
+            # responde 200 con cero resultados, sin error (la trampa de T-049).
+            nombre, _, reg = crudo.partition(":")
+            return (nombre, reg) if reg else nombre
+
+        lista = [_con_region(c.strip()) for c in comunas.split(",") if c.strip()] or [
             z["comuna"] for z in cargar("zonas").crudo("fase_1")
         ]
         ops = tuple(o.strip() for o in operaciones.split(",") if o.strip())
@@ -794,7 +812,12 @@ def recolectar_portal(
     # nueva lo inserta todo, infla la linea base compartida, y la corrida siguiente de
     # cualquier fase abortaba con un "cayo X%" falso. El arreglo real —comparar la tasa
     # filas_parseadas/doc, que no depende de fase ni paginas— es T-956.
-    id_bitacora = f"{col.id}:dirigida" if dirigida else f"{col.id}:fase{fase}"
+    if bitacora_sufijo:
+        id_bitacora = f"{col.id}:{bitacora_sufijo}"
+    elif dirigida:
+        id_bitacora = f"{col.id}:dirigida"
+    else:
+        id_bitacora = f"{col.id}:fase{fase}"
     corrida = bitacora.abrir(id_bitacora)
     try:
         anterior = bitacora.filas_de_la_ultima_corrida_exitosa(con, id_bitacora)
@@ -1648,6 +1671,17 @@ def informe_semanal(
         "con --precio-min-uf. OJO: sobre UF 6.000 el ranking excluye por regla dura "
         "(tope del subsidio, §12), asi que la vista solo puede poblarse hasta ahi.",
     ),
+    reconfirmar: bool = typer.Option(
+        False,
+        "--reconfirmar",
+        help="T-960: antes de emitir, re-recolecta VENTA en las comunas del top "
+        "provisorio (pocas comunas, paginas altas, ruta permitida) y marca en cada "
+        "ficha si el aviso reaparecio hoy o probablemente se vendio. Cuesta minutos "
+        "de corrida; el eco reporta el costo y el beneficio para calibrarlo (§8.4).",
+    ),
+    reconfirmar_paginas: int = typer.Option(
+        12, help="paginas por comuna en la re-confirmacion (48 avisos c/u)"
+    ),
 ) -> None:
     """T-930 · el informe semanal como DOCUMENTO: HTML + snapshot, no consola pegada.
 
@@ -1671,6 +1705,61 @@ def informe_semanal(
     corte = ahora - timedelta(days=dias_corte)
     p, inv = cargar("params"), cargar("inversionista")
     alcance = desde_config(cargar("zonas"))
+
+    # T-960 · re-confirmacion del top ANTES de emitir: el #1 del 14-oct llevaba 15 dias
+    # vendido y rankeo igual (el gate §7.3 tolera 21). Pasada previa barata para saber
+    # QUE comunas mira el top, re-recoleccion de SOLO esas con paginas altas (la ficha
+    # directa /MLC- esta prohibida: la unica re-confirmacion legal son los listados
+    # _Desde_), y el informe se emite recien despues, con el veredicto en cada ficha.
+    comunas_reconfirmadas: set[str] = set()
+    if reconfirmar:
+        con = duckdb.connect(str(db.crear()))
+        try:
+            r0 = op.emparejar_con_params(con, p, alcance=alcance, ahora=ahora)
+            evals0 = (
+                evaluar_universo(r0.unidades, escenario_base(p, inv), p, inv) if r0.unidades else []
+            )
+            vivos0 = [(u, e) for u, e in zip(r0.unidades, evals0, strict=True) if not e.excluido]
+            vivos0.sort(key=lambda x: -x[1].score)
+            if precio_min_uf > 0:
+                vivos0 = [x for x in vivos0 if float(x[0].precio_uf) >= precio_min_uf]
+            if precio_max_uf > 0:
+                vivos0 = [x for x in vivos0 if float(x[0].precio_uf) <= precio_max_uf]
+            # colchon top*2: la re-recoleccion puede botar filas del top y subir suplentes,
+            # que con el colchon ya vienen de comunas re-confirmadas tambien
+            objetivo = inf.comunas_del_top(
+                [u.microzona_id or "" for u, _ in vivos0[: top * 2]], alcance
+            )
+        finally:
+            con.close()
+        if not objetivo:
+            typer.echo("  re-confirmacion: sin top provisorio que re-confirmar; se emite directo")
+        else:
+            etiqueta = ",".join(f"{c}:{reg}" for c, reg in objetivo)
+            typer.echo(
+                f"  re-confirmacion T-960: {len(objetivo)} comunas del top x "
+                f"{reconfirmar_paginas} paginas (venta, ruta permitida)"
+            )
+            try:
+                recolectar_portal(
+                    comunas=etiqueta,
+                    fase=0,
+                    operaciones="venta",
+                    paginas=reconfirmar_paginas,
+                    tipo="usadas",
+                    dirigida=0,
+                    bitacora_sufijo="reconfirmacion",
+                )
+                comunas_reconfirmadas = {c for c, _ in objetivo}
+            except typer.Exit as exc:
+                # la re-confirmacion fallo (portal caido, selftest rojo...): el informe
+                # sale igual, SIN fingir que se re-confirmo — las fichas quedan con su
+                # "visto hace N dias" de siempre y el eco lo dice.
+                typer.echo(
+                    f"  ✗ la re-confirmacion fallo (exit {exc.exit_code}): el informe se "
+                    "emite sin re-confirmar, con la edad de cada avistamiento a la vista"
+                )
+
     con = duckdb.connect(str(db.crear()))
     try:
         r = op.emparejar_con_params(con, p, alcance=alcance, ahora=ahora)
@@ -1764,6 +1853,13 @@ def informe_semanal(
                     else ""
                 ),
                 visto_hace_dias=vistos_top.get(u.unidad_key, -1),
+                # T-960: veredicto solo si SU comuna se re-recolecto en esta corrida —
+                # reaparecio hoy (True) o no salio en las paginas pedidas (False)
+                reconfirmada=(
+                    vistos_top.get(u.unidad_key, -1) == 0
+                    if (u.microzona_id or "").split("/")[0] in comunas_reconfirmadas
+                    else None
+                ),
             )
             for u, ev in vivos[:top]
         ]
@@ -1801,6 +1897,20 @@ def informe_semanal(
         con.close()
 
     notas = []
+    if comunas_reconfirmadas:
+        ok = sum(1 for f in filas_top if f.reconfirmada is True)
+        caidas = sum(1 for f in filas_top if f.reconfirmada is False)
+        sin_cubrir = sum(1 for f in filas_top if f.reconfirmada is None)
+        notas.append(
+            f"TOP RE-CONFIRMADO (T-960): {len(comunas_reconfirmadas)} comunas re-recolectadas "
+            f"hoy con {reconfirmar_paginas} paginas c/u. {ok} fichas reaparecieron, "
+            f"{caidas} no (probablemente vendidas)"
+            + (f", {sin_cubrir} de comunas sin cubrir." if sin_cubrir else ".")
+        )
+        typer.echo(
+            f"  re-confirmacion: {ok} del top reaparecieron hoy · {caidas} no reaparecieron"
+            + (f" · {sin_cubrir} sin cubrir" if sin_cubrir else "")
+        )
     if precio_min_uf > 0 or precio_max_uf > 0:
         desde_txt = f"desde UF {precio_min_uf:,.0f}" if precio_min_uf > 0 else ""
         hasta_txt = f"hasta UF {precio_max_uf:,.0f}" if precio_max_uf > 0 else ""

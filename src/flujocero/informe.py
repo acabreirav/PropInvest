@@ -62,6 +62,10 @@ class FilaTop:
     # decía que llevaba días sin re-confirmarse; el gate de frescura §7.3 tolera hasta
     # 21). -1 = snapshots viejos sin el dato: no se muestra, no se inventa.
     visto_hace_dias: int = -1
+    # T-960 · resultado de la re-confirmación del top (--reconfirmar): True = su comuna
+    # se re-recolectó hoy y el aviso REAPARECIÓ; False = se re-recolectó y NO apareció
+    # (probablemente vendida); None = no hubo re-confirmación o su comuna no se cubrió.
+    reconfirmada: bool | None = None
 
 
 @dataclass
@@ -328,6 +332,28 @@ def nuevas_evaluadas_al_desde(
     return salida[:top], descartes
 
 
+# --------------------------------------------- T-960 · re-confirmación del top emitido
+
+
+def comunas_del_top(
+    microzonas: list[str], alcance: Any, max_comunas: int = 8
+) -> list[tuple[str, str]]:
+    """Las comunas del top provisorio, en orden de ranking, con su slug de región.
+
+    Es lo que la re-confirmación re-recolecta antes de emitir el informe: pocas comunas,
+    muchas páginas. `max_comunas` acota el costo (cada comuna son minutos de corrida con
+    pausas honestas entre páginas); las primeras del ranking mandan.
+    """
+    vistas: list[tuple[str, str]] = []
+    for mz in microzonas:
+        comuna = (mz or "").split("/")[0]
+        if comuna and all(c != comuna for c, _ in vistas):
+            vistas.append((comuna, alcance.region(comuna)))
+            if len(vistas) >= max_comunas:
+                break
+    return vistas
+
+
 # ----------------------------------------- T-958 · arriendo por modelo en celdas ralas
 
 
@@ -546,7 +572,20 @@ def render_html(
         # vendido y nada lo decía). Sobre 7 días el aviso no fue re-confirmado por la
         # última corrida semanal: puede estar vendido y hay que verificarlo antes de
         # entusiasmarse — el §7.3 lo tolera hasta 21 días, pero tolerar no es callar.
-        if f.visto_hace_dias < 0:
+        if f.reconfirmada is True:
+            visto = (
+                "<div><span>Visto en el portal</span><b class='pos'>re-confirmada hoy</b> "
+                "<span class='mini'>el aviso reapareció en la re-recolección de su comuna "
+                "(T-960)</span></div>"
+            )
+        elif f.reconfirmada is False:
+            visto = (
+                "<div><span>Visto en el portal</span><b class='neg'>no reapareció en la "
+                "re-confirmación de hoy</b> <span class='mini neg'>⚠ probablemente vendida o "
+                "retirada: su comuna se re-recolectó con páginas altas y el aviso no salió — "
+                "abrir el link antes de dedicarle un minuto más</span></div>"
+            )
+        elif f.visto_hace_dias < 0:
             visto = ""
         elif f.visto_hace_dias <= 1:
             visto = "<div><span>Visto en el portal</span><b class='pos'>hoy o ayer</b></div>"

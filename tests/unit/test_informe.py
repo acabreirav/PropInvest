@@ -440,3 +440,46 @@ def test_la_ficha_dice_hace_cuanto_se_vio_el_aviso() -> None:
         "2026-10-14", "2026-10-07", [_fila("S")], inf.CambiosTop(), [], [], "", []
     )
     assert "Visto en el portal" not in html2
+
+
+# ----------------------------------------------- T-960 · re-confirmacion del top
+
+
+def test_comunas_del_top_dedup_orden_y_region() -> None:
+    from flujocero.alcance import desde_config
+    from flujocero.config import cargar
+
+    alcance = desde_config(cargar("zonas"))
+    mzs = [
+        "nunoa/plaza-nunoa",
+        "independencia/hospitales",
+        "nunoa/parque-san-eugenio",  # comuna repetida: no se duplica
+        "concepcion/centro-de-concepcion",  # fuera de la RM: viaja con su region_slug
+        "",  # microzona vacia: se ignora
+        "rancagua/la-compania",
+    ]
+    comunas = inf.comunas_del_top(mzs, alcance)
+    assert [c for c, _ in comunas] == ["nunoa", "independencia", "concepcion", "rancagua"]
+    por_nombre = dict(comunas)
+    assert por_nombre["nunoa"] == "metropolitana"
+    assert por_nombre["concepcion"] != "metropolitana"  # el slug real viene de zonas.yml
+    # el tope acota el costo: cada comuna son minutos de corrida
+    assert inf.comunas_del_top(mzs, alcance, max_comunas=2) == comunas[:2]
+
+
+def test_la_ficha_dice_el_veredicto_de_la_reconfirmacion() -> None:
+    viva = _fila("V")
+    viva.reconfirmada = True
+    caida = _fila("C")
+    caida.reconfirmada = False
+    caida.visto_hace_dias = 15
+    sin_cubrir = _fila("S")
+    sin_cubrir.visto_hace_dias = 3
+    html = inf.render_html(
+        "2026-10-14", "2026-10-07", [viva, caida, sin_cubrir], inf.CambiosTop(), [], [], "", []
+    )
+    assert "re-confirmada hoy" in html
+    assert "no reapareció en la re-confirmación de hoy" in html
+    assert "probablemente vendida" in html
+    # la no cubierta cae a la escalera de edad de siempre
+    assert "hace 3 días" in html
