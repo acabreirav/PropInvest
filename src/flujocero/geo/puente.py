@@ -176,7 +176,7 @@ def calcular_riesgo(conexion: Any, p: Config, ahora: datetime) -> int:
 
 
 def catalizadores_en_memoria(
-    conexion: Any, p: Config, ahora: datetime, factor_operativa: float = 1.0
+    conexion: Any, p: Config, ahora: datetime, factor_operativa: float | None = None
 ) -> tuple[dict[str, tuple[float | None, float]], dict[str, int]]:
     """`mid -> (dist_metro_m, catalizador)` + stats, SIN escribir nada.
 
@@ -200,6 +200,9 @@ def catalizadores_en_memoria(
         str(e["linea"]).lower(): e["fecha_apertura"]
         for e in (cargar_config("metro").crudo("lineas_en_construccion") or [])
     }
+    if factor_operativa is None:
+        # el E de params manda (T-963); el argumento explicito es para las mediciones
+        factor_operativa = float(p.d("catalizador.factor_operativa"))
     horizonte_anios = int(p.d("catalizador.horizonte_fecha_anios"))
     plena = float(p.d("catalizador.dist_plena_m"))
     maxima = float(p.d("catalizador.dist_max_m"))

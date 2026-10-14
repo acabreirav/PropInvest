@@ -249,6 +249,15 @@ catalizador:
   dist_plena_m: {v: 400, evidence: E, rango: [200, 600], nota: "hasta aqui, beneficio pleno (1.0)"}
   dist_max_m: {v: 1200, evidence: E, rango: [800, 2000], nota: "mas alla, 0: la caminata deja de vender"}
   factor_en_construccion: {v: 0.7, evidence: E, rango: [0.4, 1.0], nota: "descuento por riesgo de fecha de apertura"}
+  # T-963 (auditoria 14-oct H3 + T-922): cuanto vale una estacion OPERATIVA. En 1.0 el
+  # catalizador es un "bono RM" de ~9 puntos de score DOBLEMENTE contado (una estacion
+  # de 2006 ya vive en el precio y el arriendo de su microzona; medido: peso=0 mueve el
+  # 16,2% del ranking y cambia el top 5). Medicion fina del 14-oct (medir_catalizador):
+  # 0.5 es casi un no-op (3 movidas: el min-max del score absorbe el escalado uniforme
+  # mientras la operativa siga valiendo mas que la construccion), 0.25 mueve 13,8% y
+  # 0.0 (solo construccion con fecha creible, 19 estaciones) mueve 20,3%. El valor lo
+  # decide el usuario (8.4); 1.0 = comportamiento historico hasta esa decision.
+  factor_operativa: {v: 1.0, evidence: E, rango: [0.0, 1.0], nota: "pendiente decision 8.4 del 14-oct; candidato recomendado 0.25"}
   horizonte_fecha_anios: {v: 3, evidence: V, nota: "CLAUDE.md §12: fecha creible <= 3 anios"}
 
 score:

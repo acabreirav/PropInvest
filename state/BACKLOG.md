@@ -2057,8 +2057,10 @@ criterio_de_aceptacion:
   - [x] cota extrema medida (14-oct): peso=0 mueve 16,2% y cambia el top 5 -> 8.4
   - [x] instrumento listo: catalizadores_en_memoria(factor_operativa) +
         scripts/medir_catalizador.py (variantes 1,0/0,5/0,25/0,0 sin escribir base)
-  - [ ] usuario corre medir_catalizador.py y decide el factor (8.4); recien ahi nace
-        el E catalizador.factor_operativa con el valor elegido
+  - [x] usuario corrio medir_catalizador (14-oct): 0.5 casi no-op (min-max absorbe
+        escalado uniforme), 0.25 mueve 13,8%, 0.0 mueve 20,3% con 19 estaciones
+  - [x] E catalizador.factor_operativa creado en v=1.0 (historico) con la plomeria
+        lista; falta SOLO la decision 8.4 del usuario (recomendado: 0.25)
   - [ ] evaluar incluir EFE con fecha creible (Biotren/Merval operan: mismo doble conteo)
 gate: make gates · verificador 7.6 (toca score via puente)
 

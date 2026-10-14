@@ -3524,3 +3524,21 @@ verdes) + `scripts/medir_catalizador.py`: recalcula el catalizador con factor_op
 catalizador medio RM vs regiones (el "bono" a la vista). Las en-construccion no se
 tocan en ninguna variante. Con esa salida el usuario decide el factor (8.4) y recien
 ahi nace el parametro E.
+
+## 14-oct-2026 · medir_catalizador sobre la base real — el dial es operativa-vs-construccion
+Salida completa en la conversacion. Base 2.720 rankeadas, 143 estaciones elegibles:
+- factor 0.5: 3 movidas (0,1%) — CASI UN NO-OP. Razon: el min-max del score absorbe un
+  escalado uniforme de la RM; mientras la operativa (0,5) siga cerca de la construccion
+  (0,7) nada cambia de orden. El dial real no es "cuanto vale el Metro" sino "cuanto
+  vale lo YA construido frente a lo QUE VIENE".
+- factor 0.25: 375 movidas (13,8%) — la construccion (0,7) pasa a dominar el
+  componente; el top 10 se reordena moderado, el #1 se mantiene.
+- factor 0.0: 551 movidas (20,3%), elegibles caen a 19 (solo construccion con fecha
+  creible) — las regiones entran al top general (antofagasta #8, rancagua #9) y el
+  componente queda colgando de 19 estaciones (fragil a un cambio de metro.yml).
+PLOMERIA LISTA: nuevo E `catalizador.factor_operativa` {v: 1.0, rango [0,1]} leido por
+catalizadores_en_memoria/calcular_catalizador — 1.0 = comportamiento historico, asi que
+NADA cambia hasta la decision 8.4 del usuario. Recomendacion presentada: 0.25 (bajo la
+construccion 0,7 como pide la tesis T-922, conserva un residuo por liquidez/vacancia
+cerca de Metro, y no cuelga el 10% del score de 19 estaciones). Cuando el usuario
+decida: editar el v, re-correr puente-censo e informe.
