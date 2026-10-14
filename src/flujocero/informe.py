@@ -56,6 +56,12 @@ class FilaTop:
     # D-022: la procedencia REAL del arriendo (ventana de vecinos + alertas como el ⚠ de
     # monotonía), no la frase genérica. "" = snapshots viejos, cae a la frase de siempre.
     arriendo_metodo: str = ""
+    # Hace cuántos días se VIO el aviso en el portal por última vez (14-oct-2026: el #1
+    # del informe resultó probablemente vendido — el link caía a una búsqueda de
+    # similares, que es lo que el portal hace con avisos terminados — y la ficha no
+    # decía que llevaba días sin re-confirmarse; el gate de frescura §7.3 tolera hasta
+    # 21). -1 = snapshots viejos sin el dato: no se muestra, no se inventa.
+    visto_hace_dias: int = -1
 
 
 @dataclass
@@ -536,6 +542,25 @@ def render_html(
                 f" <span class='mini neg'>⚠ bajo las UF {_f(credito_minimo_uf)} que los bancos "
                 "priorizan (supuesto E) — cotizar también mutuaria/caja</span>"
             )
+        # La edad del avistamiento, SIEMPRE visible (14-oct-2026: el #1 llevaba días
+        # vendido y nada lo decía). Sobre 7 días el aviso no fue re-confirmado por la
+        # última corrida semanal: puede estar vendido y hay que verificarlo antes de
+        # entusiasmarse — el §7.3 lo tolera hasta 21 días, pero tolerar no es callar.
+        if f.visto_hace_dias < 0:
+            visto = ""
+        elif f.visto_hace_dias <= 1:
+            visto = "<div><span>Visto en el portal</span><b class='pos'>hoy o ayer</b></div>"
+        elif f.visto_hace_dias <= 7:
+            visto = (
+                f"<div><span>Visto en el portal</span><b>hace {f.visto_hace_dias} días</b></div>"
+            )
+        else:
+            visto = (
+                f"<div><span>Visto en el portal</span><b class='neg'>hace "
+                f"{f.visto_hace_dias} días</b> <span class='mini neg'>⚠ no re-confirmado "
+                "en la última corrida: puede estar vendido — abrir el link antes de "
+                "cotizar</span></div>"
+            )
         return f"""
 <div class="ficha">
   <div class="ficha-titulo">#{i} · {escape(f.microzona_id)} · {escape(f.tipologia)} ·
@@ -556,6 +581,7 @@ def render_html(
     <div><span>Crédito ({1 - f.pie_pct:.0%})</span><b>UF {_f(credito_uf)}</b>{alerta_credito}</div>
     <div><span>Pie para flujo cero</span><b>{f.pie_cero}</b></div>
     <div><span>DFL2</span><b>{escape(f.dfl2)}</b></div>
+    {visto}
   </div>
   <div class="mini">Por qué está arriba: {drivers}</div>
 </div>"""

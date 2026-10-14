@@ -1710,6 +1710,20 @@ def informe_semanal(
         equilibrios = {
             u.unidad_key: arriendo_equilibrio_real(u, esc, p, inv) for u, _ in vivos[:top]
         }
+        # Hace cuantos dias se VIO cada fila del top en el portal (14-oct-2026: el #1
+        # resulto probablemente vendido y la ficha no decia que llevaba dias sin
+        # re-confirmarse). fetched_at de la version vigente, en dias contra `ahora`.
+        llaves_top = [u.unidad_key for u, _ in vivos[:top]]
+        vistos_top: dict[str, int] = {}
+        if llaves_top:
+            marcadores = ", ".join("?" for _ in llaves_top)
+            for k_u, visto_u in con.execute(
+                f"SELECT unidad_key, fetched_at FROM fact_unidad_venta "  # noqa: S608
+                f"WHERE valid_to IS NULL AND unidad_key IN ({marcadores})",
+                llaves_top,
+            ).fetchall():
+                if visto_u is not None:
+                    vistos_top[k_u] = max(0, (ahora - visto_u).days)
 
         filas_top = [
             inf.FilaTop(
@@ -1749,6 +1763,7 @@ def informe_semanal(
                     if u.unidad_key in r.procedencia_arriendo
                     else ""
                 ),
+                visto_hace_dias=vistos_top.get(u.unidad_key, -1),
             )
             for u, ev in vivos[:top]
         ]

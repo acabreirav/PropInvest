@@ -412,3 +412,31 @@ def test_sin_resumen_no_hay_seccion_del_modelo() -> None:
     html = inf.render_html("2026-10-14", "2026-10-07", [], inf.CambiosTop(), [], [], "", [])
     assert "Arriendo por MODELO" not in html
     assert "6 · Delta del mercado usado" in html
+
+
+# ------------------------------- 14-oct · la edad del avistamiento, visible en la ficha
+
+
+def test_la_ficha_dice_hace_cuanto_se_vio_el_aviso() -> None:
+    """El #1 del 14-oct resulto probablemente vendido y nada lo decia: el gate de
+    frescura tolera 21 dias, pero tolerar no es callar."""
+    fresca = _fila("F")
+    fresca.visto_hace_dias = 0
+    reciente = _fila("R")
+    reciente.visto_hace_dias = 4
+    vieja = _fila("V")
+    vieja.visto_hace_dias = 12
+    html = inf.render_html(
+        "2026-10-14", "2026-10-07", [fresca, reciente, vieja], inf.CambiosTop(), [], [], "", []
+    )
+    assert "hoy o ayer" in html
+    assert "hace 4 días" in html
+    assert "hace 12 días" in html and "puede estar vendido" in html
+    # el aviso solo acompana a la VIEJA, no a las frescas
+    assert html.count("puede estar vendido") == 1
+
+    # snapshots viejos sin el dato (-1): la celda no aparece — ND no se inventa
+    html2 = inf.render_html(
+        "2026-10-14", "2026-10-07", [_fila("S")], inf.CambiosTop(), [], [], "", []
+    )
+    assert "Visto en el portal" not in html2

@@ -3390,3 +3390,17 @@ T-957 hecha.
   arriendo ~X% optimista"), visible en la ficha del informe, igual que el tripwire de
   monotonia. CERO numeros cambian (solo texto de procedencia): por eso no gatilla un
   ciclo verificador completo; 2 tests fijan la marca y su ausencia.
+
+## 14-oct-2026 · hallazgo del usuario: el #1 del informe probablemente VENDIDO y la ficha no lo decia
+- El link del #1 (nunoa/parque-san-eugenio MLC-4073503306) caia a una busqueda de
+  similares — lo que el portal hace con avisos TERMINADOS — y el filtro manual por
+  precio tampoco lo encontraba. La base se recolecta semanal (ultima: 13-oct), pero el
+  gate de frescura §7.3 tolera 21 dias y la recoleccion por paginas no re-confirma
+  todos los avisos en cada corrida: un vendido puede quedarse dias en el ranking.
+- Arreglo: la ficha ahora muestra "Visto en el portal: hoy o ayer / hace N dias", y
+  sobre 7 dias agrega "⚠ no re-confirmado en la ultima corrida: puede estar vendido —
+  abrir el link antes de cotizar". ND (-1, snapshots viejos) no se muestra. Tolerar 21
+  dias es politica §7.3; callarlo era el bug.
+- Pendiente del usuario: evaluar_aviso MLC-4073503306 (ultima vista + historial) y
+  probar el link del #3 para confirmar que el formato de URL esta bien y lo del #1 es
+  aviso terminado, no un link roto.
