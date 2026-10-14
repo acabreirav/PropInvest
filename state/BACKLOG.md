@@ -1956,3 +1956,25 @@ gate: make gates · verificador 7.6: corrido y ACATADO — 2 BLOQUEA + 3 MATERIA
   variante mz_minima en el gate, temporada por ventana, tope §12 y banda en la
   seccion, ventana_descentrada). Ver RUNLOG 14-oct-2026.
 comando_usuario: uv run python scripts/backtest_modelo_arriendo.py
+
+
+## T-960 · Re-confirmar el TOP contra el portal antes de emitir el informe
+estado: pendiente
+agente: colector
+fase: 2
+origen: hallazgo del usuario (14-oct-2026) — el #1 del informe (MLC-4073503306,
+  nunoa) estaba vendido: ultima vista 29-09, dos corridas semanales despues sin
+  reaparecer, y rankeo igual porque el gate de frescura §7.3 tolera 21 dias. La marca
+  "visto hace N dias" (ya implementada) lo hace VISIBLE; esta tarea lo hace RARO.
+contexto: la recoleccion es por paginas de listado y no re-confirma cada aviso en cada
+  corrida (el delta reporta "ya no estan" POCO FIABLE por lo mismo: 42% de cobertura).
+  La ficha directa /MLC- esta PROHIBIDA por robots (§13.6): la re-confirmacion solo
+  puede ser via mas paginas de listado de las comunas del top, por la ruta _Desde_.
+criterio_de_aceptacion:
+  - paso previo al informe (o flag --reconfirmar): re-recolectar SOLO las comunas del
+    top provisorio con --paginas alto, re-emparejar, y recien ahi emitir
+  - medir el costo (paginas/tiempo) y el beneficio (cuantas unidades del top cambian
+    de "visto hace N" a "hoy", cuantas desaparecen) en una corrida real
+  - el informe dice cuantas unidades del top quedaron re-confirmadas vs no
+  - respetar robots y el detector de parser roto; cero fetch de fichas directas
+gate: make gates

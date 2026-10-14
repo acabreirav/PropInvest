@@ -3404,3 +3404,12 @@ T-957 hecha.
 - Pendiente del usuario: evaluar_aviso MLC-4073503306 (ultima vista + historial) y
   probar el link del #3 para confirmar que el formato de URL esta bien y lo del #1 es
   aviso terminado, no un link roto.
+
+## 14-oct-2026 · confirmado: el #1 del informe estaba VENDIDO (no era bug de link ni de scraping)
+evaluar_aviso MLC-4073503306: ultima vista 29-09-2026 (15 dias), dos corridas
+semanales posteriores (06 y 13-oct) recolectaron nunoa sin que reapareciera; el portal
+redirige avisos terminados a una busqueda de similares — exactamente lo que el usuario
+vio. El gate §7.3 lo toleraba hasta el 20-oct sin decirlo: la marca "visto hace N dias"
+(commit 0194682) cierra la mitad visible; T-960 (re-confirmar el top con paginas altas
+antes de emitir) queda en el backlog para la mitad estructural. Nota de mercado: que el
+#1 se venda en ~2 semanas es senal de que el ranking apunta donde el mercado tambien.
