@@ -396,6 +396,15 @@ Cada iteración del harness:
   Si el plan lo requiere, es señal de que la tarea está mal cortada.
 - Ola típica: **4–6 subagentes**. Más de 8 degrada la calidad de la revisión.
 
+### 8.3b Cómo pedirle cosas al usuario
+El agente corre en un contenedor sin la base de datos; todo lo que necesite la base
+real o la red chilena lo corre el usuario en su máquina (PowerShell 5.1, repo en
+`C:\Users\Alvaro\flujo-cero`). **Regla (pedida el 14-oct-2026): cada vez que un paso
+requiera acción del usuario, se le entrega el comando LISTO para pegar** — en bloque de
+código, con el `git pull` incluido cuando el paso dependa de código recién pusheado, y
+con una línea diciendo qué va a producir y qué hacer con la salida (normalmente:
+pegarla completa en la conversación).
+
 ### 8.4 Cuándo detenerse y preguntar
 Detente y escribe la pregunta en `docs/05-decisiones.md` si:
 - una fuente exige romper `robots.txt` o los T&C;
