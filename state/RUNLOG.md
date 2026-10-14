@@ -3277,3 +3277,32 @@ DECISIONES §8.4 (dentro de la autonomia dada para T-958; revertibles con una li
   de (0,1] cae al respaldo global; un beta GLOBAL fuera de (0,1] es modelo ND. Test
   nuevo; habia una fila 4D3B en el top de cobertura usando ese 1,067.
 T-958 pasa a hecha. La seccion 6 queda viva en el proximo informe-semanal.
+
+## 14-oct-2026 · T-955 CERRADA — el 0.15 se confirma con la medicion final (base real)
+medir_guardias_ventana + sensibilidad 0.10/0.20 (salidas completas en la conversacion):
+- El guardia D-024 a 0.15 apaga EXACTAMENTE 3 unidades y las 3 son culpables (+31,3%
+  sobre su propio nucleo — el trio ya conocido). CERO inocentes. D-023 apagaba 133
+  para atrapar a estas mismas 3.
+- 0.20 es identico a 0.15 hoy (los culpables estan sobre +31%). 0.10 apagaria 5 mas,
+  todas a +12,7% (una sola firma), sin mover NINGUNA posicion del ranking ni el top 5
+  (sensibilidad: 0 movidas >10%). Bajo el danio medido: no hay razon §8.4 para moverse.
+- Entre las anchas que PASAN: peor desviacion +12,7% al alza; la unica >15% es a la
+  BAJA (-15,8%, error conservador que el guardia asimetrico deja pasar a proposito).
+- 2c = 0: ningun valor cambia a escondidas entre guardia activo y apagado.
+- Seccion 3 (±20% con un lado >70%): 813 de 2.047 (40%) — sin guardia a proposito,
+  estructura del mercado (D-024); el tripwire de monotonia sigue cubriendo.
+DECISION: calidad.desvio_ventana_ancha_max queda en 0.15. T-955 hecha.
+
+## 14-oct-2026 · T-957 — firma S1 medida: 64 de 249 anchas (26%); nueva medicion lista
+- S1 = 64: no despreciable, y la seccion 2 NO puede absolverlas (nucleo y ancha pueden
+  estar sesgados juntos — ese es el punto del hallazgo).
+- La vara independiente que T-957 prescribia ("log-log arriendo~m² dentro de mz×tip")
+  ya existe: el modelo hedonico T-958 con beta por tipologia. Se agrego la seccion 2d
+  a medir_guardias_ventana.py: compara la asignacion de cada ancha contra la prediccion
+  del modelo, S1 vs no-S1, con el matiz declarado (el ajuste de celda del modelo usa
+  los mismos comps del grupo, y el error propio del modelo es ~6% mediano / ~11% p75,
+  asi que divergencias <15% son ruido).
+- Criterio de cierre: si las S1 divergen como las no-S1 y pocas superan el error propio
+  del modelo -> T-957 se cierra como "marca, no motor". Si divergen mas y hacia ARRIBA
+  -> prototipo de vara ajustada por tamanio en el motor, con verificador 7.6.
+Pendiente: el usuario re-corre medir_guardias_ventana.py (ahora con 2d) y pega la salida.

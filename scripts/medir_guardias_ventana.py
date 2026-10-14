@@ -72,7 +72,7 @@ grupos: dict[tuple[str, str], list[tuple[D, D]]] = {}
 for c in comps:
     grupos.setdefault((c.microzona_id, c.tipologia), []).append((c.m2_utiles, c.arriendo_uf))
 
-anchas: list[tuple[D, str, D, D]] = []  # (|desv|, key, mediana_angosta, asignado)
+anchas: list[tuple[D, str, D, D, object]] = []  # (|desv|, key, mediana_angosta, asignado, unidad)
 veinte_cargadas = 0
 veinte_total = 0
 for u in base.unidades:
@@ -91,12 +91,13 @@ for u in base.unidades:
         # asignada en ventana ancha: desviación vs la mediana de SU ±20% (candidato 3)
         m20 = percentil([a for _, a in pool20], D("0.5"))
         if m20:
-            anchas.append((abs((asignado - m20) / m20), u.unidad_key, m20, asignado))
+            anchas.append((abs((asignado - m20) / m20), u.unidad_key, m20, asignado, u))
 
 # Firma S1 (verificador D-024, hallazgo 1): un nucleo cuyo m² tipico se corre >10%
 # del m² de la unidad no es vara independiente — ancha y nucleo pueden estar sesgados
 # juntos. Se cuenta ADEMAS de la desviacion de medianas.
 s1 = 0
+s1_keys: set[str] = set()
 for u in base.unidades:
     m2 = u.m2_utiles
     grupo = grupos.get((u.microzona_id, u.tipologia), [])
@@ -106,6 +107,7 @@ for u in base.unidades:
         tipico = percentil(m2s_nucleo, D("0.5"))
         if abs(tipico - m2) > m2 * D("0.10"):
             s1 += 1
+            s1_keys.add(u.unidad_key)
 print(f"\n== 2 · unidades asignadas en ventana ANCHA con ±20% medible (n>=3): {len(anchas)} ==")
 print(f"  firma S1 (nucleo con tipico corrido >10% del m² de la unidad): {s1}")
 print("  (si es grande, la vara del nucleo no es independiente — T-957)")
@@ -115,10 +117,59 @@ if anchas:
         n = sum(1 for d in desvs if d > umbral)
         print(f"  desviación > {umbral:.0%}: {n}  ({n / len(anchas):.0%} de las anchas)")
     print("  las 15 peores (asignado vs mediana de su ±20%):")
-    for d, k, m20, asig in sorted(anchas, reverse=True)[:15]:
+    for d, k, m20, asig, _u in sorted(anchas, key=lambda t: t[0], reverse=True)[:15]:
         print(
             f"    {k:<18} ±20%={m20:>7.2f} UF → asignado={asig:>7.2f}  ({'+' if asig > m20 else '-'}{d:.1%})"
         )
+
+# 2d · T-957: la seccion 2 NO puede absolver a las firmas S1 — su punto es que nucleo
+# y ancha pueden estar sesgados JUNTOS, asi que una desviacion chica entre ellos no
+# prueba nada. La vara INDEPENDIENTE que T-957 pedia ("log-log arriendo~m² dentro de
+# mz×tip") ya existe: el modelo hedonico de T-958, con elasticidad por tipologia.
+# Se compara la asignacion de cada ancha contra la prediccion del modelo, separando
+# S1 de no-S1. Matiz honesto: el modelo tampoco es del todo independiente (el ajuste
+# de celda usa los mismos comps del grupo) y su propio error mediano es ~6% (backtest
+# 14-oct), asi que divergencias bajo ~15% son ruido; lo que importa es si las S1
+# divergen MAS que las no-S1 y cuantas superan el error propio del modelo.
+print("\n== 2d · T-957: las anchas contra la vara independiente (modelo hedonico T-958) ==")
+from flujocero.agg import modelo_arriendo as mamod  # noqa: E402
+from flujocero.agg.arriendo import m2_amoblados_por_grupo  # noqa: E402
+
+amo_g = m2_amoblados_por_grupo(con, ahora)
+k_enc = float(p.d("modelo_arriendo.encogimiento_celda_k"))
+modelo_h = mamod.entrenar(comps, rangos, amo_g, tmax, k_encogimiento=k_enc)
+if modelo_h is None:
+    print("  modelo ND (sin minimo estructural): la medicion queda pendiente")
+else:
+    por_clase: dict[str, list[D]] = {"S1": [], "no-S1": []}
+    detalle_2d: list[tuple[D, str, str, D, D]] = []  # (|ratio|, key, clase, asignado, modelo)
+    for _d, key, _m20, asignado, u in anchas:
+        pred = mamod.predecir(modelo_h, u.microzona_id, u.tipologia, u.m2_utiles)
+        if pred is None or not pred.arriendo_uf:
+            continue
+        ratio = (asignado - pred.arriendo_uf) / pred.arriendo_uf
+        clase = "S1" if key in s1_keys else "no-S1"
+        por_clase[clase].append(abs(ratio))
+        detalle_2d.append((abs(ratio), key, clase, asignado, pred.arriendo_uf))
+    for clase, vals in por_clase.items():
+        if not vals:
+            print(f"  {clase}: sin unidades medibles")
+            continue
+        med = percentil(sorted(vals), D("0.5"))
+        print(
+            f"  {clase:<6} n={len(vals):<4} |asignado vs modelo| mediano={med:.1%} · "
+            f">15%: {sum(1 for v in vals if v > D('0.15'))} · "
+            f">20%: {sum(1 for v in vals if v > D('0.20'))}"
+        )
+    print("  las 10 mayores divergencias (positivo = la ventana esta SOBRE el modelo):")
+    for r, key, clase, asig, pm in sorted(detalle_2d, key=lambda t: t[0], reverse=True)[:10]:
+        signo = "+" if asig > pm else "-"
+        print(
+            f"    {key:<18} [{clase:<5}] ventana={asig:>7.2f} UF vs modelo={pm:>7.2f}  ({signo}{r:.1%})"
+        )
+    print("  (si las S1 divergen como las no-S1 y pocas superan el error propio del")
+    print("   modelo, T-957 se cierra como 'marca, no motor'; si divergen mas y hacia")
+    print("   ARRIBA, la vara del nucleo necesita el ajuste por tamanio en el motor)")
 
 # El número que faltaba para la decisión (corrida 13-oct): la sección 2 mide solo las
 # anchas que PASARON el guardia. Acá se mide el daño de las que el guardia APAGA: con

@@ -1832,15 +1832,10 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-955 · Ventana ancha al borde del centrado con pool bimodal de tamanio
-estado: en_curso (guardia D-024 implementado y ASIMETRICO tras su verificador —
-  solo el alza veta; falta la validacion sobre la base real: re-correr
-  medir_guardias_ventana.py con el codigo nuevo + `cli sensibilidad
-  calidad.desvio_ventana_ancha_max=0.10` y `=0.20`) siguen en ND). Los guardias implementados se quedan
-  (protegen sin inflar jamas), pero el arreglo definitivo se elige con
-  `scripts/medir_guardias_ventana.py` sobre la base real: barrido del umbral, danio
-  observado ancha-vs-angosta (el candidato 3 que D-023 descarto mal), y cuantas ±20%
-  rankean cargadas a un lado. `cli sensibilidad` NO sirve para estos parametros: no
-  los varia — otra deuda que el verificador dejo anotada.)
+estado: hecha (14-oct-2026: medicion final sobre la base real — el 0.15 apaga 3/3
+  culpables (+31,3%) y CERO inocentes; 0.20 identico hoy; 0.10 apagaria 5 mas a +12,7%
+  sin mover una posicion (sensibilidad 0 movidas, top 5 igual); 2c=0. El umbral queda
+  en 0.15. Detalle en RUNLOG 14-oct-2026.)
 agente: motor-financiero
 fase: 2
 contexto: auditoria del peor caso de la medicion 8.4 (12-oct-2026, MLC-4510753650,
@@ -1886,7 +1881,11 @@ gate: make gates
 
 
 ## T-957 · La vara del nucleo no es independiente: medir con ajuste por tamanio
-estado: pendiente
+estado: en_curso (14-oct-2026: firma S1 MEDIDA = 64 de 249 anchas, 26% — material.
+  La medicion que decide ya esta escrita: seccion 2d de medir_guardias_ventana.py
+  compara cada ancha contra el modelo hedonico T-958 (la vara independiente que este
+  criterio pedia), S1 vs no-S1. Falta que el usuario la corra y pegue la salida;
+  criterio de cierre en RUNLOG 14-oct.)
 agente: motor-financiero
 fase: 2
 contexto: verificador de D-024, hallazgo 1 (estructural). El nucleo ±20% nunca pasa
