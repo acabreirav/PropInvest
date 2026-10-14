@@ -1881,11 +1881,11 @@ gate: make gates
 
 
 ## T-957 · La vara del nucleo no es independiente: medir con ajuste por tamanio
-estado: en_curso (14-oct-2026: firma S1 MEDIDA = 64 de 249 anchas, 26% — material.
-  La medicion que decide ya esta escrita: seccion 2d de medir_guardias_ventana.py
-  compara cada ancha contra el modelo hedonico T-958 (la vara independiente que este
-  criterio pedia), S1 vs no-S1. Falta que el usuario la corra y pegue la salida;
-  criterio de cierre en RUNLOG 14-oct.)
+estado: bloqueada_por_humano (14-oct-2026: medicion 2d EJECUTADA — S1 diverge 8,8%
+  vs 4,1% de las no-S1 y al ALZA (+19 a +25%): el criterio pre-declarado dice motor.
+  Propuesta en RUNLOG 14-oct: vara del nucleo ajustada por tamanio en el guardia D-024
+  (mediana x (m2/tipico)^beta local, respaldo E ~0,45 = beta global medido). Espera el
+  si/no del usuario (8.4); verificador 7.6 obligatorio si va.)
 agente: motor-financiero
 fase: 2
 contexto: verificador de D-024, hallazgo 1 (estructural). El nucleo ±20% nunca pasa

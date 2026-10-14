@@ -3306,3 +3306,25 @@ DECISION: calidad.desvio_ventana_ancha_max queda en 0.15. T-955 hecha.
   del modelo -> T-957 se cierra como "marca, no motor". Si divergen mas y hacia ARRIBA
   -> prototipo de vara ajustada por tamanio en el motor, con verificador 7.6.
 Pendiente: el usuario re-corre medir_guardias_ventana.py (ahora con 2d) y pega la salida.
+
+## 14-oct-2026 · T-957 — medicion 2d ejecutada: la firma S1 ES real y va al alza
+Resultado (base real, salida completa en la conversacion):
+- S1 (n=64): |asignado vs modelo| mediano 8,8% · 6 sobre 15% · 3 sobre 20%.
+- no-S1 (n=185): mediano 4,1% · 15 sobre 15% (8%) · 3 sobre 20% (1,6%).
+- Las 4 S1 entre las 10 mayores divergencias son TODAS positivas (ventana SOBRE el
+  modelo: +19,4% a +25,3%); las no-S1 van en ambas direcciones (simetrico = ruido).
+Lectura: el contraste S1 vs no-S1 controla el error propio del modelo (~6-7% en esta
+poblacion, backtest 14-oct) y la asimetria direccional descarta que sea solo "el modelo
+subestima premium" (eso afectaria a ambas clases por igual). La vara del nucleo NO es
+independiente cuando su tipico esta corrido: el guardia D-024 valida anchas infladas
+en ese caso. Magnitud honesta: cola de ~6-9 unidades materialmente infladas (>15%)
+sobre 2.296 rankeadas (~0,3%) — pero un arriendo inflado sube el yield y flota hacia
+el top, que es donde el usuario mira.
+VEREDICTO (criterio pre-declarado del 14-oct): amerita el prototipo de vara ajustada
+por tamanio en el motor. PROPUESTA al usuario (la decision 8.4 es suya por el criterio
+de T-957): en el guardia D-024, la mediana del nucleo se ajusta al m² de la unidad
+antes de comparar — mediana_ajustada = mediana_nucleo x (m2_unidad / m2_tipico)^beta,
+con beta local del grupo (log-log dentro de mz x tip, minimo de obs) y respaldo E
+`elasticidad_m2_defecto` ~0,45 anclado en el beta global medido (0,446). Solo cambia
+la VARA del guardia, no el arriendo asignado; con nucleo centrado el ajuste ~1 (las
+no-S1 quedan como estan). Verificador 7.6 obligatorio si se aprueba.
