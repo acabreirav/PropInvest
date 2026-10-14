@@ -225,7 +225,13 @@ tributacion:
   ganancia_capital_tasa_unica: {v: 0.10, evidence: V}
 
 activo:
-  plusvalia_real_anual: {v: 0.025, evidence: V, rango: [0.02, 0.04]}
+  # Auditoria 14-oct (H9): estaba marcada V SIN fuente — violacion directa del §3.2.
+  # Es un SUPUESTO de modelo: pasa a E con el rango abierto hasta 0, que es el valor
+  # relevante para un edificio viejo (con plusvalia 0, la TIR de las fichas de flujo
+  # negativo cae a 1,6-3,5% real — el driver "TIR alta" era enteramente este numero).
+  # Medir con `cli sensibilidad activo.plusvalia_real_anual=0`; si alguna vez se cita
+  # una fuente (serie CBR/BCCh de precios reales), vuelve a V con URL y fecha.
+  plusvalia_real_anual: {v: 0.025, evidence: E, rango: [0.0, 0.04], nota: "supuesto sin fuente primaria; el usado viejo puede ser 0"}
   premio_cercania_metro: {v: 0.20, evidence: V, rango: [0.15, 0.30]}
   radio_metro_metros: 600
 

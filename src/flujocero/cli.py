@@ -1786,8 +1786,21 @@ def informe_semanal(
             "descuento_vs_microzona": "precio bajo la mediana de su microzona",
         }
 
+        # Auditoria 14-oct (H4): el driver por aporte ABSOLUTO salia "costo de tenencia"
+        # en 15 de 15 fichas — el componente de mayor peso cerca de su maximo no dice
+        # que distingue a UNA ficha de las demas. El driver informativo es el aporte
+        # RELATIVO a la mediana del conjunto vivo: en que destaca esta unidad.
+        aportes_vivos: dict[str, list[float]] = {}
+        for _u, ev_v in vivos:
+            for k_c, v_c in ev_v.score_desglose.items():
+                aportes_vivos.setdefault(k_c, []).append(float(v_c))
+        mediana_aporte = {k_c: sorted(vs)[len(vs) // 2] for k_c, vs in aportes_vivos.items()}
+
         def _drivers(ev: Any) -> list[str]:
-            pares = sorted(ev.score_desglose.items(), key=lambda kv: -kv[1])
+            pares = sorted(
+                ((k, float(v) - mediana_aporte.get(k, 0.0)) for k, v in ev.score_desglose.items()),
+                key=lambda kv: -kv[1],
+            )
             return [nombres_driver.get(k, k) for k, _ in pares[:2]]
 
         # El arriendo de equilibrio (biseccion sobre el modelo completo) solo para las
@@ -1796,13 +1809,11 @@ def informe_semanal(
         from flujocero.finance.modelo import arriendo_equilibrio_real
 
         esc = escenario_base(p, inv)
-        equilibrios = {
-            u.unidad_key: arriendo_equilibrio_real(u, esc, p, inv) for u, _ in vivos[:top]
-        }
         # Hace cuantos dias se VIO cada fila del top en el portal (14-oct-2026: el #1
         # resulto probablemente vendido y la ficha no decia que llevaba dias sin
-        # re-confirmarse). fetched_at de la version vigente, en dias contra `ahora`.
-        llaves_top = [u.unidad_key for u, _ in vivos[:top]]
+        # re-confirmarse). Se mira la ventana top*2: si la re-confirmacion saca filas,
+        # los suplentes ya vienen medidos. fetched_at vigente, en dias contra `ahora`.
+        llaves_top = [u.unidad_key for u, _ in vivos[: top * 2]]
         vistos_top: dict[str, int] = {}
         if llaves_top:
             marcadores = ", ".join("?" for _ in llaves_top)
@@ -1813,6 +1824,22 @@ def informe_semanal(
             ).fetchall():
                 if visto_u is not None:
                     vistos_top[k_u] = max(0, (ahora - visto_u).days)
+
+        def _reconfirmada(u: Any) -> bool | None:
+            # T-960: veredicto solo si SU comuna se re-recolecto en esta corrida —
+            # reaparecio hoy (True) o no salio en las paginas pedidas (False)
+            if (u.microzona_id or "").split("/")[0] not in comunas_reconfirmadas:
+                return None
+            return vistos_top.get(u.unidad_key, -1) == 0
+
+        # Auditoria 14-oct (menor): una unidad que NO reaparecio en la re-confirmacion
+        # no ocupa un lugar NUMERADO del top — probablemente se vendio, y cada lugar
+        # suyo es un suplente vivo que el usuario no ve. Se mueve a un anexo con su
+        # llave (no desaparece: el dato queda, la decision es de presentacion) y el
+        # siguiente del ranking sube. Sin re-confirmacion no se filtra nada.
+        caidas_reconf = [u.unidad_key for u, _ in vivos[:top] if _reconfirmada(u) is False]
+        vivos_top = [x for x in vivos if _reconfirmada(x[0]) is not False][:top]
+        equilibrios = {u.unidad_key: arriendo_equilibrio_real(u, esc, p, inv) for u, _ in vivos_top}
 
         filas_top = [
             inf.FilaTop(
@@ -1856,15 +1883,9 @@ def informe_semanal(
                 antiguedad_anios=(
                     int(u.antiguedad_anios) if u.antiguedad_anios is not None else -1
                 ),
-                # T-960: veredicto solo si SU comuna se re-recolecto en esta corrida —
-                # reaparecio hoy (True) o no salio en las paginas pedidas (False)
-                reconfirmada=(
-                    vistos_top.get(u.unidad_key, -1) == 0
-                    if (u.microzona_id or "").split("/")[0] in comunas_reconfirmadas
-                    else None
-                ),
+                reconfirmada=_reconfirmada(u),
             )
-            for u, ev in vivos[:top]
+            for u, ev in vivos_top
         ]
         # El snapshot alimenta la comparacion de la proxima semana: una vista filtrada
         # lo contaminaria (todo lo fuera del rango apareceria como "salio del top").
@@ -1902,16 +1923,25 @@ def informe_semanal(
     notas = []
     if comunas_reconfirmadas:
         ok = sum(1 for f in filas_top if f.reconfirmada is True)
-        caidas = sum(1 for f in filas_top if f.reconfirmada is False)
         sin_cubrir = sum(1 for f in filas_top if f.reconfirmada is None)
         notas.append(
             f"TOP RE-CONFIRMADO (T-960): {len(comunas_reconfirmadas)} comunas re-recolectadas "
-            f"hoy con {reconfirmar_paginas} paginas c/u. {ok} fichas reaparecieron, "
-            f"{caidas} no (probablemente vendidas)"
-            + (f", {sin_cubrir} de comunas sin cubrir." if sin_cubrir else ".")
+            f"hoy con {reconfirmar_paginas} paginas c/u. {ok} fichas reaparecieron"
+            + (f", {sin_cubrir} de comunas sin cubrir" if sin_cubrir else "")
+            + (
+                ". NO reaparecieron (probablemente vendidas) y cedieron su lugar a los "
+                "suplentes: " + ", ".join(caidas_reconf) + "."
+                if caidas_reconf
+                else "."
+            )
         )
         typer.echo(
-            f"  re-confirmacion: {ok} del top reaparecieron hoy · {caidas} no reaparecieron"
+            f"  re-confirmacion: {ok} del top reaparecieron hoy"
+            + (
+                f" · {len(caidas_reconf)} cayeron al anexo (prob. vendidas)"
+                if caidas_reconf
+                else ""
+            )
             + (f" · {sin_cubrir} sin cubrir" if sin_cubrir else "")
         )
     if precio_min_uf > 0 or precio_max_uf > 0:
@@ -1931,6 +1961,21 @@ def informe_semanal(
         )
     if not filas_top:
         notas.append("Sin unidades rankeables esta corrida: revisar frescura de la recoleccion.")
+    # Auditoria 14-oct (H4): lo que el score NO esta ordenando tiene que decirse en el
+    # documento, no solo en la API. Inertes (peso redistribuido) y riesgo por defecto.
+    if vivos:
+        inertes = list(getattr(vivos[0][1], "score_inertes", []) or [])
+        if inertes:
+            notas.append(
+                "Componentes del score SIN variacion en esta corrida (peso redistribuido "
+                "entre los demas): " + ", ".join(inertes) + "."
+            )
+    if r.riesgo_por_defecto:
+        notas.append(
+            f"{r.riesgo_por_defecto} de {r.riesgo_medido + r.riesgo_por_defecto} unidades "
+            "rankean con riesgo de microzona POR DEFECTO (0,5): el puente censal no cubre "
+            "su zona."
+        )
     html = inf.render_html(
         hoy,
         corte.strftime("%Y-%m-%d"),

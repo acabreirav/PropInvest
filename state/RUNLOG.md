@@ -3448,3 +3448,52 @@ antes de emitir) queda en el backlog para la mitad estructural. Nota de mercado:
   curva de precio UF/m²~antiguedad y, si los comps del legado la traen, la de
   arriendo — y decidir con el usuario (8.4): marca, haircut E, o --antiguedad en
   evaluar_aviso.
+
+## 14-oct-2026 · AUDITORIA DEL TOP (pedida por el usuario): la aritmetica perfecta, el score sesgado
+Agente auditor sobre el top-15 min2000uf (reporte completo en la conversacion).
+Veredicto: reconstruyo las 15 fichas con el motor real a ±1 CLP — la aritmetica, la
+denegacion de subsidio/FOGAES al usado y las contribuciones estan bien. El problema es
+QUE ordena el score: "este top no sirve como lista de compra; sirve como lista de
+inspeccion".
+- H1 BLOQUEA (para comprar del top): el precio entra en 4/6 componentes (75% del peso)
+  => el ranking maximiza arriendo/precio, donde vive el error del numerador. Yields
+  6,6-9,0% vs anclas 3,5-4,3%; 4/15 fichas con marca de tamanio (3,1% del universo);
+  12/15 en comunas sin ancla de conciliacion. -> T-962.
+- H2 MATERIAL: el #10 ES el caso puerta-del-mar de D-022, aun 15-22% inflado; con el
+  arriendo real medido su flujo es -$77k a -$107k, no +$2k. La decision M2 (marca vs
+  exclusion del tripwire de monotonia) sigue abierta — AHORA tiene su caso de costo.
+- H3 MATERIAL: catalizador = bono RM ~9 puntos (operativa=1,0 doble-contada, regiones
+  =0 estructural, EFE excluido). #12 domina a #7 en los 3 componentes financieros y
+  queda abajo. -> T-963. Cota hoy: sensibilidad score.pesos.catalizador=0.
+- H4 MATERIAL: 70% del peso es una sola variable (orden por TIR identico con plusvalia
+  0-4%); tenencia en CLP suma amortizacion (premia ticket grande) y la TIR la recuenta;
+  el driver absoluto salia "tenencia" 15/15. HECHO HOY: drivers relativos a la mediana
+  del conjunto vivo + score_inertes y riesgo-por-defecto impresos. Resto -> T-964.
+- H5 MATERIAL: descuento_vs_microzona compara contra TODA la microzona => el 3D2B
+  grande/viejo sale "con descuento" automatico (4ta vez que entra el precio); las 31
+  UF/m² del #1 SUMAN puntos donde deberian disparar inspeccion. -> T-962.
+- H6 MATERIAL: la tasa 4,29% es de un NUEVO UF 3.999 pie 10% del 28-ago; +25pb matan
+  el flujo de #5/#6/#10/#12. Accion del usuario: cotizar usado UF 2.000-2.800 80% LTV
+  -> parametro V tasa_usada.
+- H7/H8: duplicado difuso (-> T-965) y saturadas con slugs probablemente inexistentes
+  (-> T-966, snippet de verificacion entregado).
+- H9 (§3.2): plusvalia_real_anual estaba V SIN FUENTE. CORREGIDO HOY: pasa a E con
+  rango [0, 0.04] y nota; con plusvalia 0 la TIR de las fichas de flujo negativo cae a
+  1,6-3,5% — "TIR alta" era ese supuesto.
+- Menores acatados hoy: las NO-reaparecidas ya no ocupan lugar numerado (anexo en la
+  nota, suplentes suben); pendientes: IGC del inversionista en vez del 23% por defecto,
+  pie cero entre segmentos, UF de agosto en la conversion CLP.
+
+## 14-oct-2026 · TERRENO del usuario sobre el #1 (MLC-2082126757) — cambia el veredicto
+- Ficha real: 3D2B 67 m², "antiguedad 0" (default de ML, no confiable), SIN
+  estacionamiento, GC $80k, condominio con amenities, "2.100 UF + 2% comision"
+  (precio efectivo UF 2.142), sector Av. La Paz / Mall Barrio Independencia.
+- CONTRAEVIDENCIA CLAVE: MLC-4441137948 (Av. La Paz, 3D2B 66 m², ano 2010, CON
+  estacionamiento, GC $110k) pide $475.000 y lleva 42 DIAS publicado sin arrendarse.
+  Eso es -26% vs el arriendo asignado ($644.584) y BAJO el equilibrio del #1 ($536k).
+- Aritmetica del veredicto (pendiente de la ficha exacta): flujo ~0,75 CLP por CLP de
+  arriendo => a $475k el flujo del #1 es ~-$46k/mes; a $500k ~-$27k; recien sobre
+  ~$540k vuelve a positivo. Un comparable igual CON estacionamiento que no arrienda a
+  $475k en 6 semanas hace improbable cerrar sobre $540k.
+- El hallazgo valida H1 en vivo y agrega el angulo DIAS PUBLICADO a T-962 (un aviso
+  anejo prueba que el cierre es menor que su precio pedido; la base tiene la historia).

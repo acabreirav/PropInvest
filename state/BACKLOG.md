@@ -2011,3 +2011,96 @@ criterio_de_aceptacion:
   - la ficha ya muestra antiguedad/sin-dato (hecho 14-oct); esta tarea decide si
     ademas se CALCULA distinto
 gate: make gates · verificador 7.6 si toca el motor
+
+
+## T-962 · El ranking selecciona el error del arriendo (auditoria 14-oct, H1+H5)
+estado: pendiente
+agente: motor-financiero
+fase: 2
+contexto: el precio entra en 4 de los 6 componentes del score (75% del peso), asi que
+  el top maximiza arriendo/precio — exactamente donde vive el desajuste del numerador.
+  Evidencia: top min2000uf con yields brutos 6,6-9,0% (anclas §13.1: 3,5-4,3%), 4 de
+  15 fichas con la marca de tamanio (3,1% del universo; binomial ~0,001), 12 de 15 en
+  comunas SIN ancla de arriendo en 00-hallazgos (la conciliacion ±25% no ve el top), y
+  CONFIRMACION DE TERRENO del usuario: el comparable MLC-4441137948 (Av. La Paz, 3D2B
+  66 m², ano 2010, CON estacionamiento) pide $475.000 y lleva 42 DIAS sin arrendarse —
+  26% bajo el arriendo asignado al #1 y bajo su equilibrio ($536k).
+candidatos (medir antes de elegir):
+  - puntuar sobre arriendo conservador (p25 bootstrap de la mediana del pool, o
+    encogimiento hacia el hedonico — OJO: reabre D-025, que prohibe que el modelo
+    alimente el ranking; esa decision es del usuario)
+  - bandera "inspeccion obligatoria" fuera del top numerado: yield bruto > 1,5x ancla
+    de la comuna, o residuo UF/m² del usado < -25% vs (mz, tip, ±m²)
+  - descuento_vs_microzona contra la mediana del USADO en (mz, tip, ±20% m²), no de
+    toda la microzona (hoy el precio se cuenta una 4ta vez y premia la anomalia)
+  - DIAS PUBLICADO del comparable (hallazgo del usuario): un aviso que pide X hace 42
+    dias prueba que el arriendo de cierre es < X. La base tiene la historia
+    (valid_from/fetched_at): medir dias-publicado mediano por celda y reportar "pool
+    anejo" en la procedencia; evaluar si pondera
+criterio_de_aceptacion:
+  - seccion nueva en backtest_modelo_arriendo.py: residuo (asignado/hedonico - 1) del
+    top-15 y top-50 vs universo; si la mediana del top-50 supera al universo en >5 pp,
+    se adopta el arriendo conservador (posiciones movidas >10% medidas)
+  - medicion de dias-publicado por celda y su correlacion con el residuo
+  - decision 8.4 con el usuario; verificador 7.6 si cambia el motor
+gate: make gates
+
+## T-963 · El catalizador es un "bono RM" de ~9 puntos (auditoria 14-oct, H3)
+estado: pendiente
+agente: geo-microzonas
+fase: 2
+contexto: calcular_catalizador da ~1,0 a toda microzona RM con estacion operativa
+  (capitalizada hace anos en precio y arriendo — doble conteo, la tesis de T-922) y 0
+  estructural a regiones (excluye EFE/Biotren/Merval). Evidencia: #12 domina a #7 en
+  los TRES componentes financieros y queda abajo; el swing medido es ~9 puntos.
+criterio_de_aceptacion:
+  - cota hoy: `cli sensibilidad score.pesos.catalizador=0` (comando ya entregado)
+  - propuesta: E `catalizador.factor_operativa` rango [0, 0.5] (la estacion operativa
+    vale fraccion; la EN CONSTRUCCION con fecha creible mantiene 1,0) o normalizacion
+    por region; requiere re-correr puente-censo para medirse
+  - evaluar incluir EFE con fecha creible (Biotren/Merval ya operan: mismo doble conteo)
+gate: make gates · verificador 7.6 (toca score via puente)
+
+## T-964 · Colinealidad del score: 70% del peso mide una sola variable (auditoria H4)
+estado: en_curso (parcial hecho 14-oct: drivers ahora RELATIVOS a la mediana del
+  conjunto vivo, score_inertes y riesgo-por-defecto impresos en el informe. Falta la
+  medicion de fondo.)
+agente: motor-financiero
+fase: 2
+contexto: con pie y tasa iguales, tenencia/pie_cero/TIR son funciones monotonas del
+  mismo rendimiento neto (el orden por TIR del top es identico con plusvalia 0-4%);
+  la tenencia en CLP absolutos ademas suma la amortizacion (premia ticket grande) y
+  la TIR la vuelve a contar.
+criterio_de_aceptacion:
+  - script con matriz de Spearman de los 6 componentes sobre el conjunto vivo
+  - si dos componentes dan rho>0,9: propuesta de fusion de pesos o tenencia por UF
+    invertida / sin amortizacion, con posiciones movidas y decision 8.4
+gate: make gates · verificador 7.6
+
+## T-965 · Duplicado difuso: la misma unidad con m²/precio casi iguales (auditoria H7)
+estado: pendiente
+agente: analista-arriendo
+fase: 2
+contexto: #5/#6 (72 y 74 m², mismo precio y arriendo) y #7/#8 (67/68 m², UF 2.790 vs
+  2.800) son probablemente la MISMA unidad republicada; la firma de dedupe exige
+  igualdad exacta. En arriendo, un relisting difuso infla n: #1, #9, #11 estan en n=8
+  justo.
+criterio_de_aceptacion:
+  - medir colapso difuso (|dm²|<=3, |dprecio|<=1%) con medir_colapso_relistings.py:
+    cuantas unidades del top-50 caen a n<8 y cuantas posiciones se mueven
+  - display: colapsar con tolerancia y nota "tambien publicado como" (sin tocar base)
+  - decision 8.4 con el usuario
+gate: make gates
+
+## T-966 · Gate: toda microzona saturada de zonas.yml debe EXISTIR en dim_microzona (auditoria H8)
+estado: pendiente
+agente: auditor-datos
+fase: 2
+contexto: quilin-av-macul, vicuna-mackenna-vespucio, jm-carrera-briones-luco, teatinos,
+  parque-almagro y santiago-norte parecen descripciones, no slugs del portal;
+  alcance.saturada compara string exacto y ningun gate verifica existencia — la
+  exclusion dura del §12 puede estar muerta en 6 de 8 saturadas. El usuario corre el
+  snippet de verificacion (entregado 14-oct) y con esa salida se corrigen los slugs en
+  zonas.yml y se agrega el check (ALERTA si dim_microzona tiene filas y una saturada
+  no calza).
+gate: make gates
