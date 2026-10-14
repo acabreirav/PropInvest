@@ -144,14 +144,18 @@ TEMPORADA_MAX = D("0.30")
 # inversion era clara con 4 chicos y el tripwire quedo mudo por un comp de diferencia.
 MONOTONIA_MIN_CHICOS = 3
 MONOTONIA_FACTOR_CHICO = D("0.85")
-# T-955 · balance de lados en ventanas ENSANCHADAS (±30/±40): el centrado del tipico
-# no basta cuando el pool es bimodal — en huertos-familiares, 5 de 13 comps eran de
-# 105 m² para una unidad de 75 (tipico 87: paso el guardia justo al borde) y la
-# mediana subio +20%. Si un solo lado aporta mas que este tope del pool, la ventana
-# no es vecindario: se sigue ensanchando (puede equilibrarse) y si nunca equilibra,
-# ND con motivo propio. La ±20% queda exenta: es homogenea por construccion.
-# Umbral E declarado en config/params.yml (calidad.ventana_balance_lado_max).
-BALANCE_LADO_MAX = D("0.70")
+# T-955/D-024 · guardia de DESPLAZAMIENTO en ventanas ENSANCHADAS (±30/±40): la
+# mediana de la ventana ancha no puede alejarse mas de esto de la mediana del nucleo
+# ±20% de la propia unidad (con nucleo de n>=3). Reemplaza al conteo de lados de
+# D-023, que el verificador demostro mal apuntado (contaba cabezas, no danio) y la
+# medicion del 13-oct remato: de 133 unidades que apagaba, 118 tenian desviacion
+# <10% (inocentes) y solo 3-4 eran culpables reales (un trio a +31% y el caso
+# huertos-familiares a +21%). El umbral 0.15 sale de esa medicion: atrapa a todos
+# los culpables medidos y libera al resto. Se sigue ensanchando por si converge;
+# si nunca, ND con motivo `ventana_desviada`. La ±20% no se compara consigo misma.
+# Umbral E declarado en config/params.yml (calidad.desvio_ventana_ancha_max).
+DESVIO_ANCHA_MAX = D("0.15")
+DESVIO_NUCLEO_MIN = 3
 
 
 def emparejar_con_params(
@@ -173,7 +177,7 @@ def emparejar_con_params(
         alcance=alcance,
         ahora=ahora,
         temporada_max=params.d("calidad.contaminacion_temporada_max"),
-        balance_lado_max=params.d("calidad.ventana_balance_lado_max"),
+        desvio_ancha_max=params.d("calidad.desvio_ventana_ancha_max"),
     )
 
 
@@ -183,7 +187,7 @@ def emparejar(
     alcance: Alcance | None = None,
     ahora: datetime | None = None,
     temporada_max: Decimal | None = None,
-    balance_lado_max: Decimal | None = None,
+    desvio_ancha_max: Decimal | None = None,
 ) -> Emparejamiento:
     """Cruza `fact_unidad_venta` vigente contra `agg_arriendo_microzona`.
 
@@ -231,7 +235,7 @@ def emparejar(
     # declarado con rango — verificador D-022 M4); la constante es el respaldo de los
     # caminos sin params a mano.
     tope_temporada = TEMPORADA_MAX if temporada_max is None else temporada_max
-    tope_balance = BALANCE_LADO_MAX if balance_lado_max is None else balance_lado_max
+    tope_desvio = DESVIO_ANCHA_MAX if desvio_ancha_max is None else desvio_ancha_max
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
     riesgos: dict[str, Decimal] = {
@@ -264,7 +268,7 @@ def emparejar(
                 "fuera_de_rango",
                 "sin_comparables",
                 "mercado_temporada",
-                "ventana_desbalanceada",
+                "ventana_desviada",
                 "duplicado",
             ),
             0,
@@ -410,10 +414,14 @@ def emparejar(
         n = 0
         metodo = ""
         temporada = False
-        desbalanceada = False
+        desviada = False
+        # las rentas del nucleo ±20%: la vara contra la que se mide toda ventana ancha
+        rentas_nucleo: list[Decimal] = []
         for i_factor, factor in enumerate(VENTANAS_M2_REL):
             ventana = max(VENTANA_M2_MIN, m2 * factor)
             pool = [(m2c, arr) for m2c, arr in grupo if abs(m2c - m2) <= ventana]
+            if i_factor == 0:
+                rentas_nucleo = [arr for _, arr in pool]
             # D-022 · guardia de temporada, evaluado en CADA ancho probado y no solo en
             # el aceptado (verificador H6: una ventana angosta contaminada con n<8 se
             # "diluia" ensanchando — la dilucion mete vecinos que no son vecinos). Si
@@ -432,17 +440,22 @@ def emparejar(
                 # pool descentrado: seguir ensanchando puede equilibrarlo (aparecen
                 # vecinos del otro lado) — y si nunca se equilibra, el final es ND.
                 continue
-            if i_factor > 0:
-                # T-955 · balance de lados, solo en ventanas ensanchadas: el tipico
-                # puede quedar a ±20% con un pool donde un solo lado (otra clase de
-                # tamanio) pone casi toda la mediana. Caso real: 75 m² con 10 de 13
-                # comps sobre el, cinco de 105 m² — tipico 87, +20% de arriendo.
-                lado_chico = sum(1 for m2c, _ in pool if m2c < m2)
-                lado_grande = sum(1 for m2c, _ in pool if m2c > m2)
-                if max(lado_chico, lado_grande) > len(pool) * tope_balance:
-                    desbalanceada = True
+            candidata = percentil([a for _, a in pool], D("0.5"))
+            if i_factor > 0 and len(rentas_nucleo) >= DESVIO_NUCLEO_MIN:
+                # T-955/D-024 · desplazamiento: la mediana de la ventana ancha se mide
+                # contra la del nucleo ±20% de la PROPIA unidad. Caso real (huertos-
+                # familiares): nucleo $625k, ancha $755k (+21%) — la clase de 105 m²
+                # colandose como vecina de un 75. El conteo de lados que habia aqui
+                # fallaba en las dos puntas: dejaba pasar ese caso con 9/13 y apagaba
+                # 118 unidades inocentes (medicion 13-oct-2026).
+                mediana_nucleo = percentil(rentas_nucleo, D("0.5"))
+                if (
+                    mediana_nucleo
+                    and abs(candidata - mediana_nucleo) / mediana_nucleo > tope_desvio
+                ):
+                    desviada = True
                     continue
-            arriendo, n = percentil([a for _, a in pool], D("0.5")), len(pool)
+            arriendo, n = candidata, len(pool)
             metodo = f"vecinos ±{ventana:.0f} m² de {m2:.0f} (típico {m2_tipico:.0f})"
             break
         if temporada:
@@ -450,11 +463,12 @@ def emparejar(
             _anotar(r, comuna, "mercado_temporada")
             continue
         if arriendo is None:
-            if desbalanceada:
-                # T-955: hubo pool suficiente y centrado pero con un solo lado
-                # dominante en toda ventana ancha — otro motivo que "no hay vecinos".
-                r.descartes["ventana_desbalanceada"] += 1
-                _anotar(r, comuna, "ventana_desbalanceada")
+            if desviada:
+                # T-955/D-024: hubo pool suficiente y centrado, pero toda ventana ancha
+                # entregaba una mediana corrida >15% respecto del nucleo de la unidad —
+                # otro producto, otro motivo que "no hay vecinos".
+                r.descartes["ventana_desviada"] += 1
+                _anotar(r, comuna, "ventana_desviada")
                 continue
             # SIN caida a comuna ni al tramo, a proposito. Ver el docstring del modulo.
             r.descartes["sin_comparables"] += 1

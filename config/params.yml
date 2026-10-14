@@ -289,10 +289,11 @@ calidad:
   # en el titulo y la asignacion es ND. Sensibilidad PENDIENTE de medir sobre la base
   # real (T-954): cuantas celdas apaga por comuna en cada punta del rango.
   contaminacion_temporada_max: {v: 0.30, evidence: E, rango: [0.20, 0.50], nota: "medir con T-954; verificador D-022 estimo que sin la simetria H5 el umbral efectivo era ~0.21"}
-  # T-955: fraccion maxima del pool que puede aportar UN solo lado (mas chicos o mas
-  # grandes que la unidad) en una ventana ENSANCHADA (±30/±40). Caso real medido
-  # (huertos-familiares, 12-oct-2026): 10 de 13 comps sobre la unidad, cinco de
-  # 105 m² para un 75 m² — tipico 87 paso el descentrado justo al borde y la mediana
-  # subio +20%. Decision directa del inversionista ("dale con esos arreglos");
-  # el impacto se observa en el descarte `ventana_desbalanceada` de cada corrida.
-  ventana_balance_lado_max: {v: 0.70, evidence: E, rango: [0.60, 0.80], nota: "la ±20% queda exenta: homogenea por construccion"}
+  # T-955/D-024: desplazamiento maximo de la mediana de una ventana ENSANCHADA
+  # (±30/±40) respecto de la mediana del nucleo ±20% de la propia unidad (n>=3).
+  # Reemplaza al conteo de lados de D-023 CON MEDICION (13-oct-2026): de 133 unidades
+  # que el conteo apagaba, 118 tenian desviacion <10% (inocentes) y los culpables
+  # reales eran 3-4 (trio a +31%, huertos-familiares a +21%). El 0.15 atrapa a todos
+  # los culpables medidos y libera al resto; el impacto queda visible en el descarte
+  # `ventana_desviada` de cada corrida.
+  desvio_ventana_ancha_max: {v: 0.15, evidence: E, rango: [0.10, 0.20], nota: "medido sobre la base real el 13-oct-2026; percentiles en el RUNLOG"}

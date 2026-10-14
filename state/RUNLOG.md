@@ -3132,3 +3132,13 @@ mataron a los culpables. Hallazgo 2 dimensionado: 813 de 2.047 rankeadas (40%)
 viven en ±20% con un lado >70% — es estructura del mercado, no patologia: extender
 el guardia ahi mataria medio ranking. FALTA un numero para decidir: el dano de las
 133 bloqueadas (seccion 2b agregada al script; re-correr).
+
+## 13-oct-2026 (2) · T-955 CERRADA con D-024: desplazamiento de mediana a 0.15
+
+Medicion 2b (las 133 que el conteo apagaba): 118 con desviacion <10%, 15 >10%,
+4 >15%, 3 >20% (trio +31% y huertos-familiares +21%). El conteo de lados disparaba
+133 veces para acertar 4 y dejaba pasar el 9/13. Reemplazado por desplazamiento de
+mediana ancha vs nucleo ±20% (n>=3), umbral 0.15 en params
+(calidad.desvio_ventana_ancha_max), descarte `ventana_desviada`. La ±20% cargada a
+un lado (40% del ranking) queda sin guardia a proposito: estructura de mercado.
+Verificador 7.6 lanzado sobre el reemplazo.

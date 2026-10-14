@@ -893,3 +893,28 @@ T-955 reabierta; los guardias quedan (su peor falla es no proteger, nunca inflar
 daño ancha-vs-angosta (candidato 3, descartado prematuramente) y la carga de lados en
 las ±20% rankeadas — con esa salida se elige el arreglo definitivo. Reporte completo
 en RUNLOG 12-oct.
+
+## D-024 · El guardia de ventanas anchas mide desplazamiento, no cabezas — 13-oct-2026
+
+**Decisión (§8.4, con la medición completa sobre la base real):** el conteo de lados
+de D-023 se reemplaza por el guardia de desplazamiento de mediana — el candidato 3 de
+T-955 que D-023 descartó prematuramente y el verificador reivindicó. Regla: en una
+ventana ensanchada (±30/±40), si la mediana del pool se aleja más de
+`calidad.desvio_ventana_ancha_max` (0,15, E con rango 0,10-0,20) de la mediana del
+núcleo ±20% de la propia unidad (n≥3), se sigue ensanchando y si nunca converge, ND
+con motivo `ventana_desviada`.
+
+**La medición que decidió (13-oct, scripts/medir_guardias_ventana.py):**
+- Entre las anchas que PASABAN el conteo: 119 medibles, solo 3 con desviación >10%,
+  CERO >15% — el daño ya lo habían matado los guardias de contaminación.
+- Entre las 133 que el conteo APAGABA: 118 con desviación <10% (inocentes), 15 >10%,
+  4 >15%, 3 >20% — incluidos el trío a +31% y huertos-familiares a +21%.
+- El conteo disparaba 133 veces para acertar 4, y además DEJABA PASAR el caso 9/13
+  (verificador D-023 M1). El desplazamiento a 0,15 atrapa exactamente a los culpables
+  medidos y libera al resto: ~129 unidades vuelven al ranking honestamente.
+- La ±20% con un lado dominante (813 de 2.047 = 40% del ranking) queda sin guardia a
+  propósito: es estructura del mercado (unidades al borde de su cluster de producto),
+  no patología; el tripwire de monotonía sigue marcando las inversiones.
+
+El parámetro `ventana_balance_lado_max` se elimina de params.yml (vivió un día, con
+su medición hecha — exactamente para eso era el rango declarado).

@@ -674,36 +674,56 @@ def test_los_defaults_del_codigo_calzan_con_params_yml() -> None:
 
     p = cargar("params")
     assert op.TEMPORADA_MAX == p.d("calidad.contaminacion_temporada_max")
-    assert op.BALANCE_LADO_MAX == p.d("calidad.ventana_balance_lado_max")
+    assert op.DESVIO_ANCHA_MAX == p.d("calidad.desvio_ventana_ancha_max")
 
 
-def test_una_ventana_ancha_con_un_solo_lado_dominante_es_ND(con) -> None:
-    """T-955, caso real (huertos-familiares, 12-oct): el colapso dejo la ±20% en n=7,
-    el salto a ±40% tomo CINCO comps de 105 m² para una unidad de 75 — el tipico (87)
-    paso el descentrado justo al borde y la mediana subio +20%. Un solo lado no puede
-    aportar mas del 70% de una ventana ensanchada."""
-    for m2c, cid in ((70, "A"), (71, "B"), (74, "C"), (76, "D"), (84, "E"), (85, "F"), (87, "G")):
-        _comp_arr(con, cid, m2c, "15", tip="3D2B")
-    for i in range(6):  # la otra clase de tamanio, toda a un lado
-        _comp_arr(con, f"XL{i}", 105 - i * 0.01, "20", tip="3D2B")
+def test_una_ventana_ancha_con_la_mediana_corrida_es_ND(con) -> None:
+    """T-955/D-024, el mecanismo real de huertos-familiares: el nucleo ±20% junta n=7
+    (menos de 8), la ±40% junta n>=8 PERO su mediana viene de otra clase de tamanio.
+    El guardia compara medianas: ancha corrida >15% respecto del nucleo = ND. El
+    conteo de lados de D-023 dejaba pasar este caso con 9/13 (verificador)."""
+    # nucleo: 4 chicos baratos + 3 medianos caros — mediana del nucleo = 14
+    for m2c, uf, cid in ((70, 14, "A"), (71, 14, "B"), (73, 14, "C"), (74, 14, "D")):
+        _comp_arr(con, cid, m2c, str(uf), tip="3D2B")
+    for m2c, cid in ((84, "E"), (85, "F"), (87, "G")):
+        _comp_arr(con, cid, m2c, "19", tip="3D2B")
+    for i in range(6):  # la clase de 105 m², cara, que domina la mediana ancha
+        _comp_arr(con, f"XL{i}", 105 - i * 0.01, "19", tip="3D2B")
     unidad(con, tip="3D2B", m2=75, precio="4000")
 
     r = op.emparejar(con, RANGOS)
+    # ±40%: n=13, tipico 87 (pasa el descentrado justo al borde), mediana 19 vs
+    # nucleo 14 = +36% > 15% -> ND con motivo propio
     assert len(r.unidades) == 0
-    assert r.descartes["ventana_desbalanceada"] == 1
-    assert r.descartes["sin_comparables"] == 0, "el motivo es el desbalance, no la falta"
+    assert r.descartes["ventana_desviada"] == 1
+    assert r.descartes["sin_comparables"] == 0, "el motivo es el desvio, no la falta"
 
 
-def test_la_ventana_de_20_pct_queda_exenta_del_balance(con) -> None:
-    """La ±20% es homogenea por construccion: una unidad al borde chico de un cluster
-    sano (comps 74-88 para un 77) rankea aunque el lado grande domine."""
+def test_una_ventana_ancha_coherente_con_su_nucleo_rankea(con) -> None:
+    """La contracara medida el 13-oct: 118 de 133 unidades apagadas por el conteo de
+    lados eran inocentes (desviacion <10%). Con el guardia de desplazamiento, una
+    ancha cuya mediana calza con el nucleo rankea aunque un lado domine en cantidad."""
+    for m2c, cid in ((70, "A"), (71, "B"), (74, "C"), (76, "D"), (84, "E"), (85, "F"), (87, "G")):
+        _comp_arr(con, cid, m2c, "15", tip="3D2B")
+    for i in range(6):  # un solo lado en cantidad, pero al MISMO precio: sin danio
+        _comp_arr(con, f"XL{i}", 105 - i * 0.01, "15.5", tip="3D2B")
+    unidad(con, tip="3D2B", m2=75, precio="4000")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    assert r.descartes["ventana_desviada"] == 0
+
+
+def test_la_ventana_de_20_pct_no_se_compara_consigo_misma(con) -> None:
+    """Una unidad que rankea en su propio nucleo ±20% no tiene contra que desviarse:
+    el guardia solo mide ventanas ENSANCHADAS."""
     for i in range(8):
         _comp_arr(con, f"P{i}", 74 + i * 2, "22", tip="3D2B")
     unidad(con, tip="3D2B", m2=77, precio="3100")
 
     r = op.emparejar(con, RANGOS)
     assert len(r.unidades) == 1
-    assert r.descartes["ventana_desbalanceada"] == 0
+    assert r.descartes["ventana_desviada"] == 0
 
 
 def test_el_tripwire_de_monotonia_marca_el_m2_invertido(con) -> None:

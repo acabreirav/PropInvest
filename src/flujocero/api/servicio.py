@@ -356,7 +356,7 @@ class Servicio:
             )
         guardias = {
             "mercado de temporada": emp.descartes.get("mercado_temporada", 0),
-            "ventana desbalanceada": emp.descartes.get("ventana_desbalanceada", 0),
+            "ventana desviada del núcleo": emp.descartes.get("ventana_desviada", 0),
         }
         if any(guardias.values()):
             advertencias.append(

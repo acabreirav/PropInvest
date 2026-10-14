@@ -43,28 +43,28 @@ tmax = p.d("calidad.contaminacion_temporada_max")
 con = duckdb.connect(str(RAIZ / "data" / "flujocero.duckdb"), read_only=True)
 
 # ---------------------------------------------------- 1 · barrido del umbral de balance
-print("== 1 · barrido de calidad.ventana_balance_lado_max ==")
+print("== 1 · barrido de calidad.desvio_ventana_ancha_max ==")
 resultados = {}
 for etiqueta, umbral in (
-    ("0.60", D("0.60")),
-    ("0.70 (actual)", D("0.70")),
-    ("0.80", D("0.80")),
-    ("apagado", D(1)),
+    ("0.10", D("0.10")),
+    ("0.15 (actual)", D("0.15")),
+    ("0.20", D("0.20")),
+    ("apagado", D(99)),
 ):
     r = op.emparejar(
-        con, rangos, alcance=alcance, ahora=ahora, temporada_max=tmax, balance_lado_max=umbral
+        con, rangos, alcance=alcance, ahora=ahora, temporada_max=tmax, desvio_ancha_max=umbral
     )
     resultados[etiqueta] = r
     print(
         f"  {etiqueta:<14} rankean={len(r.unidades):<5} "
-        f"desbalanceadas={r.descartes['ventana_desbalanceada']:<4} "
+        f"desviadas={r.descartes['ventana_desviada']:<4} "
         f"sin_comparables={r.descartes['sin_comparables']:<4} "
         f"temporada={r.descartes['mercado_temporada']}"
     )
-base = resultados["0.70 (actual)"]
+base = resultados["0.15 (actual)"]
 apagado = resultados["apagado"]
 solo_sin_guardia = {u.unidad_key for u in apagado.unidades} - {u.unidad_key for u in base.unidades}
-print(f"  rankean SOLO sin guardia (las que el 0.70 apaga): {len(solo_sin_guardia)}")
+print(f"  rankean SOLO sin guardia (las que el 0.15 apaga): {len(solo_sin_guardia)}")
 
 # ------------------------------------- 2 y 3 · daño observado, con la corrida actual
 comps, _ = comparables_desde_duckdb(con, ahora)
@@ -126,7 +126,7 @@ for u in apagado.unidades:
             continue
     sin_nucleo += 1
 
-print(f"\n== 2b · las {len(solo_sin_guardia)} que el guardia 0.70 apaga: su daño SIN guardia ==")
+print(f"\n== 2b · las {len(solo_sin_guardia)} que el guardia 0.15 apaga: su daño SIN guardia ==")
 if bloqueadas:
     for umbral in (D("0.10"), D("0.15"), D("0.20")):
         n = sum(1 for d, *_ in bloqueadas if d > umbral)
