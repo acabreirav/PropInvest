@@ -1944,5 +1944,8 @@ criterio_de_aceptacion:
   - [ ] primera corrida real pegada al RUNLOG: beta plausible (0-1), error por comuna,
         sesgo con signo, cobertura (cuantas sin_comparables se vuelven estimables)
   - [ ] decision 8.4 con el usuario sobre los umbrales E tras ver la medicion
-gate: make gates · verificador 7.6: corrido (ver RUNLOG 14-oct-2026)
+gate: make gates · verificador 7.6: corrido y ACATADO — 2 BLOQUEA + 3 MATERIAL
+  corregidos (encogimiento de efectos, soporte minimo n>=8, beta por tipologia,
+  variante mz_minima en el gate, temporada por ventana, tope §12 y banda en la
+  seccion, ventana_descentrada). Ver RUNLOG 14-oct-2026.
 comando_usuario: uv run python scripts/backtest_modelo_arriendo.py

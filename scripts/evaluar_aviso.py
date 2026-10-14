@@ -99,9 +99,10 @@ if clave not in por_clave:
     if not (mz and tip and m2):
         print("    · le falta microzona, tipología o m²")
     print(
-        "    · o su ventana de vecinos no junta n>=8, quedo descentrada o con la mediana ancha desviada del nucleo"
+        "    · o su ventana de vecinos no junta n>=8 (sin_comparables), quedo descentrada"
+        "\n      (ventana_descentrada), con la mediana ancha desviada del nucleo (T-955,"
+        "\n      ventana_desviada) o su segmento es mercado de temporada (D-022) — ver abajo"
     )
-    print("      (T-955) o su segmento es mercado de temporada (D-022) — ver abajo")
 else:
     u, e = por_clave[clave]
     puesto = next((i for i, (x, _) in enumerate(vivos, 1) if x.unidad_key == clave), None)

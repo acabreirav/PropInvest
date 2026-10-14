@@ -328,24 +328,32 @@ def nuevas_evaluadas_al_desde(
 def arriendos_por_modelo(
     conexion: Any,
     p: Any,
-    detalle: list[tuple[str, str, str, Decimal, Decimal]],
+    detalle: list[tuple[str, str, str, Decimal, Decimal, bool]],
     comparables: list[Any],
     amoblados: dict[tuple[str, str], list[Decimal]],
     top: int = 12,
+    comunas: frozenset[str] | None = None,
+    precio_min_uf: float = 0.0,
+    precio_max_uf: float = 0.0,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Las unidades ND por `sin_comparables`, estimadas por el modelo hedónico — con gate.
 
     El gate corre AQUÍ, en cada generación del informe: el backtest leave-one-cell-out
-    sobre las celdas densas de la base del día decide si la sección se publica. Si el
-    error mediano o el p75 superan los umbrales de `params.yml` (o hay pocas celdas
-    evaluables), se devuelve la lista vacía y el resumen dice exactamente por qué —
-    el informe lo muestra en vez de esconder la sección.
+    (incluida su variante `mz_minima`, la microzona adelgazada al soporte mínimo — la
+    población rala que esta sección publica) sobre la base del día decide si la sección
+    se publica. Si el error mediano o el p75 superan los umbrales de `params.yml` (o hay
+    pocas celdas evaluables), se devuelve la lista vacía y el resumen dice exactamente
+    por qué — el informe lo muestra en vez de esconder la sección.
 
-    Solo entran las descartadas por `sin_comparables`: `mercado_temporada` y
-    `ventana_desviada` son ND deliberados sobre segmentos sospechosos (D-022/D-024) y
-    el modelo no les re-pone número. El cruce con la profundidad censal de arriendo
-    (hogares arrendatarios / hogares, T-014b) es el árbitro de la tesis "celda rala =
-    poca competencia": rala con demanda honda es la tesis; rala sin demanda es la trampa.
+    Solo entran las descartadas por `sin_comparables`: `mercado_temporada`,
+    `ventana_desviada` y `ventana_descentrada` son ND deliberados sobre segmentos
+    sospechosos (D-022/D-024/T-949) y el modelo no les re-pone número. Las exclusiones
+    duras del §12 que no requieren motor también aplican aquí: el tope de precio del
+    subsidio filtra igual que en el ranking, y la banda `--precio-min/max-uf` de la
+    vista filtrada también (verificador T-958 H5). El cruce con la profundidad censal
+    de arriendo (hogares arrendatarios / hogares, T-014b), medida SOLO contra las
+    microzonas del alcance, es el árbitro de la tesis "celda rala = poca competencia":
+    rala con demanda honda es la tesis; rala sin demanda es la trampa.
     """
     from flujocero.agg import modelo_arriendo as ma
 
@@ -355,6 +363,7 @@ def arriendos_por_modelo(
     umbral_med = float(p.d("modelo_arriendo.error_mediano_max"))
     umbral_p75 = float(p.d("modelo_arriendo.error_p75_max"))
     min_celdas = int(p.d("modelo_arriendo.min_celdas_backtest"))
+    tope_uf = float(p.crudo("score.exclusiones_duras")["precio_max_uf"])
 
     bt = ma.backtest_loco(comparables, rangos, amoblados, tope, k_encogimiento=k)
     resumen: dict[str, Any] = {
@@ -378,7 +387,17 @@ def arriendos_por_modelo(
     resumen["beta"] = modelo.beta
     resumen["n_obs"] = modelo.n_obs
     resumen["n_celdas"] = modelo.n_celdas
-    resumen["grupos_temporada_excluidos"] = modelo.grupos_temporada_excluidos
+    resumen["obs_temporada_excluidas"] = modelo.obs_temporada_excluidas
+
+    # El intervalo publicado es el MÁS ANCHO entre los residuos de entrenamiento del
+    # modelo y los errores FUERA de muestra del backtest de hoy (verificador H3: el
+    # residuo en muestra subestima la duda justo donde menos dato hay).
+    q25_bt, q75_bt = bt.cuantiles_error()
+    import math as _math
+
+    fac25 = min(_math.exp(modelo.q25), 1 + q25_bt)
+    fac75 = max(_math.exp(modelo.q75), 1 + q75_bt)
+    resumen["intervalo"] = (fac25, fac75)
 
     prof: dict[str, float] = {
         mid: float(v)
@@ -386,6 +405,7 @@ def arriendos_por_modelo(
             "SELECT microzona_id, profundidad_arriendo FROM agg_riesgo_microzona "
             "WHERE profundidad_arriendo IS NOT NULL"
         ).fetchall()
+        if comunas is None or mid.split("/")[0] in comunas
     }
     valores_prof = sorted(prof.values())
     prof_mediana = valores_prof[len(valores_prof) // 2] if valores_prof else None
@@ -393,7 +413,13 @@ def arriendos_por_modelo(
     uf = float(p.d("macro.valor_uf_clp"))
     vistos: set[tuple[Any, ...]] = set()
     filas: list[dict[str, Any]] = []
-    for key, mz, tip, m2, precio in detalle:
+    for key, mz, tip, m2, precio, nueva in detalle:
+        if float(precio) > tope_uf:  # la exclusión dura del §12 aplica también aquí
+            continue
+        if precio_min_uf > 0 and float(precio) < precio_min_uf:
+            continue
+        if precio_max_uf > 0 and float(precio) > precio_max_uf:
+            continue
         firma = (mz, tip, m2, precio)
         if firma in vistos:  # el mismo colapso §7.3 que aplica el ranking
             continue
@@ -402,6 +428,7 @@ def arriendos_por_modelo(
         if pred is None:
             continue
         pf = prof.get(mz)
+        central = float(pred.arriendo_uf)
         filas.append(
             {
                 "unidad_key": key,
@@ -409,12 +436,13 @@ def arriendos_por_modelo(
                 "tipologia": tip,
                 "m2": float(m2),
                 "precio_uf": float(precio),
-                "arriendo_clp": int(float(pred.arriendo_uf) * uf),
-                "p25_clp": int(float(pred.p25_uf) * uf),
-                "p75_clp": int(float(pred.p75_uf) * uf),
-                "yield_modelo": float(pred.arriendo_uf) * 12 / float(precio),
-                "yield_p25": float(pred.p25_uf) * 12 / float(precio),
-                "n_celda": pred.n_celda,
+                "nueva": bool(nueva),
+                "arriendo_clp": int(central * uf),
+                "p25_clp": int(central * fac25 * uf),
+                "p75_clp": int(central * fac75 * uf),
+                "yield_modelo": central * 12 / float(precio),
+                "yield_p25": central * fac25 * 12 / float(precio),
+                "n_grupo": pred.n_grupo,
                 "n_microzona": pred.n_microzona,
                 "profundidad": pf,
                 "demanda_honda": (
@@ -423,9 +451,10 @@ def arriendos_por_modelo(
             }
         )
     resumen["candidatas"] = len(filas)
-    # El orden CASTIGA el optimismo: por el yield del p25 (el piso del intervalo), no por
-    # el central — ordenar por el central premiaría a las celdas donde el modelo mas duda.
-    filas.sort(key=lambda f: -f["yield_p25"])
+    # Por yield central. El piso (p25) viaja al lado en cada fila; ordenar por él sería
+    # lo mismo con otro nombre — el intervalo es un factor global, así que el orden no
+    # cambia y afirmarlo como "castigo al optimismo" era falso (verificador H3).
+    filas.sort(key=lambda f: -f["yield_modelo"])
     return filas[:top], resumen
 
 
@@ -627,11 +656,16 @@ def render_html(
         if modelo_resumen is None:
             return ""
         r = modelo_resumen
-        vara = (
-            f"backtest leave-one-cell-out sobre {r['celdas_evaluadas']} celdas densas: "
-            f"error mediano {r['error_mediano']:.1%} (umbral {r['umbral_mediano']:.0%}), "
-            f"p75 {r['error_p75']:.1%} (umbral {r['umbral_p75']:.0%})"
-        )
+        if r["celdas_evaluadas"]:
+            vara = (
+                f"backtest leave-one-cell-out sobre {r['celdas_evaluadas']} exámenes "
+                "(celdas densas retenidas + variante de microzona adelgazada): "
+                f"error mediano {r['error_mediano']:.1%} (umbral {r['umbral_mediano']:.0%}), "
+                f"p75 {r['error_p75']:.1%} (umbral {r['umbral_p75']:.0%})"
+            )
+        else:
+            # un backtest sin celdas no midió nada: ND, no "0,0% de error"
+            vara = "backtest leave-one-cell-out sin celdas evaluables: error ND"
         if not r["pasa"]:
             motivo = (
                 f"pocas celdas evaluables ({r['celdas_evaluadas']} &lt; {r['min_celdas']})"
@@ -661,35 +695,46 @@ def render_html(
                 demanda = f"<b class='pos'>honda</b> ({f['profundidad']:.0%} arrendatarios)"
             else:
                 demanda = f"<b class='neg'>baja</b> ({f['profundidad']:.0%} arrendatarios)"
+            estado = "nueva" if f.get("nueva") else "usada"
             cuerpo += (
-                f"<tr><td>{escape(f['microzona'])}</td><td>{escape(f['tipologia'])}</td>"
+                f"<tr><td>{escape(f['microzona'])}</td><td>{escape(f['tipologia'])}"
+                f" <span class='mini'>{estado}</span></td>"
                 f"<td class='n'>{f['m2']:.0f}</td><td>{codigo}</td>"
                 f"<td class='n'>UF {_f(f['precio_uf'])}</td>"
                 f"<td class='n'>${_f(f['arriendo_clp'])} <span class='mini'>"
                 f"(${_f(f['p25_clp'])}–${_f(f['p75_clp'])})</span></td>"
                 f"<td class='n'>{f['yield_modelo']:.2%} <span class='mini'>"
                 f"(piso {f['yield_p25']:.2%})</span></td>"
-                f"<td class='n'>{f['n_celda']}</td><td>{demanda}</td></tr>"
+                f"<td class='n'>{f['n_grupo']}</td><td class='n'>{f['n_microzona']}</td>"
+                f"<td>{demanda}</td></tr>"
             )
         tabla = (
             "<table><tr><th>Microzona</th><th>Tip.</th><th>m²</th><th>Código</th>"
             "<th>Precio</th><th>Arriendo modelo (p25–p75)</th><th>Yield bruto</th>"
-            f"<th>n celda</th><th>Demanda censal</th></tr>{cuerpo}</table>"
+            "<th>avisos del grupo</th><th>avisos de la microzona</th>"
+            f"<th>Demanda censal</th></tr>{cuerpo}</table>"
             if cuerpo
             else "<p>El modelo pasa su examen pero ninguna celda rala resultó estimable.</p>"
         )
         return f"""
 <h2>6 · Arriendo por MODELO — celdas sin comparables (estimación, fuera del ranking)</h2>
 {tabla}
-<p class='nota'>Estas unidades NO compiten en el ranking: su celda no junta los 8
-comparables del umbral y el arriendo es una <b>estimación de modelo (evidencia E)</b> —
-hedónico log-log entrenado con los {modelo_resumen.get("n_obs", 0)} arriendos limpios de
-toda la base, no un dato observado. El examen de hoy: {vara} → PASA. El orden castiga el
-optimismo: va por el yield del PISO del intervalo (p25), no por el central. "Demanda
-censal" es la profundidad de arriendo del Censo 2024 (hogares arrendatarios / hogares)
-contra la mediana del alcance: <b>rala con demanda honda</b> es la tesis "poca
-competencia, menor vacancia"; <b>rala con demanda baja</b> es la trampa — nadie arrienda
-ahí. Verificar en terreno antes de ofertar: un modelo no reemplaza a un comparable.</p>"""
+<p class='nota'>Estas unidades NO compiten en el ranking: su ventana de vecinos no junta
+los 8 comparables del umbral y el arriendo es una <b>estimación de modelo (evidencia
+E)</b> — hedónico log-log entrenado con los {modelo_resumen.get("n_obs", 0)} arriendos
+limpios de toda la base, no un dato observado. El examen de hoy: {vara} → PASA. El
+intervalo (p25–p75) es el más ancho entre los residuos del modelo y los errores FUERA de
+muestra de ese examen; es un factor común a todas las filas, así que el orden (por yield
+central) no cambiaría ordenando por el piso. "Avisos del grupo" cuenta los arriendos
+reales de esa (microzona, tipología) en TODO el rango de m² — puede ser ≥8 y aun así la
+unidad no rankear, porque sus vecinos de tamaño no alcanzan. "Demanda censal" es la
+profundidad de arriendo del Censo 2024 (hogares arrendatarios / hogares) contra la
+mediana de las microzonas del alcance con censo — vara relativa: la mitad de ellas
+siempre quedará "honda". <b>Rala con demanda honda</b> es la tesis "poca competencia,
+menor vacancia"; <b>rala con demanda baja</b> es la trampa — nadie arrienda ahí. El
+flujo, el pie y el déficit NO se evalúan aquí (eso exige el motor y un arriendo
+observado). Verificar en terreno antes de ofertar: un modelo no reemplaza a un
+comparable.</p>"""
 
     notas_html = "".join(f"<p class='nota'>{escape(n)}</p>" for n in notas)
     return f"""<!doctype html><html><head><meta charset="utf-8">

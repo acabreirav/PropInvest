@@ -328,26 +328,35 @@ def test_arriendos_por_modelo_publica_solo_si_el_backtest_pasa(con) -> None:
         )
     comps = _mercado_sintetico(saltar={("com0/mz0", "1D1B")})
     detalle = [
-        ("MLC-1", "com0/mz0", "1D1B", D(30), D(900)),  # celda rala estimable, demanda honda
-        ("MLC-2", "com0/mz0", "1D1B", D(30), D(900)),  # misma firma: colapsa (§7.3)
-        ("MLC-3", "com1/mz1", "2D2B", D(58), D(1600)),  # demanda baja
-        ("MLC-4", "zz/nunca-vista", "2D2B", D(58), D(1500)),  # ND: microzona nunca vista
+        ("MLC-1", "com0/mz0", "1D1B", D(30), D(900), False),  # rala estimable, honda
+        ("MLC-2", "com0/mz0", "1D1B", D(30), D(900), False),  # misma firma: colapsa (§7.3)
+        ("MLC-3", "com1/mz1", "2D2B", D(58), D(1600), True),  # demanda baja, nueva
+        ("MLC-4", "zz/nunca-vista", "2D2B", D(58), D(1500), False),  # ND: mz nunca vista
+        # H5: el tope del subsidio es exclusión dura TAMBIÉN aquí (§12)
+        ("MLC-5", "com2/mz2", "2D2B", D(58), D(6500), False),
     ]
     filas, resumen = inf.arriendos_por_modelo(con, p, detalle, comps, {})
     assert resumen["pasa"] is True
     assert resumen["celdas_evaluadas"] >= int(p.d("modelo_arriendo.min_celdas_backtest"))
-    assert resumen["candidatas"] == 2  # MLC-2 colapsó, MLC-4 quedó ND
+    assert resumen["candidatas"] == 2  # MLC-2 colapsó, MLC-4 quedó ND, MLC-5 sobre el tope
     llaves = {f["unidad_key"] for f in filas}
     assert llaves == {"MLC-1", "MLC-3"}
     por_llave = {f["unidad_key"]: f for f in filas}
     assert por_llave["MLC-1"]["demanda_honda"] is True
-    assert por_llave["MLC-1"]["n_celda"] == 0  # extrapolación pura, dicho
+    assert por_llave["MLC-1"]["n_grupo"] == 0  # extrapolación pura, dicho
+    assert por_llave["MLC-1"]["n_microzona"] >= 8  # jamás un efecto sin soporte (H1)
     assert por_llave["MLC-3"]["demanda_honda"] is False
-    # el intervalo envuelve: p25 < central < p75, y el orden castiga el optimismo (p25)
+    assert por_llave["MLC-3"]["nueva"] is True and por_llave["MLC-1"]["nueva"] is False
+    # el intervalo envuelve: p25 < central < p75 (factor común, ensanchado por el
+    # error fuera de muestra del backtest)
     for f in filas:
         assert f["p25_clp"] < f["arriendo_clp"] < f["p75_clp"]
         assert f["yield_p25"] < f["yield_modelo"]
-    assert filas[0]["yield_p25"] >= filas[-1]["yield_p25"]
+    assert filas[0]["yield_modelo"] >= filas[-1]["yield_modelo"]
+
+    # la banda de la vista filtrada también muerde (H5): con max 1.000 solo queda MLC-1
+    filas_banda, _ = inf.arriendos_por_modelo(con, p, detalle, comps, {}, precio_max_uf=1000.0)
+    assert {f["unidad_key"] for f in filas_banda} == {"MLC-1"}
 
     # el render publica la tabla con la vara del examen a la vista
     html = inf.render_html(
@@ -365,6 +374,8 @@ def test_arriendos_por_modelo_publica_solo_si_el_backtest_pasa(con) -> None:
     assert "Arriendo por MODELO" in html
     assert "backtest leave-one-cell-out" in html and "→ PASA" in html
     assert "honda" in html and "baja" in html
+    assert "avisos de la microzona" in html  # el soporte del efecto, a la vista (H1)
+    assert ">nueva</span>" in html and ">usada</span>" in html  # D-015 rotulado (H5)
     assert "7 · Delta del mercado usado" in html
 
 
@@ -372,9 +383,10 @@ def test_arriendos_por_modelo_con_pocas_celdas_NO_publica(con) -> None:
     from flujocero.config import cargar
 
     p = cargar("params")
-    comps = _mercado_sintetico(n_mz=4)  # 24 celdas < min_celdas_backtest (40)
+    # 18 celdas × 2 variantes = 36 exámenes < min_celdas_backtest (40)
+    comps = _mercado_sintetico(n_mz=3)
     filas, resumen = inf.arriendos_por_modelo(
-        con, p, [("MLC-9", "com0/mz0", "2D2B", D(58), D(1500))], comps, {}
+        con, p, [("MLC-9", "com0/mz0", "2D2B", D(58), D(1500), False)], comps, {}
     )
     assert resumen["pasa"] is False
     assert filas == []

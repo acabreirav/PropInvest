@@ -1772,7 +1772,14 @@ def informe_semanal(
         comps_modelo, _ = comparables_desde_duckdb(con, ahora)
         amoblados_modelo = m2_amoblados_por_grupo(con, ahora)
         filas_modelo, resumen_modelo = inf.arriendos_por_modelo(
-            con, p, r.sin_comparables_detalle, comps_modelo, amoblados_modelo
+            con,
+            p,
+            r.sin_comparables_detalle,
+            comps_modelo,
+            amoblados_modelo,
+            comunas=alcance.comunas,
+            precio_min_uf=precio_min_uf,
+            precio_max_uf=precio_max_uf,
         )
         delta_texto = str(dl.comparar(con, corte))
     finally:
@@ -1840,9 +1847,14 @@ def informe_semanal(
         + (f" · fuera: {fuera}" if fuera else "")
     )
     rm = resumen_modelo
+    error_txt = (
+        f"error mediano {rm['error_mediano']:.1%} / p75 {rm['error_p75']:.1%}"
+        if rm["celdas_evaluadas"]
+        else "error ND (sin celdas evaluables)"  # 0,0% seria un numero inventado
+    )
     typer.echo(
-        f"  arriendo por modelo (T-958): backtest {rm['celdas_evaluadas']} celdas, "
-        f"error mediano {rm['error_mediano']:.1%} / p75 {rm['error_p75']:.1%} -> "
+        f"  arriendo por modelo (T-958): backtest {rm['celdas_evaluadas']} examenes, "
+        f"{error_txt} -> "
         + (
             f"PASA · {len(filas_modelo)} celdas ralas estimadas (de {rm['candidatas']} candidatas)"
             if rm["pasa"]

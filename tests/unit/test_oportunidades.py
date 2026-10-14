@@ -578,7 +578,10 @@ def test_una_ventana_descentrada_no_es_vecindario(con) -> None:
     unidad(con, tip="3D2B", m2=60, precio="3000")
 
     r = op.emparejar(con, RANGOS)
-    assert len(r.unidades) == 0 and r.descartes["sin_comparables"] == 1
+    # T-958 H5: el descentrado es un ND DELIBERADO con motivo propio — no un hueco de
+    # datos que el modelo hedonico pueda re-estimar. Antes se contaba sin_comparables.
+    assert len(r.unidades) == 0 and r.descartes["ventana_descentrada"] == 1
+    assert r.descartes["sin_comparables"] == 0 and r.sin_comparables_detalle == []
 
 
 def test_una_ventana_en_mercado_de_temporada_es_ND(con) -> None:
@@ -820,7 +823,7 @@ def test_sin_comparables_deja_detalle_para_el_modelo(con) -> None:
     unidad(con, m2=56, precio="3000")
     r = op.emparejar(con, RANGOS)
     assert r.descartes["sin_comparables"] == 1
-    assert r.sin_comparables_detalle == [("U1", "sm/el-llano", "2D2B", D(56), D(3000))]
+    assert r.sin_comparables_detalle == [("U1", "sm/el-llano", "2D2B", D(56), D(3000), False)]
 
 
 def test_el_detalle_no_incluye_temporada_ni_desviadas(con) -> None:

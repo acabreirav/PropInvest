@@ -1,17 +1,23 @@
 """Backtest §8.4 del modelo hedónico de arriendo (T-958) sobre la base real.
 
-Tres cosas, en orden:
+Cuatro cosas, en orden:
 
-  1. ENTRENAMIENTO: con qué se entrena (obs, celdas, grupos excluidos por temporada),
-     la elasticidad β del tamaño y los efectos extremos de microzona — números que el
-     usuario puede contrastar con lo que sabe del mercado.
-  2. BACKTEST leave-one-cell-out sobre las celdas densas (n>=8): el error del modelo
-     al predecir celdas cuya verdad SÍ conocemos, sin verlas. Global, por comuna y por
-     tipología, con las 15 peores a la vista, y el veredicto contra los umbrales de
-     `params.yml` — el mismo gate que decide si la sección 6 del informe se publica.
-  3. COBERTURA: cuántas unidades hoy ND por `sin_comparables` el modelo puede estimar,
-     cruzadas con la profundidad censal de arriendo (la tesis del usuario: celda rala
-     con demanda honda = poca competencia; rala sin demanda = trampa).
+  1. ENTRENAMIENTO: con qué se entrena (obs, celdas, avisos excluidos por temporada),
+     la elasticidad β del tamaño (global y por tipología) y los efectos extremos de
+     microzona — números que el usuario puede contrastar con lo que sabe del mercado.
+  2. BACKTEST leave-one-cell-out sobre las celdas densas (n>=8), en DOS variantes:
+     `loco` (la celda retenida, microzona bien poblada) y `mz_minima` (además la
+     microzona adelgazada al soporte mínimo — la población rala que la sección 6
+     publica). Global, por variante, por comuna y por tipología, con las 15 peores a
+     la vista, y el veredicto contra los umbrales de `params.yml` — el mismo gate que
+     decide si la sección 6 del informe se publica.
+  3. BARRIDO de `encogimiento_celda_k` (los extremos del rango E declarado): cómo se
+     mueve el error del backtest con el encogimiento — la sensibilidad que el
+     verificador exigió que fuera medible.
+  4. COBERTURA: cuántas unidades hoy ND por `sin_comparables` el modelo puede estimar
+     (con los mismos filtros §12 de la sección 6), cruzadas con la profundidad censal
+     de arriendo (la tesis del usuario: celda rala con demanda honda = poca
+     competencia; rala sin demanda = trampa).
 
 Uso:  uv run python scripts/backtest_modelo_arriendo.py
 Pegar la salida completa en la conversación / RUNLOG.
@@ -19,6 +25,7 @@ Pegar la salida completa en la conversación / RUNLOG.
 
 from __future__ import annotations
 
+import math
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +47,7 @@ alcance = desde_config(cargar("zonas"))
 rangos = p.crudo("ingresos.rangos_m2")
 tope = p.d("calidad.contaminacion_temporada_max")
 k = float(p.d("modelo_arriendo.encogimiento_celda_k"))
+tope_uf = float(p.crudo("score.exclusiones_duras")["precio_max_uf"])
 con = duckdb.connect(str(RAIZ / "data" / "flujocero.duckdb"), read_only=True)
 
 comps, _ = comparables_desde_duckdb(con, ahora)
@@ -51,50 +59,59 @@ modelo = ma.entrenar(comps, rangos, amoblados, tope, k_encogimiento=k)
 if modelo is None:
     raise SystemExit(
         "  el modelo no junta el minimo estructural "
-        f"({ma.MIN_OBS_ENTRENAMIENTO} obs / {ma.MIN_CELDAS_ENTRENAMIENTO} celdas): ND"
+        f"({ma.MIN_OBS_ENTRENAMIENTO} obs / {ma.MIN_CELDAS_ENTRENAMIENTO} celdas) "
+        "o el ajuste no convergio: ND"
     )
 print(
     f"  obs={modelo.n_obs} · celdas={modelo.n_celdas} · "
-    f"grupos excluidos por temporada={modelo.grupos_temporada_excluidos}"
+    f"avisos excluidos por temporada={modelo.obs_temporada_excluidas} · "
+    f"iteraciones={modelo.iteraciones}"
 )
-print(f"  beta (elasticidad log-log del m²) = {modelo.beta:.3f}")
+print(f"  beta global (elasticidad log-log del m²) = {modelo.beta:.3f}")
 print("  (esperable: entre 0 y 1 — el arriendo sube con el tamaño, menos que proporcional)")
+print("  beta por tipologia (D-024 H2: las que juntan variacion propia usan la suya):")
+for tp in sorted(modelo.beta_tipologia):
+    propio = "propia" if modelo.beta_tipologia[tp] != modelo.beta else "global (respaldo)"
+    print(f"    {tp:<6} beta={modelo.beta_tipologia[tp]:.3f}  [{propio}]")
 efectos = sorted(modelo.efecto_microzona.items(), key=lambda kv: kv[1])
-print("  microzonas mas BARATAS ajustado por tamaño/tipologia:")
+print("  microzonas mas BARATAS ajustado por tamaño/tipologia (efectos YA encogidos):")
 for mz, ef in efectos[:5]:
-    print(f"    {mz:<40} {ef:+.3f} (x{2.718281828**ef:.2f}, n={modelo.n_microzona[mz]})")
+    print(f"    {mz:<40} {ef:+.3f} (x{math.exp(ef):.2f}, n={modelo.n_microzona[mz]})")
 print("  mas CARAS:")
 for mz, ef in efectos[-5:]:
-    print(f"    {mz:<40} {ef:+.3f} (x{2.718281828**ef:.2f}, n={modelo.n_microzona[mz]})")
+    print(f"    {mz:<40} {ef:+.3f} (x{math.exp(ef):.2f}, n={modelo.n_microzona[mz]})")
 
 # ------------------------------------------------------------------------ 2 · backtest
-print("\n== 2 · backtest leave-one-cell-out sobre celdas densas (n>=8) ==")
+print("\n== 2 · backtest leave-one-cell-out (variantes loco + mz_minima) ==")
 bt = ma.backtest_loco(comps, rangos, amoblados, tope, k_encogimiento=k)
 print(
-    f"  celdas densas={bt.celdas_densas} · evaluadas={len(bt.errores)} · "
+    f"  celdas densas={bt.celdas_densas} · examenes={len(bt.errores)} · "
     f"no predecibles sin si mismas={bt.no_predecibles} · reentrenos sin minimo={bt.sin_modelo}"
 )
 if not bt.errores:
-    raise SystemExit("  sin celdas evaluables: no hay veredicto")
+    raise SystemExit("  sin examenes evaluables: error ND, no hay veredicto")
 print(f"  |error| mediano = {bt.error_abs_mediano:.1%} · p75 = {bt.error_abs_p75:.1%}")
-sobre = sorted(e.error for e in bt.errores)
+firmados = sorted(e.error for e in bt.errores)
 print(
-    f"  sesgo (mediana del error CON signo) = {sobre[len(sobre) // 2]:+.1%}"
+    f"  sesgo (mediana del error CON signo) = {firmados[len(firmados) // 2]:+.1%}"
     "  (positivo = el modelo sobreestima, el lado que infla)"
 )
 for u in (0.10, 0.15, 0.20):
     n = sum(1 for e in bt.errores if abs(e.error) > u)
-    print(f"  celdas con |error| > {u:.0%}: {n}  ({n / len(bt.errores):.0%})")
-print("\n  por comuna (n celdas, |error| mediano):")
+    print(f"  examenes con |error| > {u:.0%}: {n}  ({n / len(bt.errores):.0%})")
+print("\n  por variante (n, |error| mediano) — mz_minima es la poblacion rala real:")
+for v, (n, err) in bt.por_grupo("variante").items():
+    print(f"    {v:<12} n={n:<4} {err:.1%}")
+print("  por comuna:")
 for comuna, (n, err) in bt.por_grupo("comuna").items():
     print(f"    {comuna:<24} n={n:<4} {err:.1%}")
 print("  por tipologia:")
 for tip, (n, err) in bt.por_grupo("tipologia").items():
     print(f"    {tip:<24} n={n:<4} {err:.1%}")
-print("\n  las 15 peores celdas (modelo vs mediana real):")
+print("\n  los 15 peores examenes (modelo vs mediana real):")
 for e in sorted(bt.errores, key=lambda e: -abs(e.error))[:15]:
     print(
-        f"    {e.microzona_id} · {e.tipologia:<5} n={e.n:<3} "
+        f"    {e.microzona_id} · {e.tipologia:<5} [{e.variante}] n={e.n:<3} "
         f"real={e.mediana_real_uf:>6.2f} UF → modelo={e.mediana_modelo_uf:>6.2f}  ({e.error:+.1%})"
     )
 
@@ -104,11 +121,25 @@ min_celdas = int(p.d("modelo_arriendo.min_celdas_backtest"))
 pasa = bt.pasa(umbral_med, umbral_p75, min_celdas)
 print(
     f"\n  GATE (params modelo_arriendo.*): mediano<={umbral_med:.0%}, p75<={umbral_p75:.0%}, "
-    f"celdas>={min_celdas} → {'PASA: la seccion 6 del informe se publica' if pasa else 'NO PASA: la seccion 6 lo dira sin publicar estimaciones'}"
+    f"examenes>={min_celdas} → "
+    + ("PASA: la seccion 6 del informe se publica" if pasa else "NO PASA: la seccion 6 lo dira")
 )
 
-# ------------------------------------------------------- 3 · cobertura y tesis censal
-print("\n== 3 · cobertura: las ND por sin_comparables que el modelo puede estimar ==")
+# --------------------------------------------- 3 · sensibilidad del encogimiento (k)
+print("\n== 3 · barrido de modelo_arriendo.encogimiento_celda_k (rango E declarado) ==")
+rango_k = p.crudo("modelo_arriendo.encogimiento_celda_k").get("rango", [4, 16])
+for kv in sorted({float(rango_k[0]), k, float(rango_k[1])}):
+    btk = ma.backtest_loco(comps, rangos, amoblados, tope, k_encogimiento=kv)
+    if btk.errores:
+        print(
+            f"  k={kv:<5g} examenes={len(btk.errores):<4} "
+            f"|error| mediano={btk.error_abs_mediano:.1%} p75={btk.error_abs_p75:.1%}"
+        )
+    else:
+        print(f"  k={kv:<5g} sin examenes evaluables (ND)")
+
+# ------------------------------------------------------- 4 · cobertura y tesis censal
+print("\n== 4 · cobertura: las ND por sin_comparables que el modelo puede estimar ==")
 r = op.emparejar_con_params(con, p, alcance=alcance, ahora=ahora)
 prof = {
     mid: float(v)
@@ -116,13 +147,17 @@ prof = {
         "SELECT microzona_id, profundidad_arriendo FROM agg_riesgo_microzona "
         "WHERE profundidad_arriendo IS NOT NULL"
     ).fetchall()
+    if mid.split("/")[0] in alcance.comunas
 }
 vp = sorted(prof.values())
 prof_med = vp[len(vp) // 2] if vp else None
-estimables = honda = baja = sin_censo = 0
+estimables = honda = baja = sin_censo = sobre_tope = 0
 vistos: set[tuple] = set()
-top: list[tuple[float, float, str, str, str, float, int]] = []
-for key, mz, tip, m2, precio in r.sin_comparables_detalle:
+top: list[tuple[float, float, str, str, str, float, int, int]] = []
+for key, mz, tip, m2, precio, _nueva in r.sin_comparables_detalle:
+    if float(precio) > tope_uf:  # la seccion 6 tampoco los publica (§12)
+        sobre_tope += 1
+        continue
     firma = (mz, tip, m2, precio)
     if firma in vistos:
         continue
@@ -140,22 +175,25 @@ for key, mz, tip, m2, precio in r.sin_comparables_detalle:
         baja += 1
     y_p25 = float(pred.p25_uf) * 12 / float(precio)
     y = float(pred.arriendo_uf) * 12 / float(precio)
-    top.append((y_p25, y, key, mz, tip, pf if pf is not None else -1.0, pred.n_celda))
+    top.append(
+        (y, y_p25, key, mz, tip, pf if pf is not None else -1.0, pred.n_grupo, pred.n_microzona)
+    )
 print(
-    f"  sin_comparables={r.descartes['sin_comparables']} · unicas={len(vistos)} · "
-    f"estimables por el modelo={estimables}"
+    f"  sin_comparables={r.descartes['sin_comparables']} (descentradas aparte: "
+    f"{r.descartes['ventana_descentrada']}) · sobre el tope UF {tope_uf:.0f}: {sobre_tope} · "
+    f"unicas={len(vistos)} · estimables por el modelo={estimables}"
 )
 if prof_med is not None:
     print(
         f"  tesis censal (profundidad mediana del alcance {prof_med:.0%}): "
         f"demanda HONDA={honda} · demanda baja={baja} · sin censo={sin_censo}"
     )
-print("  top 15 por yield del PISO del intervalo (p25 — castiga el optimismo):")
-for y25, y, key, mz, tip, pf, n_c in sorted(top, reverse=True)[:15]:
+print("  top 15 por yield central (el piso p25 al lado — mismo orden, factor comun):")
+for y, y25, key, mz, tip, pf, n_g, n_mz in sorted(top, reverse=True)[:15]:
     censal = f"prof {pf:.0%}" if pf >= 0 else "sin censo"
     print(
-        f"    {key:<18} {mz} · {tip:<5} yield piso {y25:.2%} (central {y:.2%}) · "
-        f"n_celda={n_c} · {censal}"
+        f"    {key:<18} {mz} · {tip:<5} yield {y:.2%} (piso {y25:.2%}) · "
+        f"grupo={n_g} · mz={n_mz} · {censal}"
     )
 print(
     "\n  OJO: nada de esto entra al ranking (§12). Es el radar de la seccion 6 del"

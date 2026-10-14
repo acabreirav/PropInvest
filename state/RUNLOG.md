@@ -3188,3 +3188,52 @@ sigue pasando — bajo el umbral 0.15, conocido y dentro del rango declarado.
 - make gates: VERDE (797 passed, 1 skipped; mypy --strict finance limpio).
 - Verificador §7.6: lanzado adversarial sobre el modelo + gate + integracion; su
   reporte se pega a continuacion cuando termine. La tarea NO se cierra sin acatarlo.
+
+## 14-oct-2026 · verificador §7.6 de T-958/D-025 — 2 BLOQUEA, 3 MATERIAL, 2 MENOR; acatado
+Reporte (resumen; la tarea NO se cerro con el primer commit ba8e8e5):
+- H1 BLOQUEA: los efectos de microzona/tipologia eran efectos fijos SIN encoger — una
+  microzona con UN aviso 30% caro fijaba +30% el arriendo de TODA la microzona, el k no
+  actuaba (identico con k=4/8/16), y la fila decia "n celda 0" sugiriendo estructura.
+- H2 BLOQUEA: el gate media otra poblacion — solo celdas densas en su m² mediano; k no
+  afectaba el backtest (E inmedible); un beta unico se sesga a la elasticidad de los
+  chicos e inflaba +16% al 3D2B de 60 m² con backtest verde (caso parque-brasil).
+- H3 MATERIAL: "orden por p25 castiga el optimismo" era FALSO — el intervalo es factor
+  global, el orden por p25 = orden por central; y el intervalo (±2%) no cubria el error
+  real (30%) de la microzona rala.
+- H4 MATERIAL: el guardia de temporada A NIVEL DE GRUPO diluia la contaminacion que
+  D-022 H6 prohibio diluir (14% del grupo vs 33% de la ventana: entrenaba envenenado,
+  +11 pts en una tipologia vecina).
+- H5 MATERIAL: la seccion 6 saltaba exclusiones del §12 (tope UF 6.000), ignoraba la
+  banda --precio-min/max, no rotulaba usadas, y re-estimaba las DESCENTRADAS (ND
+  deliberado de T-949 contado como sin_comparables).
+- H6/H7 MENOR: medias alternadas sin senal de no-convergencia + puente de 1 aviso une
+  componentes; "n celda" podia ser >=8; error ND impreso como 0,0%; profundidad mediana
+  contra TODAS las microzonas (no el alcance).
+ACATADO (commit siguiente):
+- H1: efectos t/z ENCOGIDOS por n/(n+k); predecir exige n_microzona>=8 y n_tipologia>=8
+  (MIN_SOPORTE = MIN_COMPARABLES del §7.3); "avisos de la microzona" como columna.
+- H2: beta POR TIPOLOGIA (variacion propia >=30 obs demeaned; respaldo global); backtest
+  con variante mz_minima (microzona adelgazada a 8 obs) que ENTRA al gate; el k ahora
+  mueve el backtest (medido en smoke: mediano 1,2%/2,1%/3,2% con k=4/8/16) y el script
+  trae el barrido del rango E.
+- H3: el intervalo publicado = max(residuos del modelo, cuantiles del error FUERA de
+  muestra del backtest del dia); el orden pasa a yield central y la nota dice que el
+  factor es comun (la afirmacion falsa se retiro de informe y D-025 via addendum).
+- H4: guardia de temporada POR VENTANA de m² (±20% min ±3, la del emparejamiento),
+  aviso por aviso; `obs_temporada_excluidas` reemplaza al conteo por grupo.
+- H5: tope UF 6.000 (score.exclusiones_duras) y banda --precio-min/max aplican a la
+  seccion; rotulo usada/nueva por fila; nuevo descarte `ventana_descentrada` en
+  emparejar (ND deliberado, fuera del detalle del modelo), visible en servicio y
+  evaluar_aviso.
+- H6: no-convergencia => modelo ND (tol 1e-9, 500 iter, iteraciones reportadas); las
+  aristas del grafo exigen celdas con n>=2 (un aviso no une mercados).
+- H7: encabezado "avisos del grupo (mz,tip)" con nota de que puede ser >=8; error sin
+  examenes se imprime ND (CLI, HTML y script); profundidad mediana SOLO del alcance.
+- Tests: 19 en test_modelo_arriendo (5 nuevos: soporte<8 ND, encogimiento amortigua,
+  puente de 1 aviso, beta por tipologia no infla al 3D chico, k mueve el backtest;
+  temporada por ventana reescrito), informe con tope/banda/rotulos, oportunidades con
+  ventana_descentrada. make gates: VERDE (802 passed).
+Smoke en base sintetica: iter=6, loco 1,6% vs mz_minima 3,1% (la variante rala es menos
+precisa, como corresponde), gate PASA, 1,7 s para 425 comps / 94 examenes.
+Pendiente sin cambio: corrida real del usuario (backtest_modelo_arriendo.py) para
+calibrar los umbrales E (§8.4).

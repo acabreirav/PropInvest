@@ -68,11 +68,12 @@ class Emparejamiento:
     riesgo_por_defecto: int = 0
     catalizador_medido: int = 0
     catalizador_por_defecto: int = 0
-    # T-958 · `(unidad_key, microzona, tipologia, m2, precio_uf)` de las descartadas por
-    # `sin_comparables` — y SOLO por ese motivo: `mercado_temporada` y `ventana_desviada`
-    # son ND deliberados sobre segmentos sospechosos y el modelo hedonico no debe
-    # re-ponerles numero. Es el insumo de la seccion "arriendo por modelo" del informe.
-    sin_comparables_detalle: list[tuple[str, str, str, Decimal, Decimal]] = field(
+    # T-958 · `(unidad_key, microzona, tipologia, m2, precio_uf, es_nueva)` de las
+    # descartadas por `sin_comparables` — y SOLO por ese motivo: `mercado_temporada`,
+    # `ventana_desviada` y `ventana_descentrada` son ND deliberados sobre segmentos
+    # sospechosos (D-022/D-024/T-949) y el modelo hedonico no debe re-ponerles numero
+    # (verificador T-958 H5). Es el insumo de la seccion "arriendo por modelo".
+    sin_comparables_detalle: list[tuple[str, str, str, Decimal, Decimal, bool]] = field(
         default_factory=list
     )
 
@@ -276,6 +277,7 @@ def emparejar(
                 "sin_comparables",
                 "mercado_temporada",
                 "ventana_desviada",
+                "ventana_descentrada",
                 "duplicado",
             ),
             0,
@@ -422,6 +424,7 @@ def emparejar(
         metodo = ""
         temporada = False
         desviada = False
+        descentrada = False
         # las rentas del nucleo ±20%: la vara contra la que se mide toda ventana ancha
         rentas_nucleo: list[Decimal] = []
         for i_factor, factor in enumerate(VENTANAS_M2_REL):
@@ -445,7 +448,11 @@ def emparejar(
             m2_tipico = percentil([m2c for m2c, _ in pool], D("0.5"))
             if abs(m2_tipico - m2) > m2 * DESCENTRADO_MAX:
                 # pool descentrado: seguir ensanchando puede equilibrarlo (aparecen
-                # vecinos del otro lado) — y si nunca se equilibra, el final es ND.
+                # vecinos del otro lado) — y si nunca se equilibra, el final es ND
+                # con motivo PROPIO: hubo vecinos de sobra pero todos de otro tamanio
+                # (parque-brasil). No es "sin_comparables", y el modelo hedonico de
+                # T-958 no debe re-estimarlo (verificador T-958 H5).
+                descentrada = True
                 continue
             candidata = percentil([a for _, a in pool], D("0.5"))
             if i_factor > 0 and len(rentas_nucleo) >= DESVIO_NUCLEO_MIN:
@@ -481,10 +488,20 @@ def emparejar(
                 r.descartes["ventana_desviada"] += 1
                 _anotar(r, comuna, "ventana_desviada")
                 continue
+            if descentrada:
+                # T-949: hubo pool suficiente en algun ancho, pero el m² tipico de los
+                # "vecinos" nunca quedo a ±20% de la unidad — son otro producto. Es un
+                # ND deliberado, no un hueco de datos, y se cuenta aparte para que el
+                # modelo de T-958 no lo re-estime por extrapolacion del tamanio.
+                r.descartes["ventana_descentrada"] += 1
+                _anotar(r, comuna, "ventana_descentrada")
+                continue
             # SIN caida a comuna ni al tramo, a proposito. Ver el docstring del modulo.
             r.descartes["sin_comparables"] += 1
             _anotar(r, comuna, "sin_comparables")
-            r.sin_comparables_detalle.append((key, mz, tip, m2, precio))
+            r.sin_comparables_detalle.append(
+                (key, mz, tip, m2, precio, bool(nueva) if nueva is not None else False)
+            )
             continue
         # D-022 · tripwire de monotonia: en el mercado pelado el $/m² cae con el tamanio.
         # Si la asignacion supera el $/m² mediano de los comparables mas chicos de su

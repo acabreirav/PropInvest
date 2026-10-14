@@ -977,3 +977,22 @@ llevan rango y nota; la primera corrida de `scripts/backtest_modelo_arriendo.py`
 la base real decide si se recalibran (§8.4) — el gate de ejecución protege el informe
 mientras tanto. T-957 (vara ajustada por tamaño) se construiría sobre el mismo β si la
 firma S1 resulta material.
+
+**Addendum post-verificador de D-025 (14-oct):** siete hallazgos, acatados así. (H1)
+los efectos de microzona/tipología ahora se **encogen por n/(n+k)** y `predecir` exige
+**n≥8 de soporte** en la microzona Y la tipología (el mismo umbral §7.3) — antes UN
+aviso fijaba el arriendo de toda una microzona rala. (H2) **β por tipología** (respaldo
+global) y el backtest ganó la variante **`mz_minima`** (microzona adelgazada a 8 obs),
+que entra al gate: el examen ahora cubre la población rala que la sección publica, y el
+`k` se volvió medible (el script trae su barrido). (H3) el intervalo publicado se
+ensancha con los **errores fuera de muestra** del backtest del día; la afirmación
+"el orden por p25 castiga el optimismo" era falsa (factor global ⇒ mismo orden) y se
+retiró: el orden es por yield central con el piso a la vista. (H4) el guardia de
+temporada del entrenamiento corre **por ventana de m², aviso por aviso** — a nivel de
+grupo diluía la contaminación que D-022 H6 prohibió diluir. (H5) la sección respeta el
+**tope UF 6.000** y la banda `--precio-min/max`, rotula usada/nueva, y las unidades
+**descentradas** (T-949) ganaron su propio descarte `ventana_descentrada`: son ND
+deliberado y el modelo no las re-estima. (H6) un ajuste que no converge es ND y las
+aristas del grafo bipartito exigen celdas con n≥2. (H7) la columna dice "avisos del
+grupo" (puede ser ≥8 sin que la unidad rankee), el error sin exámenes se imprime ND y
+la profundidad mediana se calcula solo sobre el alcance.
