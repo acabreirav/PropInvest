@@ -449,10 +449,14 @@ def emparejar(
                 # fallaba en las dos puntas: dejaba pasar ese caso con 9/13 y apagaba
                 # 118 unidades inocentes (medicion 13-oct-2026).
                 mediana_nucleo = percentil(rentas_nucleo, D("0.5"))
-                if (
-                    mediana_nucleo
-                    and abs(candidata - mediana_nucleo) / mediana_nucleo > tope_desvio
-                ):
+                # ASIMETRICO a proposito (verificador D-024, hallazgo 2): solo el ALZA
+                # veta. El veto simetrico + `continue` inflaba — la ±30% honesta-barata
+                # se descartaba por "desviada hacia abajo" y la ±40% cara (dentro del
+                # ±15% de un nucleo premium de n=3) quedaba fija: comparables
+                # insuficientes disfrazados de n=12. Una mediana ancha BAJO el nucleo
+                # es error conservador (subestima el yield, no fabrica oportunidad):
+                # se acepta.
+                if mediana_nucleo and (candidata - mediana_nucleo) / mediana_nucleo > tope_desvio:
                     desviada = True
                     continue
             arriendo, n = candidata, len(pool)

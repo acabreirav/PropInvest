@@ -1,10 +1,10 @@
 """Medición §8.4 de los guardias de ventana (T-955/D-023) sobre la base real.
 
-El verificador de D-023 demostró que el balance de lados cuenta cabezas y no mide el
-DAÑO (la mediana ancha puede quedar inflada con 9/13), y que la ±20% exenta puede
-cargarse entera a un lado sin que ningún guardia salte (el descentrado es vacuo ahí:
-su límite es igual al ancho de la ventana). Este script mide ambas cosas donde
-corresponde — la base real — para elegir el arreglo definitivo con datos:
+Tras D-024 (guardia de desplazamiento ASIMETRICO, solo el alza veta), este script
+mide sobre la base real lo que el verificador de D-024 dejo pendiente: la firma S1
+(nucleo cargado validando una ancha cargada: ambos sesgados en la misma direccion),
+las unidades cuyo VALOR cambia entre guardia activo y apagado (invisibles para una
+comparacion de conjuntos), y el barrido del umbral:
 
   1. BARRIDO del umbral de balance (0.60 / 0.70 actual / 0.80 / apagado): cuántas
      unidades rankean, cuántas caen por `ventana_desbalanceada`, cómo cambia el top.
@@ -93,7 +93,22 @@ for u in base.unidades:
         if m20:
             anchas.append((abs((asignado - m20) / m20), u.unidad_key, m20, asignado))
 
+# Firma S1 (verificador D-024, hallazgo 1): un nucleo cuyo m² tipico se corre >10%
+# del m² de la unidad no es vara independiente — ancha y nucleo pueden estar sesgados
+# juntos. Se cuenta ADEMAS de la desviacion de medianas.
+s1 = 0
+for u in base.unidades:
+    m2 = u.m2_utiles
+    grupo = grupos.get((u.microzona_id, u.tipologia), [])
+    ventana20 = max(D(3), m2 * D("0.20"))
+    m2s_nucleo = [m2c for m2c, _ in grupo if abs(m2c - m2) <= ventana20]
+    if 3 <= len(m2s_nucleo) < op.MIN_COMPARABLES:  # rankeo en ancha, nucleo medible
+        tipico = percentil(m2s_nucleo, D("0.5"))
+        if abs(tipico - m2) > m2 * D("0.10"):
+            s1 += 1
 print(f"\n== 2 · unidades asignadas en ventana ANCHA con ±20% medible (n>=3): {len(anchas)} ==")
+print(f"  firma S1 (nucleo con tipico corrido >10% del m² de la unidad): {s1}")
+print("  (si es grande, la vara del nucleo no es independiente — T-957)")
 if anchas:
     desvs = sorted(d for d, *_ in anchas)
     for umbral in (D("0.10"), D("0.15"), D("0.20")):
@@ -140,6 +155,25 @@ if bloqueadas:
         )
 else:
     print(f"  ninguna medible (sin núcleo ±20% con n>=3: {sin_nucleo})")
+
+# Hallazgo 2 del verificador D-024: comparar conjuntos de llaves esconde a las que
+# rankean en ambas corridas pero con OTRO arriendo (la ±30% vetada -> ±40% distinta).
+por_llave_base = {u.unidad_key: u.arriendo_mensual_uf for u in base.unidades}
+cambiadas = [
+    (
+        abs((por_llave_base[u.unidad_key] - u.arriendo_mensual_uf) / u.arriendo_mensual_uf),
+        u.unidad_key,
+        u.arriendo_mensual_uf,
+        por_llave_base[u.unidad_key],
+    )
+    for u in apagado.unidades
+    if u.unidad_key in por_llave_base
+    and u.arriendo_mensual_uf
+    and por_llave_base[u.unidad_key] != u.arriendo_mensual_uf
+]
+print(f"\n== 2c · rankean en ambas corridas pero con OTRO arriendo: {len(cambiadas)} ==")
+for d, k, sin_g, con_g in sorted(cambiadas, reverse=True)[:10]:
+    print(f"    {k:<18} sin guardia={sin_g:>7.2f} → con guardia={con_g:>7.2f}  ({d:.1%})")
 
 print(
     f"\n== 3 · unidades rankeadas en ±20% con un lado >70% del pool: {veinte_cargadas} de {veinte_total} =="

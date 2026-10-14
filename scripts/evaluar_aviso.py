@@ -98,7 +98,9 @@ if clave not in por_clave:
         print(f"    · comuna {mz.split('/')[0]} fuera del alcance (§10)")
     if not (mz and tip and m2):
         print("    · le falta microzona, tipología o m²")
-    print("    · o su ventana de vecinos no junta n>=8, quedo descentrada/desbalanceada")
+    print(
+        "    · o su ventana de vecinos no junta n>=8, quedo descentrada o con la mediana ancha desviada del nucleo"
+    )
     print("      (T-955) o su segmento es mercado de temporada (D-022) — ver abajo")
 else:
     u, e = por_clave[clave]

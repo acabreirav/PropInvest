@@ -1832,10 +1832,10 @@ criterio_de_aceptacion:
 gate: make gates
 
 ## T-955 · Ventana ancha al borde del centrado con pool bimodal de tamanio
-estado: hecha (13-oct-2026, D-024 — cerrada CON la medicion que su criterio exigia:
-  el conteo de lados de D-023 se reemplazo por el guardia de desplazamiento de
-  mediana a 0.15, calibrado con los percentiles reales; ~129 unidades inocentes
-  vuelven al ranking y los culpables medidos (+31%, +21%) siguen en ND). Los guardias implementados se quedan
+estado: en_curso (guardia D-024 implementado y ASIMETRICO tras su verificador —
+  solo el alza veta; falta la validacion sobre la base real: re-correr
+  medir_guardias_ventana.py con el codigo nuevo + `cli sensibilidad
+  calidad.desvio_ventana_ancha_max=0.10` y `=0.20`) siguen en ND). Los guardias implementados se quedan
   (protegen sin inflar jamas), pero el arreglo definitivo se elige con
   `scripts/medir_guardias_ventana.py` sobre la base real: barrido del umbral, danio
   observado ancha-vs-angosta (el candidato 3 que D-023 descarto mal), y cuantas ±20%
@@ -1882,4 +1882,24 @@ criterio_de_aceptacion:
     tasa filas_parseadas/docs_recolectados, independiente de fase, comunas y paginas
   - CMF compara magnitudes homogeneas
   - wpjson escribe run_log (minimo docs y filas)
+gate: make gates
+
+
+## T-957 · La vara del nucleo no es independiente: medir con ajuste por tamanio
+estado: pendiente
+agente: motor-financiero
+fase: 2
+contexto: verificador de D-024, hallazgo 1 (estructural). El nucleo ±20% nunca pasa
+  por el centrado (que es vacuo a ese ancho) y siempre tiene n entre 3 y 7: cuando
+  esta cargado hacia el mismo lado que la ventana ancha, la desviacion de medianas
+  sale chica aunque la asignacion este inflada vs el tamanio real (caso S1: +13,6%
+  con desviacion ~0,6%; en su Monte Carlo sintetico 1.276 de 1.432 anchas infladas
+  >15% aparecian "inocentes"). La frecuencia REAL no esta medida: la seccion 2 de
+  medir_guardias_ventana.py ahora cuenta la firma S1 (nucleo con tipico corrido >10%
+  del m² de la unidad) — ese numero decide si esto amerita motor o solo marca.
+criterio_de_aceptacion:
+  - correr medir_guardias sobre la base real y pegar la firma S1 + seccion 2c
+  - si S1 es material: prototipo de vara ajustada por tamanio (elasticidad $/m² del
+    nucleo o log-log arriendo~m² dentro de mz×tip) medido contra la vara actual
+  - decision 8.4 con el usuario y verificador 7.6 si cambia el motor
 gate: make gates

@@ -3142,3 +3142,16 @@ mediana ancha vs nucleo ±20% (n>=3), umbral 0.15 en params
 (calidad.desvio_ventana_ancha_max), descarte `ventana_desviada`. La ±20% cargada a
 un lado (40% del ranking) queda sin guardia a proposito: estructura de mercado.
 Verificador 7.6 lanzado sobre el reemplazo.
+
+## 14-oct-2026 · Verificador de D-024 acatado: guardia ASIMETRICO, T-955 reabierta, T-957
+
+H2 (material, corregido): el veto simetrico inflaba — ±30% honesta-barata vetada
+"hacia abajo", ±40% cara aceptada contra un nucleo premium n=3 (S2: 15.1 honesto ->
+18.0, +20%). Guardia ahora asimetrico: solo el alza veta. H1 (material, estructural):
+nucleo cargado valida ancha cargada (S1: +13.6% con desviacion 0.6%) — T-957 creada;
+medir_guardias suma la firma S1 y la seccion 2c (valores cambiados entre corridas,
+invisibles al diff de conjuntos). H3 (proceso): T-955 de vuelta a en_curso — la
+medicion se hizo con el codigo viejo; re-correr script + sensibilidad 0.10/0.20.
+Menores: tests al borde agregados (S2), textos viejos corregidos (evaluar_aviso,
+docstring del script). Nota del verificador: el 9/13 con gradiente suave (+10.9%)
+sigue pasando — bajo el umbral 0.15, conocido y dentro del rango declarado.

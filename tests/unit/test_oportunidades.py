@@ -714,6 +714,30 @@ def test_una_ventana_ancha_coherente_con_su_nucleo_rankea(con) -> None:
     assert r.descartes["ventana_desviada"] == 0
 
 
+def test_una_ancha_barata_no_se_veta_el_guardia_es_asimetrico(con) -> None:
+    """Verificador D-024 hallazgo 2 (caso S2): con veto simetrico, una ±30% honesta
+    que quedaba BAJO un nucleo premium de n=3 se descartaba... y la ±40% cara (dentro
+    del ±15% del mismo nucleo) quedaba fija: el guardia INFLABA. Asimetrico: la baja
+    es error conservador y se acepta."""
+    # nucleo premium: 3 comps del mismo segmento caro, 74-76 m² a 18 UF
+    for m2c, cid in ((74, "P1"), (75.2, "P2"), (76, "P3")):
+        _comp_arr(con, cid, m2c, "18", tip="3D2B")
+    # el mercado real alrededor: mas barato
+    for m2c, cid in ((53, "A"), (55, "B"), (57, "C"), (59, "D"), (94, "E")):
+        _comp_arr(con, cid, m2c, "14", tip="3D2B")
+    for m2c, cid in ((98, "F"), (100, "G"), (102, "H"), (104, "I")):
+        _comp_arr(con, cid, m2c, "15", tip="3D2B")
+    unidad(con, tip="3D2B", m2=75, precio="4000")
+
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    _o, _n, arr = r.procedencia_arriendo["U1"]
+    # la ±30% (n=8: nucleo + 4 chicos + 94) se acepta AUNQUE quede ~-18% bajo el
+    # nucleo: mediana 14-15 UF, no los 18 del nucleo premium
+    assert arr < D("16"), f"se quedo con la ventana cara: {arr}"
+    assert r.descartes["ventana_desviada"] == 0
+
+
 def test_la_ventana_de_20_pct_no_se_compara_consigo_misma(con) -> None:
     """Una unidad que rankea en su propio nucleo ±20% no tiene contra que desviarse:
     el guardia solo mide ventanas ENSANCHADAS."""

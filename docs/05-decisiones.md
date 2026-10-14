@@ -918,3 +918,16 @@ con motivo `ventana_desviada`.
 
 El parámetro `ventana_balance_lado_max` se elimina de params.yml (vivió un día, con
 su medición hecha — exactamente para eso era el rango declarado).
+
+**Addendum post-verificador de D-024 (14-oct):** tres materiales, acatados así. (H2,
+bug claro) el veto simétrico + `continue` podía INFLAR — la ±30% honesta-barata se
+vetaba "hacia abajo" y la ±40% cara quedaba fija, amarrada a un núcleo premium de
+n=3 disfrazado de n=12 → **el guardia pasó a ASIMÉTRICO**: solo el alza veta; la
+mediana ancha bajo el núcleo es error conservador y se acepta (test del caso S2).
+(H1, estructural) el núcleo no es vara independiente cuando está cargado al mismo
+lado que la ancha (S1: +13,6% con desviación 0,6%) — abierto como **T-957** con la
+medición prescrita: la sección 2 del script ahora cuenta la firma S1 y la 2c el
+diff de VALORES entre corridas; la frecuencia real decide si amerita vara ajustada
+por tamaño. (H3, proceso) T-955 vuelve a en_curso hasta re-correr la medición con
+el código nuevo + sensibilidad 0,10/0,20. El tripwire de monotonía sí marca S1 en
+la ficha — mitigación parcial visible mientras T-957 decide.
