@@ -296,7 +296,7 @@ calidad:
   # reales eran 3-4 (trio a +31%, huertos-familiares a +21%). El 0.15 atrapa a todos
   # los culpables medidos y libera al resto; el impacto queda visible en el descarte
   # `ventana_desviada` de cada corrida.
-  desvio_ventana_ancha_max: {v: 0.15, evidence: E, rango: [0.10, 0.20], nota: "medido el 13-oct y confirmado el 14-oct PARA LA VARA CRUDA (3/3 culpables, 0 inocentes); con la vara ajustada por tamanio (D-026) la re-medicion esta pendiente — correr medir_guardias_ventana.py"}
+  desvio_ventana_ancha_max: {v: 0.15, evidence: E, rango: [0.10, 0.20], nota: "medido el 13-oct y confirmado el 14-oct PARA LA VARA CRUDA (3/3 culpables, 0 inocentes); con la vara ajustada (D-026) RE-MEDIDO el 14-oct: apaga 7 — trio +31% + cuarteto +12,7% de nucleo corrido — y el 0.15 se sostiene"}
   # T-957/D-026: EL exponente del ajuste de la vara del guardia D-024 al tamanio de
   # la unidad: vara = mediana_nucleo x min(1, (m2/tipico)^beta) — el ajuste solo
   # ENDURECE (verificador D-026 H1). Es el unico beta que opera (el local por grupo

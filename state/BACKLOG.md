@@ -1881,19 +1881,17 @@ gate: make gates
 
 
 ## T-957 · La vara del nucleo no es independiente: medir con ajuste por tamanio
-estado: en_curso (14-oct-2026: usuario APROBO el arreglo — D-026 implementado: vara
-  = mediana_nucleo x (m2/tipico)^beta, beta local del grupo o respaldo E
-  calidad.elasticidad_m2_vara 0,45. Tests del caso diferencial (atrapa la S1 que el
-  crudo validaba / no sobre-veta / no-danio con nucleo centrado). Verificador 7.6
-  corrido y ACATADO (1 BLOQUEA: el ajuste solo ENDURECE via min(1,.); beta local
-  eliminado — el exponente es el E declarado; ver RUNLOG 14-oct). Falta SOLO la
-  re-medicion del usuario (medir_guardias_ventana.py) para cerrar.)
+estado: hecha (14-oct-2026: D-026 implementado, verificador 7.6 ACATADO (min(1,.):
+  el ajuste solo endurece; el exponente es el E declarado) y RE-MEDIDO sobre la base
+  real: apaga 7 (trio +31% + cuarteto +12,7% de nucleo corrido), 1 reasignada -5,6%,
+  costo 4 de 2.296; el 0.15 se sostiene. Residuo declarado en RUNLOG: 6 anchas S1
+  >15% sobre el modelo que ninguna vara de nucleo puede ver — vigilancia, el modelo
+  no puede vetar (D-025).)
 nota_continua: >
-  Pregunta del usuario (14-oct): m² como variable continua. La seleccion ya es
-  continua; el residuo es la ASIGNACION (mediana cruda del pool, corrimiento interno
-  de hasta ±20% ~ ±8-9% de arriendo con beta 0,45). La seccion 5 nueva de
-  medir_guardias_ventana.py lo mide; si la cola es gorda se abre T-959 (ajustar la
-  asignacion por tamanio — decision 8.4, mueve el numerador de todos los yields).
+  T-959 RESUELTA el mismo dia (medicion seccion 5, base real): 883 sobreestimadas con
+  mediana 2,5% / p90 4,7% / cero sobre el techo estructural de 8% — la asignacion NO
+  se ajusta (ruido mediano no justifica mover todos los yields); la cola 5-8% queda
+  MARCADA en la procedencia ("mas chica que sus vecinos"), visible en la ficha.
 agente: motor-financiero
 fase: 2
 contexto: verificador de D-024, hallazgo 1 (estructural). El nucleo ±20% nunca pasa

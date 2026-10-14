@@ -937,3 +937,28 @@ def test_una_no_S1_honesta_sobrevive_el_endurecimiento_leve(con) -> None:
     # vara = 10 * (60/65)^0.45 = 9.65; candidata 10.8 = +12% < 15% => rankea
     assert len(r.unidades) == 1
     assert r.descartes["ventana_desviada"] == 0
+
+
+# ------------------------------------------- T-959 · marca de corrimiento de tamanio
+
+
+def test_la_unidad_mas_chica_que_su_pool_queda_marcada(con) -> None:
+    """T-959 (14-oct): el '60 vs 70' del usuario — la asignacion cruda hereda el
+    arriendo del tamanio tipico del pool. Medido: cola acotada a 5-8%, no amerita
+    mover el numerador; la cola se MARCA en la procedencia (visible, no excluida)."""
+    for i in range(10):
+        _comp_arr(con, f"GR{i}", 66 + i * 0.65, "14", tip="2D2B")  # tipico ~69
+    unidad(con, tip="2D2B", m2=60, precio="3000")
+    r = op.emparejar(con, RANGOS)
+    assert len(r.unidades) == 1
+    origen, _n, _arr = r.procedencia_arriendo["U1"]
+    assert "⚠ más chica que sus vecinos" in origen
+
+
+def test_sin_corrimiento_material_no_hay_marca_de_tamanio(con) -> None:
+    for i in range(10):
+        _comp_arr(con, f"GR{i}", 58 + i * 0.5, "14", tip="2D2B")  # tipico ~60
+    unidad(con, tip="2D2B", m2=60, precio="3000")
+    r = op.emparejar(con, RANGOS)
+    origen, _n, _arr = r.procedencia_arriendo["U1"]
+    assert "más chica que sus vecinos" not in origen

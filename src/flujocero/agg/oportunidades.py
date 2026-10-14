@@ -179,6 +179,16 @@ DESVIO_NUCLEO_MIN = 3
 # guardia frena. Con nucleo centrado el ajuste queda en [0,95; 1]: las no-S1 cambian
 # a lo mas ~4,6%, y siempre hacia MAS estricto.
 ELASTICIDAD_VARA = D("0.45")
+# T-959 (pregunta del usuario, medido 14-oct-2026): la asignacion es la mediana CRUDA
+# del pool, asi que una unidad mas chica que el tipico de sus vecinos hereda un
+# arriendo optimista — acotado por construccion a (1/1,2)^0,45 - 1 ~ -8% (el
+# descentrado no permite mas). Medido sobre la base real: 883 sobreestimadas con
+# mediana 2,5% y p90 4,7%, 64 sobre 5%, CERO sobre 8% — ajustar el numerador de TODOS
+# los yields por un ruido mediano de 2,5% no se justifica (decision 8.4, criterio
+# pre-declarado en la seccion 5 del script de guardias). La cola de 5-8% se MARCA en
+# la procedencia, como el tripwire de monotonia: visible, no excluida. Umbral de
+# exhibicion estructural (no de mercado): vive aqui, no en params.
+MARCA_CORRIMIENTO_TAM = 0.05
 
 
 def emparejar_con_params(
@@ -552,6 +562,12 @@ def emparejar(
             ufm2_chicos, D("0.5")
         ):
             metodo += " · ⚠ $/m² sobre el de los más chicos de la microzona"
+        # T-959 · corrimiento de tamanio dentro del pool ACEPTADO: la unidad hereda la
+        # mediana del tamanio tipico de sus vecinos; si es bastante mas chica que
+        # ellos, ese arriendo le queda grande y la ficha lo dice (ver la constante).
+        factor_tam = (float(m2) / float(m2_tipico)) ** float(beta_vara) if m2_tipico else 1.0
+        if factor_tam < 1 - MARCA_CORRIMIENTO_TAM:
+            metodo += f" · ⚠ más chica que sus vecinos: arriendo ~{1 - factor_tam:.0%} optimista"
 
         firma = (mz, tip, m2, precio)
         if firma in vistos:

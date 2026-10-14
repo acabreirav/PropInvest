@@ -3359,3 +3359,34 @@ ACATADO:
 PENDIENTE (usuario): re-correr medir_guardias_ventana.py — cierra T-957 con el guardia
 nuevo medido (seccion 1: cuantas desviadas con la vara ajustada; seccion 5: la cola
 direccional que decide T-959, la pregunta del m² continuo).
+
+## 14-oct-2026 · T-957 CERRADA — re-medicion con la vara ajustada (D-026) sobre la base real
+- Seccion 1: el 0.15 con vara ajustada apaga 7 (antes 3): el trio +31,3% MAS el
+  cuarteto a +12,7% crudo cuyo nucleo corrido la vara ajustada ya no perdona (2b:
+  100% de las apagadas con desviacion >10%). Una unidad rankea con arriendo 5,6% mas
+  conservador (2c=1: la ±30 vetada cayo a una ±40 mas barata — el mecanismo
+  funcionando). Costo total: 4 unidades de 2.296. El umbral 0.15 se sostiene
+  (0.10 apagaria 22; 0.20 soltaria al cuarteto).
+- Seccion 2 (las que PASAN): maxima desviacion al alza +10,9%; la unica >15% es a la
+  BAJA (-15,8%, conservadora). Limpio.
+- Firma S1 por signo: 35 nucleo grande (el lado que la vara ajustada endurece) y 29
+  nucleo chico (el lado que min(1,.) congela en el crudo — jamas relaja).
+- RESIDUO declarado (vigilancia, no tarea): 6 anchas S1 siguen >15% sobre el modelo
+  hedonico (max +25,3%) — nucleo y ancha sesgados JUNTOS: ninguna vara basada en el
+  propio nucleo puede verlos, y usar el modelo para VETAR esta prohibido (D-025: el
+  modelo jamas alimenta el ranking). Quedan el tripwire de monotonia, la procedencia
+  en la ficha y el arriendo de equilibrio como contrapesos visibles. Si un caso de
+  estos aparece en el top, se audita a mano (evaluar_aviso).
+T-957 hecha.
+
+## 14-oct-2026 · T-959 (m² continuo, pregunta del usuario) — MEDIDO: marca, no motor
+- Seccion 5 sobre la base real: 2.047 asignadas en ±20%; 883 sobreestimadas (unidad
+  mas chica que su pool) con correccion implicada mediana 2,5%, p90 4,7%, 64 sobre 5%
+  y CERO sobre 8% — el 8% es el techo estructural ((1/1,2)^0,45 - 1: el descentrado
+  no permite mas). El "60 vs 70" del usuario existe literal (3 unidades, -6,7%).
+- DECISION (criterio pre-declarado en la seccion 5): NO se ajusta la asignacion —
+  mover el numerador de TODOS los yields por un ruido mediano de 2,5% es peor que la
+  enfermedad. La cola 5-8% se MARCA en la procedencia ("⚠ mas chica que sus vecinos:
+  arriendo ~X% optimista"), visible en la ficha del informe, igual que el tripwire de
+  monotonia. CERO numeros cambian (solo texto de procedencia): por eso no gatilla un
+  ciclo verificador completo; 2 tests fijan la marca y su ausencia.
