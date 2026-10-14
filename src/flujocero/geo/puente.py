@@ -175,30 +175,26 @@ def calcular_riesgo(conexion: Any, p: Config, ahora: datetime) -> int:
     return len(brutos)
 
 
-def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str, int]:
-    """El catalizador del §12 por microzona: distancia a la estacion ELEGIBLE mas cercana.
+def catalizadores_en_memoria(
+    conexion: Any, p: Config, ahora: datetime, factor_operativa: float = 1.0
+) -> tuple[dict[str, tuple[float | None, float]], dict[str, int]]:
+    """`mid -> (dist_metro_m, catalizador)` + stats, SIN escribir nada.
 
-    Elegible = operativa, o en construccion cuya linea tenga fecha creible dentro del
-    horizonte en `config/metro.yml`. Una estacion en construccion sin linea declarada en
-    OSM o sin fecha curada NO cataliza: se cuenta, no se le inventa fecha (§3.2).
-
-    La conversion distancia -> 0..1 es lineal con dos umbrales E declarados en params
-    (`catalizador.*`): pleno hasta `dist_plena_m`, cero desde `dist_max_m`. Las estaciones
-    en construccion valen `factor_en_construccion` de lo que valdria una operativa.
-
-    Escribe sobre `agg_riesgo_microzona` (upsert): la fila puede existir del riesgo o
-    nacer aca — una microzona con centro y sin manzanas igual tiene distancia al Metro.
-    Con `dim_estacion_metro` vacia no se escribe nada: catalizador NULL = sin medir,
-    que el emparejamiento cuenta como defecto. Cero seria "medimos y no hay Metro cerca",
-    y eso es otra afirmacion.
+    Es el calculo de `calcular_catalizador` extraido para poder medir variantes
+    (auditoria 14-oct H3 / T-963): `factor_operativa` escala lo que vale una estacion
+    OPERATIVA (hoy 1,0 — el valor que la auditoria mostro como "bono RM" de ~9 puntos,
+    doblemente contado porque una estacion de 2006 ya vive en el precio y el arriendo
+    de su microzona). Las EN CONSTRUCCION con fecha creible mantienen su
+    `factor_en_construccion`: ese es el catalizador que aun NO esta en el precio.
     """
     from flujocero.config import cargar as cargar_config
 
     filas = conexion.execute(
         "SELECT estacion_id, linea, estado, lat, lon, anio_apertura, red FROM dim_estacion_metro"
     ).fetchall()
+    stats = {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0, "excluidas_efe": 0}
     if not filas:
-        return {"microzonas": 0, "construccion_sin_fecha": 0, "elegibles": 0, "excluidas_efe": 0}
+        return {}, stats
 
     fechas = {
         str(e["linea"]).lower(): e["fecha_apertura"]
@@ -219,7 +215,8 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
             excluidas_efe += 1
             continue
         if estado == "operativa":
-            elegibles.append((float(lat), float(lon), 1.0))
+            if factor_operativa > 0:
+                elegibles.append((float(lat), float(lon), factor_operativa))
             continue
         fecha = fechas.get((linea or "").lower())
         if fecha is None:
@@ -240,21 +237,18 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
         else:
             construccion_sin_fecha += 1
 
+    stats["construccion_sin_fecha"] = construccion_sin_fecha
+    stats["excluidas_efe"] = excluidas_efe
     if not elegibles:
         # hay estaciones cargadas pero ninguna elegible: eso es "no se pudo medir",
-        # no "medimos y no hay Metro" — escribir 0.0 aca afirmaria lo segundo
-        return {
-            "microzonas": 0,
-            "construccion_sin_fecha": construccion_sin_fecha,
-            "elegibles": 0,
-            "excluidas_efe": excluidas_efe,
-        }
+        # no "medimos y no hay Metro" — un 0.0 aca afirmaria lo segundo
+        return {}, stats
 
     centros = conexion.execute(
         "SELECT microzona_id, centro_lat, centro_lon FROM dim_microzona "
         "WHERE centro_lat IS NOT NULL"
     ).fetchall()
-    n = 0
+    salida: dict[str, tuple[float | None, float]] = {}
     for mid, clat, clon in centros:
         mejor = 0.0
         mejor_dist = None
@@ -269,6 +263,32 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
             else:
                 puntaje = factor * (maxima - d) / (maxima - plena)
             mejor = max(mejor, puntaje)
+        salida[mid] = (mejor_dist, mejor)
+    stats["microzonas"] = len(salida)
+    stats["elegibles"] = len(elegibles)
+    return salida, stats
+
+
+def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str, int]:
+    """El catalizador del §12 por microzona: distancia a la estacion ELEGIBLE mas cercana.
+
+    Elegible = operativa, o en construccion cuya linea tenga fecha creible dentro del
+    horizonte en `config/metro.yml`. Una estacion en construccion sin linea declarada en
+    OSM o sin fecha curada NO cataliza: se cuenta, no se le inventa fecha (§3.2).
+
+    La conversion distancia -> 0..1 es lineal con dos umbrales E declarados en params
+    (`catalizador.*`): pleno hasta `dist_plena_m`, cero desde `dist_max_m`. Las estaciones
+    en construccion valen `factor_en_construccion` de lo que valdria una operativa.
+
+    Escribe sobre `agg_riesgo_microzona` (upsert): la fila puede existir del riesgo o
+    nacer aca — una microzona con centro y sin manzanas igual tiene distancia al Metro.
+    Con `dim_estacion_metro` vacia no se escribe nada: catalizador NULL = sin medir,
+    que el emparejamiento cuenta como defecto. Cero seria "medimos y no hay Metro cerca",
+    y eso es otra afirmacion. El calculo vive en `catalizadores_en_memoria`; aqui solo
+    la persistencia.
+    """
+    valores, stats = catalizadores_en_memoria(conexion, p, ahora)
+    for mid, (mejor_dist, mejor) in valores.items():
         existe = conexion.execute(
             "SELECT 1 FROM agg_riesgo_microzona WHERE microzona_id = ?", (mid,)
         ).fetchone()
@@ -284,10 +304,9 @@ def calcular_catalizador(conexion: Any, p: Config, ahora: datetime) -> dict[str,
                 "calculado_en) VALUES (?, ?, ?, ?)",
                 (mid, mejor_dist, mejor, ahora),
             )
-        n += 1
     return {
-        "microzonas": n,
-        "construccion_sin_fecha": construccion_sin_fecha,
-        "elegibles": len(elegibles),
-        "excluidas_efe": excluidas_efe,
+        "microzonas": stats["microzonas"],
+        "construccion_sin_fecha": stats["construccion_sin_fecha"],
+        "elegibles": stats["elegibles"],
+        "excluidas_efe": stats["excluidas_efe"],
     }

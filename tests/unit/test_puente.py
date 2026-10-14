@@ -120,3 +120,41 @@ def test_emparejar_usa_el_riesgo_medido_y_cuenta_el_defecto(con):
     r = op.emparejar(con, [[25, 35], [35, 50]])
     assert (r.riesgo_medido, r.riesgo_por_defecto) == (1, 0)
     assert r.unidades[0].riesgo_microzona != D("0.5"), "medido, no el default"
+
+
+def test_catalizadores_en_memoria_escala_solo_las_operativas() -> None:
+    """T-963 (auditoria 14-oct H3): `factor_operativa` escala lo que vale una estacion
+    OPERATIVA sin tocar la base ni a las en-construccion, y con 0 la operativa deja de
+    catalizar. Es el instrumento de la medicion que decide el 'bono RM'."""
+    import duckdb
+
+    from flujocero import db
+    from flujocero.config import cargar
+    from flujocero.geo.puente import catalizadores_en_memoria
+
+    c = duckdb.connect(":memory:")
+    db.aplicar_esquema(c)
+    c.execute("INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES ('x', 'X', 'RM')")
+    c.execute(
+        "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre, centro_lat, centro_lon) "
+        "VALUES ('x/barrio', 'x', 'B', -33.45, -70.66)"
+    )
+    # una estacion OPERATIVA pegada al centro del barrio (<dist_plena_m)
+    c.execute(
+        "INSERT INTO dim_estacion_metro (estacion_id, nombre, linea, estado, lat, lon, red) "
+        "VALUES ('e1', 'E1', 'l1', 'operativa', -33.4501, -70.6601, 'metro')"
+    )
+    p = cargar("params")
+    ahora = datetime(2026, 10, 14, tzinfo=UTC)
+
+    pleno, _ = catalizadores_en_memoria(c, p, ahora)  # default 1.0 = lo de siempre
+    assert pleno["x/barrio"][1] == pytest.approx(1.0)
+    medio, _ = catalizadores_en_memoria(c, p, ahora, factor_operativa=0.5)
+    assert medio["x/barrio"][1] == pytest.approx(0.5)
+    # la distancia no cambia con el factor: es la misma estacion
+    assert medio["x/barrio"][0] == pytest.approx(pleno["x/barrio"][0])
+    # con 0, la operativa no cataliza — y sin elegibles el resultado es ND, no 0.0
+    apagado, stats = catalizadores_en_memoria(c, p, ahora, factor_operativa=0.0)
+    assert apagado == {}
+    assert stats["elegibles"] == 0
+    c.close()

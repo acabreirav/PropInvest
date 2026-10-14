@@ -3497,3 +3497,30 @@ inspeccion".
   $475k en 6 semanas hace improbable cerrar sobre $540k.
 - El hallazgo valida H1 en vivo y agrega el angulo DIAS PUBLICADO a T-962 (un aviso
   anejo prueba que el cierre es menor que su precio pedido; la base tiene la historia).
+
+## 14-oct-2026 · mediciones del usuario (sensibilidad + vecinos del #1) y T-963 instrumentado
+Salidas completas en la conversacion:
+- evaluar_aviso MLC-2082126757 (#1): el comparable Houm de $475k NO esta en su pool —
+  o quedo en otra microzona (frontera Av. La Paz) o no se recolecto. Y TRES de sus 8
+  vecinos rentan $644.501/$644.667/$645.219 con m² distintos (60/71/75): precios en UF
+  casi identicos = probable operador/edificio publicando en serie (evidencia directa
+  para T-965 duplicado difuso y T-953 multifamily). El propio #1 lleva publicado SIN
+  VENDERSE desde el 03-09 a UF 2.100 — seis semanas sin comprador para un "9% de
+  yield" es el mercado opinando.
+- sensibilidad catalizador=0: 16,2% del ranking se mueve >10% y el top 5 CAMBIA ->
+  decision 8.4 OBLIGATORIA (H3 confirmado a escala). OJO: apagar el PESO tambien mata
+  a las en-construccion (Cerrillos L6, Recoleta L7), que son el catalizador legitimo.
+- sensibilidad descuento_vs_microzona=0: 0 movidas >10% (solo un swap 4<->5). El H5
+  es conceptualmente correcto pero casi INERTE como fuerza de ranking (5% de peso):
+  baja de prioridad dentro de T-962; la bandera de inspeccion sigue valiendo.
+- sensibilidad plusvalia=0: 0 movidas — confirma la colinealidad H4 (el orden por TIR
+  es identico con cualquier plusvalia DENTRO de las usadas). El paso a E queda por
+  honestidad y por el cruce usadas/nuevas.
+- sensibilidad vacancia=0.10: 38 salen del ranking (tope de deficit), 0 reordenan.
+INSTRUMENTADO HOY (T-963): `catalizadores_en_memoria(con, p, ahora, factor_operativa)`
+extraido de calcular_catalizador (sin escribir; la persistencia quedo aparte, tests
+verdes) + `scripts/medir_catalizador.py`: recalcula el catalizador con factor_operativa
+1,0/0,5/0,25/0,0 EN MEMORIA, re-puntua el universo y reporta movidas, top 10 y el
+catalizador medio RM vs regiones (el "bono" a la vista). Las en-construccion no se
+tocan en ninguna variante. Con esa salida el usuario decide el factor (8.4) y recien
+ahi nace el parametro E.

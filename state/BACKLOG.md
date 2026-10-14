@@ -2054,11 +2054,12 @@ contexto: calcular_catalizador da ~1,0 a toda microzona RM con estacion operativ
   estructural a regiones (excluye EFE/Biotren/Merval). Evidencia: #12 domina a #7 en
   los TRES componentes financieros y queda abajo; el swing medido es ~9 puntos.
 criterio_de_aceptacion:
-  - cota hoy: `cli sensibilidad score.pesos.catalizador=0` (comando ya entregado)
-  - propuesta: E `catalizador.factor_operativa` rango [0, 0.5] (la estacion operativa
-    vale fraccion; la EN CONSTRUCCION con fecha creible mantiene 1,0) o normalizacion
-    por region; requiere re-correr puente-censo para medirse
-  - evaluar incluir EFE con fecha creible (Biotren/Merval ya operan: mismo doble conteo)
+  - [x] cota extrema medida (14-oct): peso=0 mueve 16,2% y cambia el top 5 -> 8.4
+  - [x] instrumento listo: catalizadores_en_memoria(factor_operativa) +
+        scripts/medir_catalizador.py (variantes 1,0/0,5/0,25/0,0 sin escribir base)
+  - [ ] usuario corre medir_catalizador.py y decide el factor (8.4); recien ahi nace
+        el E catalizador.factor_operativa con el valor elegido
+  - [ ] evaluar incluir EFE con fecha creible (Biotren/Merval operan: mismo doble conteo)
 gate: make gates · verificador 7.6 (toca score via puente)
 
 ## T-964 · Colinealidad del score: 70% del peso mide una sola variable (auditoria H4)
