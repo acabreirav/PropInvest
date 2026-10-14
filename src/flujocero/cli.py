@@ -1853,6 +1853,9 @@ def informe_semanal(
                     else ""
                 ),
                 visto_hace_dias=vistos_top.get(u.unidad_key, -1),
+                antiguedad_anios=(
+                    int(u.antiguedad_anios) if u.antiguedad_anios is not None else -1
+                ),
                 # T-960: veredicto solo si SU comuna se re-recolecto en esta corrida —
                 # reaparecio hoy (True) o no salio en las paginas pedidas (False)
                 reconfirmada=(

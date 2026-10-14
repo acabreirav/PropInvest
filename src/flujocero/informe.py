@@ -66,6 +66,11 @@ class FilaTop:
     # se re-recolectó hoy y el aviso REAPARECIÓ; False = se re-recolectó y NO apareció
     # (probablemente vendida); None = no hubo re-confirmación o su comuna no se cubrió.
     reconfirmada: bool | None = None
+    # T-961 (hallazgo del usuario, 14-oct: el #2 tenía 50 años y nada lo decía) · la
+    # antigüedad del edificio cuando la base la tiene. -1 = sin dato, que es lo normal:
+    # vive en la ficha de detalle del portal (prohibida por robots §13.6) y los
+    # listados permitidos no la publican — la ficha lo DICE en vez de callar.
+    antiguedad_anios: int = -1
 
 
 @dataclass
@@ -572,6 +577,28 @@ def render_html(
         # vendido y nada lo decía). Sobre 7 días el aviso no fue re-confirmado por la
         # última corrida semanal: puede estar vendido y hay que verificarlo antes de
         # entusiasmarse — el §7.3 lo tolera hasta 21 días, pero tolerar no es callar.
+        # T-961: la antigüedad, con el optimismo no medido a la vista. El arriendo viene
+        # de vecinos por (mz, tip, m²) SIN controlar antigüedad, y el opex es el supuesto
+        # general: en un edificio viejo ambos son optimistas. La rebaja DFL2 de
+        # contribuciones ya se asume vencida para usados viejos o sin dato (T-911/D-018).
+        if f.antiguedad_anios >= 30:
+            edad = (
+                f"<div><span>Antigüedad</span><b class='neg'>{f.antiguedad_anios} años</b> "
+                "<span class='mini neg'>⚠ el arriendo se comparó con vecinos sin controlar "
+                "antigüedad y la mantención real puede superar el supuesto general — "
+                "descontar al cotizar</span></div>"
+            )
+        elif f.antiguedad_anios >= 0:
+            edad = f"<div><span>Antigüedad</span><b>{f.antiguedad_anios} años</b></div>"
+        elif not f.con_subsidio:  # usada sin dato: decirlo, no callar
+            edad = (
+                "<div><span>Antigüedad</span><b>sin dato</b> <span class='mini'>el listado "
+                "permitido no la publica: verla en el aviso (clic en el código). Un edificio "
+                "viejo renta y se mantiene peor de lo que el modelo asume; la rebaja DFL2 de "
+                "contribuciones ya se asume vencida</span></div>"
+            )
+        else:
+            edad = ""
         if f.reconfirmada is True:
             visto = (
                 "<div><span>Visto en el portal</span><b class='pos'>re-confirmada hoy</b> "
@@ -620,6 +647,7 @@ def render_html(
     <div><span>Crédito ({1 - f.pie_pct:.0%})</span><b>UF {_f(credito_uf)}</b>{alerta_credito}</div>
     <div><span>Pie para flujo cero</span><b>{f.pie_cero}</b></div>
     <div><span>DFL2</span><b>{escape(f.dfl2)}</b></div>
+    {edad}
     {visto}
   </div>
   <div class="mini">Por qué está arriba: {drivers}</div>

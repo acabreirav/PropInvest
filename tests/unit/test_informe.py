@@ -483,3 +483,27 @@ def test_la_ficha_dice_el_veredicto_de_la_reconfirmacion() -> None:
     assert "probablemente vendida" in html
     # la no cubierta cae a la escalera de edad de siempre
     assert "hace 3 días" in html
+
+
+# ------------------------------------- T-961 · la antiguedad, con el optimismo a la vista
+
+
+def test_la_ficha_dice_la_antiguedad_o_que_no_hay_dato() -> None:
+    """El #2 del 14-oct tenia 50 años y nada lo decia: el arriendo se compara con
+    vecinos sin controlar antiguedad y el opex es el supuesto general."""
+    vieja = _fila("V")
+    vieja.antiguedad_anios = 50
+    media = _fila("M")
+    media.antiguedad_anios = 8
+    usada_nd = _fila("U")  # con_subsidio=False por defecto: usada sin dato
+    html = inf.render_html(
+        "2026-10-14", "2026-10-07", [vieja, media, usada_nd], inf.CambiosTop(), [], [], "", []
+    )
+    assert "50 años" in html and "sin controlar" in html and "descontar al cotizar" in html
+    assert "8 años" in html
+    assert "el listado permitido no la publica" in html
+    # una NUEVA sin dato no muestra la celda (la ventana DFL2 recien empieza)
+    nueva = _fila("N")
+    nueva.con_subsidio = True
+    html2 = inf.render_html("2026-10-14", "2026-10-07", [nueva], inf.CambiosTop(), [], [], "", [])
+    assert "Antigüedad" not in html2

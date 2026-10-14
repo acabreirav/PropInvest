@@ -1983,3 +1983,31 @@ criterio_de_aceptacion:
   - el informe dice cuantas unidades del top quedaron re-confirmadas vs no
   - respetar robots y el detector de parser roto; cero fetch de fichas directas
 gate: make gates
+
+
+## T-961 · Medir la merma por antiguedad y decidir su tratamiento
+estado: pendiente
+agente: analista-arriendo
+fase: 2
+origen: hallazgo del usuario (14-oct-2026) — el #2 del informe min2000uf
+  (rancagua/centro, MLC-2300670639) tiene ~50 años segun la ficha del portal y se
+  evaluo con el arriendo de vecinos sin controlar antiguedad y el opex general.
+contexto: la antiguedad vive en la ficha de DETALLE del portal (prohibida por robots
+  §13.6); los listados permitidos no la publican, asi que el stock vigente tiene
+  antiguedad NULL (medido en la revision D-018). Lo que SI la tiene es el corpus
+  LEGADO de mayo (6.180 fichas de detalle ya ingeridas, portal_legado parsea
+  antiguedad_anios). La ventana DFL2 de contribuciones ya se asume vencida para
+  usados viejos o sin dato (T-911/D-018) — ese optimismo no existe; el no medido es
+  el ARRIENDO y la mantencion.
+criterio_de_aceptacion:
+  - medir sobre el corpus legado la curva precio: UF/m² ~ antiguedad controlando
+    (microzona, tipologia, m²) — el descuento que el mercado de VENTA ya cobra
+  - evaluar si los comparables de ARRIENDO del legado traen antiguedad; si si,
+    medir la elasticidad arriendo~antiguedad con el mismo control (requiere columna
+    nueva en fact_arriendo_comp + re-ingesta del legado, SCD intacto)
+  - con las dos curvas, decision 8.4 con el usuario: marca (como hoy), haircut E
+    declarado en params con rango, o parametro manual de evaluar_aviso
+    (--antiguedad N) para re-evaluar una unidad puntual con su edad real
+  - la ficha ya muestra antiguedad/sin-dato (hecho 14-oct); esta tarea decide si
+    ademas se CALCULA distinto
+gate: make gates · verificador 7.6 si toca el motor

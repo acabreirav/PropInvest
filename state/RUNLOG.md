@@ -3434,3 +3434,17 @@ antes de emitir) queda en el backlog para la mitad estructural. Nota de mercado:
   Tests: comunas_del_top (dedup/orden/region/tope) y el render de los tres veredictos.
 - Pendiente: primera corrida real del usuario mide costo (minutos/paginas) y beneficio
   (cuantas fichas re-confirmadas vs caidas) -> decidir si pasa al semanal por defecto.
+
+## 14-oct-2026 · hallazgo del usuario: el #2 (min2000uf) tiene ~50 años y nada lo decia
+- Capas del hallazgo: (1) la rebaja DFL2 de contribuciones YA se asume vencida para
+  usados viejos/sin dato (T-911/D-018) — ese optimismo no existe; (2) el optimismo
+  real no medido es el ARRIENDO (vecinos sin controlar antiguedad) y la mantencion
+  (opex general); (3) el dato no se puede capturar en bulk: vive en la ficha de
+  detalle prohibida por robots — el stock vigente tiene antiguedad NULL.
+- Hecho ahora: la ficha del top muestra la antiguedad cuando existe (⚠ rojo sobre 30
+  años con el descargo del optimismo), y en usados SIN dato lo dice y manda a verla
+  en el aviso. Una nueva sin dato no muestra la celda. Test de los 4 casos.
+- T-961 al backlog: medir la merma con el corpus LEGADO (que si trae antiguedad) —
+  curva de precio UF/m²~antiguedad y, si los comps del legado la traen, la de
+  arriendo — y decidir con el usuario (8.4): marca, haircut E, o --antiguedad en
+  evaluar_aviso.
