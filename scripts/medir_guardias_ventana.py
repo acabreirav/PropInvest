@@ -232,4 +232,48 @@ print(
 print("  (hallazgo 2 del verificador: hoy SIN guardia — si el número es grande, el")
 print("   arreglo definitivo tiene que cubrir también la ±20%, no solo las anchas)")
 
+# 5 · pregunta del usuario (14-oct): ¿m² como variable CONTINUA? El emparejamiento ya
+# es continuo en la SELECCION (ventana alrededor del m² propio), pero la ASIGNACION es
+# la mediana cruda del pool: si la unidad queda descentrada DENTRO de la ventana (hasta
+# ±20%, que el guardia de descentrado permite), hereda el arriendo del tamanio tipico
+# del pool, no del suyo. Con beta~0,45, un corrimiento de +17% de m² (el 60 vs 70 del
+# usuario) son ~+7% de arriendo. Aqui se mide cuanto corrimiento REAL hay en los pools
+# aceptados de ±20% y cuanto arriendo implica, ANTES de decidir si la asignacion misma
+# se ajusta por tamanio (candidato T-959 — mover el numerador de TODOS los yields es
+# decision 8.4 con medicion, no un commit).
+print("\n== 5 · corrimiento de m² DENTRO de la ventana ±20% aceptada (asignacion cruda) ==")
+BETA_REF = D("0.45")  # el respaldo E calidad.elasticidad_m2_vara (beta global 0,446)
+factores: list[tuple[D, str, D, D]] = []  # (|factor-1|, key, m2, tipico)
+for u in base.unidades:
+    m2 = u.m2_utiles
+    grupo = grupos.get((u.microzona_id, u.tipologia), [])
+    ventana20 = max(D(3), m2 * D("0.20"))
+    pool20m = [m2c for m2c, _ in grupo if abs(m2c - m2) <= ventana20]
+    if len(pool20m) < op.MIN_COMPARABLES:
+        continue  # asignada en ancha: su vara ya se ajusta por D-026
+    tipico = percentil(pool20m, D("0.5"))
+    if not tipico:
+        continue
+    factor = D(str((float(m2) / float(tipico)) ** float(BETA_REF)))
+    factores.append((abs(factor - 1), u.unidad_key, m2, tipico))
+if factores:
+    vals = sorted(f for f, *_ in factores)
+    mediana_f = percentil(vals, D("0.5"))
+    p90_f = percentil(vals, D("0.9"))
+    print(f"  unidades asignadas en ±20%: {len(factores)}")
+    print(
+        f"  correccion de arriendo implicada |(m2/tipico)^0.45 - 1|: mediana {mediana_f:.1%} · p90 {p90_f:.1%}"
+    )
+    for umbral in (D("0.03"), D("0.05"), D("0.08")):
+        n = sum(1 for v in vals if v > umbral)
+        print(f"  unidades con correccion implicada > {umbral:.0%}: {n}  ({n / len(vals):.0%})")
+    print("  las 10 mas corridas (su arriendo hereda el del tamanio tipico del pool):")
+    for f, k, m2v, tipv in sorted(factores, key=lambda t: t[0], reverse=True)[:10]:
+        lado = "chica vs pool" if m2v < tipv else "grande vs pool"
+        print(f"    {k:<18} {m2v:>5.0f} m² vs tipico {tipv:>5.0f}  ({lado}, correccion {f:+.1%})")
+    print("  (mediana y p90 chicas => la asignacion cruda basta y T-959 no se abre;")
+    print("   una cola gorda sobre 5-8% => medir el ajuste de asignacion por tamanio)")
+else:
+    print("  sin unidades medibles")
+
 con.close()

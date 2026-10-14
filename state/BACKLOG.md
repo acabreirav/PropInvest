@@ -1881,11 +1881,18 @@ gate: make gates
 
 
 ## T-957 · La vara del nucleo no es independiente: medir con ajuste por tamanio
-estado: bloqueada_por_humano (14-oct-2026: medicion 2d EJECUTADA — S1 diverge 8,8%
-  vs 4,1% de las no-S1 y al ALZA (+19 a +25%): el criterio pre-declarado dice motor.
-  Propuesta en RUNLOG 14-oct: vara del nucleo ajustada por tamanio en el guardia D-024
-  (mediana x (m2/tipico)^beta local, respaldo E ~0,45 = beta global medido). Espera el
-  si/no del usuario (8.4); verificador 7.6 obligatorio si va.)
+estado: en_curso (14-oct-2026: usuario APROBO el arreglo — D-026 implementado: vara
+  = mediana_nucleo x (m2/tipico)^beta, beta local del grupo o respaldo E
+  calidad.elasticidad_m2_vara 0,45. Tests del caso diferencial (atrapa la S1 que el
+  crudo validaba / no sobre-veta / no-danio con nucleo centrado). Falta: veredicto del
+  verificador 7.6 y la re-medicion del usuario (medir_guardias con el guardia nuevo)
+  para cerrar.)
+nota_continua: >
+  Pregunta del usuario (14-oct): m² como variable continua. La seleccion ya es
+  continua; el residuo es la ASIGNACION (mediana cruda del pool, corrimiento interno
+  de hasta ±20% ~ ±8-9% de arriendo con beta 0,45). La seccion 5 nueva de
+  medir_guardias_ventana.py lo mide; si la cola es gorda se abre T-959 (ajustar la
+  asignacion por tamanio — decision 8.4, mueve el numerador de todos los yields).
 agente: motor-financiero
 fase: 2
 contexto: verificador de D-024, hallazgo 1 (estructural). El nucleo ±20% nunca pasa

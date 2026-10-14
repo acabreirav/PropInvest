@@ -678,6 +678,7 @@ def test_los_defaults_del_codigo_calzan_con_params_yml() -> None:
     p = cargar("params")
     assert op.TEMPORADA_MAX == p.d("calidad.contaminacion_temporada_max")
     assert op.DESVIO_ANCHA_MAX == p.d("calidad.desvio_ventana_ancha_max")
+    assert op.ELASTICIDAD_VARA == p.d("calidad.elasticidad_m2_vara")
 
 
 def test_una_ventana_ancha_con_la_mediana_corrida_es_ND(con) -> None:
@@ -835,3 +836,65 @@ def test_el_detalle_no_incluye_temporada_ni_desviadas(con) -> None:
     r = op.emparejar(con, RANGOS)
     assert r.descartes["mercado_temporada"] == 1
     assert r.sin_comparables_detalle == []
+
+
+# --------------------------------------- T-957/D-026 · la vara ajustada por tamanio
+
+
+def test_la_vara_ajustada_atrapa_la_ancha_que_el_nucleo_corrido_validaba(con) -> None:
+    """Firma S1 (medicion 14-oct): nucleo de 71-72 m² validando a un 60 m². La candidata
+    queda +10% del nucleo CRUDO (pasaba con D-024 a pelo), pero el nucleo trae el
+    tamanio ajeno adentro: ajustado a 60 m² con el respaldo 0.45, la ancha esta +19%
+    y el resultado honesto es ND."""
+    # nucleo: 3 comps grandes dentro del ±20% (48-72), rentas 10
+    for i, m2c in enumerate((71.0, 71.5, 71.9)):
+        _comp_arr(con, f"NU{i}", m2c, "10", tip="3D2B")
+    # contrapeso chico y segmento grande, ambos a 11: pendiente local implausible (~0)
+    # => el ajuste usa el respaldo E 0.45
+    for i, m2c in enumerate((43.0, 44.0, 45.0, 46.0, 47.0)):
+        _comp_arr(con, f"CH{i}", m2c, "11", tip="3D2B")
+    for i, m2c in enumerate((78.0, 79.0, 80.0, 81.0, 82.0, 83.0, 84.0)):
+        _comp_arr(con, f"GR{i}", m2c, "11", tip="3D2B")
+    unidad(con, tip="3D2B", m2=60, precio="3000")
+
+    r = op.emparejar(con, RANGOS)
+    # candidata 11 vs nucleo crudo 10 = +10% (pasaba); vs vara ajustada
+    # 10*(60/71.5)^0.45 = 9.24 => +19% > 15% => ND
+    assert r.unidades == []
+    assert r.descartes["ventana_desviada"] == 1
+
+
+def test_la_vara_ajustada_no_sobre_veta_cerca_del_borde(con) -> None:
+    """La otra punta de D-026: misma geometria S1 del test anterior pero con la ancha
+    a +13.6% de la vara AJUSTADA (bajo el 15%): rankea. El ajuste endereza la vara,
+    no convierte el guardia en una guillotina."""
+    for i, m2c in enumerate((71.0, 71.5, 71.9)):
+        _comp_arr(con, f"NU{i}", m2c, "10", tip="3D2B")
+    for i, m2c in enumerate((43.0, 44.0, 45.0, 46.0, 47.0)):
+        _comp_arr(con, f"CH{i}", m2c, "10.5", tip="3D2B")
+    for i, m2c in enumerate((78.0, 79.0, 80.0, 81.0, 82.0, 83.0, 84.0)):
+        _comp_arr(con, f"GR{i}", m2c, "10.5", tip="3D2B")
+    unidad(con, tip="3D2B", m2=60, precio="3000")
+
+    r = op.emparejar(con, RANGOS)
+    # candidata 10.5 vs vara ajustada ~9.24 = +13.6% < 15% => rankea
+    assert len(r.unidades) == 1
+    assert r.descartes["ventana_desviada"] == 0
+
+
+def test_con_nucleo_centrado_la_vara_ajustada_no_cambia_nada(con) -> None:
+    """La condicion de no-danio de D-026: con el nucleo centrado (tipico == m2 de la
+    unidad) el factor es exactamente 1 y el caso D-024 clasico sigue cayendo igual."""
+    for i, m2c in enumerate((58.0, 60.0, 62.0)):
+        _comp_arr(con, f"NU{i}", m2c, "14", tip="3D2B")  # tipico 60 = m2 unidad
+    for i, m2c in enumerate((44.0, 45.0, 46.0)):
+        _comp_arr(con, f"CH{i}", m2c, "13", tip="3D2B")
+    for i, m2c in enumerate((73.0, 74.0, 75.0, 76.0, 77.0, 78.0)):
+        _comp_arr(con, f"GR{i}", m2c, "19", tip="3D2B")
+    unidad(con, tip="3D2B", m2=60, precio="3000")
+
+    r = op.emparejar(con, RANGOS)
+    # pool ±40% centrado (tipico 67.5), candidata 16.5 vs vara 14*(60/60)^beta = 14
+    # => +17.9% > 15% => ND, identico a D-024 sin ajuste
+    assert r.unidades == []
+    assert r.descartes["ventana_desviada"] == 1

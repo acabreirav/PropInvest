@@ -18,6 +18,7 @@ es indistinguible de un filtro roto.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -164,6 +165,17 @@ MONOTONIA_FACTOR_CHICO = D("0.85")
 # Umbral E declarado en config/params.yml (calidad.desvio_ventana_ancha_max).
 DESVIO_ANCHA_MAX = D("0.15")
 DESVIO_NUCLEO_MIN = 3
+# T-957/D-026 · la vara del nucleo se AJUSTA POR TAMANIO antes de comparar: cuando el
+# m² tipico del nucleo esta corrido respecto de la unidad (firma S1, medida el
+# 14-oct-2026: 64 de 249 anchas, divergencia 8,8% vs 4,1% de las no-S1 y al ALZA),
+# nucleo y ventana ancha estan sesgados JUNTOS y el guardia D-024 validaba anchas
+# infladas. La mediana del nucleo se escala por (m²_unidad / m²_tipico_nucleo)^beta —
+# beta local del grupo (log-log sobre sus comps, n>=8 y pendiente plausible (0,1]) o
+# el respaldo E `calidad.elasticidad_m2_vara` (0,45, anclado en el beta global 0,446
+# medido por el backtest del modelo hedonico sobre 5.227 comps). Con nucleo centrado
+# el ajuste ~1: las no-S1 quedan exactamente como estaban.
+ELASTICIDAD_VARA = D("0.45")
+ELASTICIDAD_GRUPO_MIN_OBS = 8
 
 
 def emparejar_con_params(
@@ -186,6 +198,7 @@ def emparejar_con_params(
         ahora=ahora,
         temporada_max=params.d("calidad.contaminacion_temporada_max"),
         desvio_ancha_max=params.d("calidad.desvio_ventana_ancha_max"),
+        elasticidad_vara=params.d("calidad.elasticidad_m2_vara"),
     )
 
 
@@ -196,6 +209,7 @@ def emparejar(
     ahora: datetime | None = None,
     temporada_max: Decimal | None = None,
     desvio_ancha_max: Decimal | None = None,
+    elasticidad_vara: Decimal | None = None,
 ) -> Emparejamiento:
     """Cruza `fact_unidad_venta` vigente contra `agg_arriendo_microzona`.
 
@@ -244,6 +258,33 @@ def emparejar(
     # caminos sin params a mano.
     tope_temporada = TEMPORADA_MAX if temporada_max is None else temporada_max
     tope_desvio = DESVIO_ANCHA_MAX if desvio_ancha_max is None else desvio_ancha_max
+    respaldo_beta = float(ELASTICIDAD_VARA if elasticidad_vara is None else elasticidad_vara)
+
+    # T-957/D-026 · elasticidad arriendo~m² POR GRUPO (mz, tip), para ajustar la vara
+    # del nucleo al tamanio de la unidad. Pendiente log-log local cuando el grupo junta
+    # n>=8 con variacion y el resultado es plausible (0 < beta <= 1: el arriendo pelado
+    # sube con el tamanio y menos que proporcional — mismo guarda que el modelo T-958);
+    # si no, el respaldo E `calidad.elasticidad_m2_vara`, anclado en el beta global
+    # medido (0,446 sobre 5.227 comps, 14-oct-2026). Cache por grupo: es O(n) por celda.
+    betas_grupo: dict[tuple[str, str], float] = {}
+
+    def _beta_de_grupo(clave: tuple[str, str]) -> float:
+        if clave in betas_grupo:
+            return betas_grupo[clave]
+        pares = [(float(m2c), float(arr)) for m2c, arr in vecinos.get(clave, []) if m2c and arr]
+        beta = respaldo_beta
+        if len(pares) >= ELASTICIDAD_GRUPO_MIN_OBS:
+            xs = [math.log(m2c) for m2c, _ in pares]
+            ys = [math.log(arr) for _, arr in pares]
+            mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+            sxx = sum((x - mx) ** 2 for x in xs)
+            if sxx > 1e-9:
+                propio = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / sxx
+                if 0 < propio <= 1:
+                    beta = propio
+        betas_grupo[clave] = beta
+        return beta
+
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
     riesgos: dict[str, Decimal] = {
@@ -425,13 +466,13 @@ def emparejar(
         temporada = False
         desviada = False
         descentrada = False
-        # las rentas del nucleo ±20%: la vara contra la que se mide toda ventana ancha
-        rentas_nucleo: list[Decimal] = []
+        # el nucleo ±20% (m², renta): la vara contra la que se mide toda ventana ancha
+        nucleo: list[tuple[Decimal, Decimal]] = []
         for i_factor, factor in enumerate(VENTANAS_M2_REL):
             ventana = max(VENTANA_M2_MIN, m2 * factor)
             pool = [(m2c, arr) for m2c, arr in grupo if abs(m2c - m2) <= ventana]
             if i_factor == 0:
-                rentas_nucleo = [arr for _, arr in pool]
+                nucleo = pool
             # D-022 · guardia de temporada, evaluado en CADA ancho probado y no solo en
             # el aceptado (verificador H6: una ventana angosta contaminada con n<8 se
             # "diluia" ensanchando — la dilucion mete vecinos que no son vecinos). Si
@@ -455,14 +496,26 @@ def emparejar(
                 descentrada = True
                 continue
             candidata = percentil([a for _, a in pool], D("0.5"))
-            if i_factor > 0 and len(rentas_nucleo) >= DESVIO_NUCLEO_MIN:
+            if i_factor > 0 and len(nucleo) >= DESVIO_NUCLEO_MIN:
                 # T-955/D-024 · desplazamiento: la mediana de la ventana ancha se mide
                 # contra la del nucleo ±20% de la PROPIA unidad. Caso real (huertos-
                 # familiares): nucleo $625k, ancha $755k (+21%) — la clase de 105 m²
                 # colandose como vecina de un 75. El conteo de lados que habia aqui
                 # fallaba en las dos puntas: dejaba pasar ese caso con 9/13 y apagaba
                 # 118 unidades inocentes (medicion 13-oct-2026).
-                mediana_nucleo = percentil(rentas_nucleo, D("0.5"))
+                mediana_nucleo = percentil([a for _, a in nucleo], D("0.5"))
+                # T-957/D-026 · la vara se AJUSTA al m² de la unidad antes de comparar:
+                # un nucleo cuyo tipico esta corrido (firma S1) trae el tamanio ajeno
+                # dentro de su mediana, y compararlo a pelo valida anchas sesgadas en
+                # la MISMA direccion (medicion 14-oct: S1 diverge 8,8% vs 4,1%, al
+                # alza). Con nucleo centrado el factor ~1 y nada cambia.
+                tipico_nucleo = percentil([m2c for m2c, _ in nucleo], D("0.5"))
+                if mediana_nucleo and tipico_nucleo:
+                    beta_g = _beta_de_grupo((mz, tip))
+                    ajuste = Decimal(str((float(m2) / float(tipico_nucleo)) ** beta_g))
+                    vara = mediana_nucleo * ajuste
+                else:
+                    vara = mediana_nucleo
                 # ASIMETRICO a proposito (verificador D-024, hallazgo 2): solo el ALZA
                 # veta. El veto simetrico + `continue` inflaba — la ±30% honesta-barata
                 # se descartaba por "desviada hacia abajo" y la ±40% cara (dentro del
@@ -470,7 +523,7 @@ def emparejar(
                 # insuficientes disfrazados de n=12. Una mediana ancha BAJO el nucleo
                 # es error conservador (subestima el yield, no fabrica oportunidad):
                 # se acepta.
-                if mediana_nucleo and (candidata - mediana_nucleo) / mediana_nucleo > tope_desvio:
+                if vara and (candidata - vara) / vara > tope_desvio:
                     desviada = True
                     continue
             arriendo, n = candidata, len(pool)

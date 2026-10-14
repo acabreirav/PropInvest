@@ -996,3 +996,37 @@ deliberado y el modelo no las re-estima. (H6) un ajuste que no converge es ND y 
 aristas del grafo bipartito exigen celdas con n≥2. (H7) la columna dice "avisos del
 grupo" (puede ser ≥8 sin que la unidad rankee), el error sin exámenes se imprime ND y
 la profundidad mediana se calcula solo sobre el alcance.
+
+## D-026 · La vara del guardia de ventanas anchas se ajusta por tamaño — 14-oct-2026
+
+**Decisión (§8.4, aprobada por el usuario con la medición 2d a la vista):** en el
+guardia D-024, la mediana del núcleo ±20% se escala al m² de la unidad antes del veto:
+
+```
+vara = mediana_núcleo × (m²_unidad / m²_típico_núcleo)^β
+```
+
+con β local del grupo (pendiente log-log sobre sus comps, n≥8 y plausible 0<β≤1) y
+respaldo E `calidad.elasticidad_m2_vara` = 0,45 (rango 0,30–0,60), anclado en el β
+global del modelo hedónico medido sobre la base real (0,446, 5.227 comps). El veto
+sigue siendo ASIMÉTRICO (D-024: solo el alza veta) y solo cambia la VARA, nunca el
+arriendo asignado.
+
+**La medición que decidió (14-oct, sección 2d de `medir_guardias_ventana.py`):** las
+64 anchas con firma S1 (núcleo con típico corrido >10% del m² de la unidad) divergen
+del modelo hedónico 8,8% mediano contra 4,1% de las 185 no-S1, y sus divergencias
+grandes son TODAS al alza (+19,4% a +25,3%) — un núcleo corrido trae el tamaño ajeno
+dentro de su mediana, y compararlo a pelo valida anchas sesgadas en la misma dirección.
+La asimetría direccional descarta que sea solo "el modelo subestima premium" (eso
+golpearía igual a las dos clases). Con núcleo centrado el factor es ~1: las no-S1
+quedan exactamente como estaban (test de no-daño).
+
+**Pregunta abierta del usuario (misma conversación): ¿m² como variable continua?**
+La *selección* de comparables ya es continua (ventana alrededor del m² propio, D-020)
+y el modelo T-958 también; el residuo real es que la *asignación* es la mediana cruda
+del pool: una unidad descentrada dentro de su ventana (hasta ±20%, permitido) hereda
+el arriendo del tamaño típico del pool — con β≈0,45, un corrimiento de +17% de m²
+(60 vs 70) son ~+7% de arriendo. La sección 5 nueva de `medir_guardias_ventana.py`
+mide cuánto corrimiento real hay en los pools aceptados y cuánta corrección implica;
+con esa medición se decide si la asignación misma se ajusta por tamaño (candidato
+T-959 — mover el numerador de TODOS los yields no es un commit, es una decisión §8.4).
