@@ -272,6 +272,10 @@ def entrenar(
         # sin variación de tamaño dentro de las celdas no hay elasticidad estimable
         return None
     beta = sxy / sxx
+    if not 0 < beta <= 1:
+        # el arriendo pelado sube con el tamaño y MENOS que proporcional: un β global
+        # fuera de (0, 1] dice que el dato de entrenamiento está roto, no el mercado. ND.
+        return None
     beta_tip = {
         tp: (
             sxy_tip[tp] / sxx_tip[tp]
@@ -280,6 +284,11 @@ def entrenar(
         )
         for tp in tips
     }
+    # Plausibilidad por tipología (medido en la corrida real del 14-oct-2026: 4D3B dio
+    # β=1,067 con ~30 obs — ruido con forma de coeficiente, y habría inflado a los 4D3B
+    # grandes y deflactado a los chicos). Una elasticidad fuera de (0, 1] no es señal:
+    # respaldo al β global, igual que una tipología sin variación propia.
+    beta_tip = {tp: (b if 0 < b <= 1 else beta) for tp, b in beta_tip.items()}
 
     # Ajuste aditivo de dos vías sobre las medias por celda, ponderado por n.
     # r̄_celda = media de (y − β_tip·x) en la celda; se busca μ + t_tip + z_mz.

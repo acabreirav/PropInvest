@@ -1911,10 +1911,12 @@ gate: make gates
 
 
 ## T-958 · Modelo hedonico de arriendo para celdas ralas — D-025
-estado: etapas 1-3 implementadas; esperando la PRIMERA corrida real
-  (`scripts/backtest_modelo_arriendo.py` en la maquina del usuario) para calibrar los
-  umbrales E del gate (§8.4). El gate ademas corre EN CADA informe: la seccion 6 solo
-  se publica si el backtest leave-one-cell-out pasa sobre la base del dia.
+estado: hecha (14-oct-2026: corrida real pegada al RUNLOG — gate PASA con 5,7%
+  mediano / 10,9% p75 sobre 307 examenes; umbrales E confirmados, k=8 se queda con el
+  barrido medido, guarda de plausibilidad beta (0,1] agregado por el 4D3B=1,067 real).
+  El gate sigue corriendo EN CADA informe. Vigilancia abierta: cola de inflacion del
+  patron "barrio barato en estructura cara" (quilpue/los-pinos +27% loco) — refinar
+  solo si aparece en la seccion 6 publicada.
 agente: analista-arriendo
 fase: 2
 origen: pedido del usuario (14-oct-2026) — "un modelo de prediccion para estimar
@@ -1941,9 +1943,9 @@ criterio_de_aceptacion:
   - [x] etapa 3 · cruce con la profundidad censal de arriendo: rala + demanda honda =
         la tesis del usuario; rala + demanda baja = la trampa. El orden de la seccion
         castiga el optimismo (yield del p25, no el central)
-  - [ ] primera corrida real pegada al RUNLOG: beta plausible (0-1), error por comuna,
-        sesgo con signo, cobertura (cuantas sin_comparables se vuelven estimables)
-  - [ ] decision 8.4 con el usuario sobre los umbrales E tras ver la medicion
+  - [x] primera corrida real pegada al RUNLOG (14-oct): beta 0,446, error por comuna,
+        sesgo -0,3%, 1.048 de 1.466 unicas estimables, tesis censal 676 honda/363 baja
+  - [x] decision 8.4 registrada en el RUNLOG: umbrales y k confirmados; guarda beta nuevo
 gate: make gates · verificador 7.6: corrido y ACATADO — 2 BLOQUEA + 3 MATERIAL
   corregidos (encogimiento de efectos, soporte minimo n>=8, beta por tipologia,
   variante mz_minima en el gate, temporada por ventana, tope §12 y banda en la

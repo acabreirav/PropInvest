@@ -3237,3 +3237,43 @@ Smoke en base sintetica: iter=6, loco 1,6% vs mz_minima 3,1% (la variante rala e
 precisa, como corresponde), gate PASA, 1,7 s para 425 comps / 94 examenes.
 Pendiente sin cambio: corrida real del usuario (backtest_modelo_arriendo.py) para
 calibrar los umbrales E (§8.4).
+
+## 14-oct-2026 · T-958 · PRIMERA CORRIDA REAL del backtest (maquina del usuario) — gate PASA
+Numeros clave (salida completa en la conversacion):
+- Entrenamiento: 5.227 obs limpias, 967 celdas, 208 avisos excluidos por temporada,
+  converge en 22 iteraciones. beta global 0,446; propios: 1D1B 0,376 · 2D1B 0,231 ·
+  2D2B 0,489 · 3D1B 0,377 · 3D2B 0,763. Efectos extremos plausibles (Estacion Central
+  x0,75-0,78 barata; nunoa/plaza-egana y los sectores "las condes/vitacura" de
+  Antofagasta x1,40-1,81 caros — esos dos ultimos con n=6-7, bajo MIN_SOPORTE: se ven
+  en el reporte pero JAMAS se predicen).
+- Backtest: 307 examenes (165 loco + 142 mz_minima), |error| mediano 5,7%, p75 10,9%,
+  sesgo con signo -0,3% (sin tendencia a inflar). GATE (10%/15%/40): PASA.
+  Por variante: loco 5,2% vs mz_minima 7,0% — la poblacion rala es menos precisa, como
+  debe verse. Peor comuna nunoa 13,5% (SUBestima los barrios premium: plaza-egana y
+  plaza-nunoa -19 a -23% — error conservador); V region 10,6-11,2%.
+- COLA DE INFLACION (vigilancia): 12 examenes >20% (4%). Los sobreestimados son el
+  patron "barrio barato dentro de estructura mas cara": quilpue/los-pinos +26,8% YA en
+  loco (+34,7% mz_minima), valparaiso/curauma +20-23%, metro-las-rejas 1D1B +22,5% y
+  la-cisterna +21,2% (ambos solo mz_minima). El intervalo p25-p75 es intercuartil y NO
+  cubre esa cola (asi esta rotulado). Si el usuario ve filas infladas de ese patron en
+  la seccion 6, el refinamiento candidato es un ajuste de celda con piso en el propio
+  grupo — se abre tarea solo si pasa en la practica.
+- Barrido k (ahora medible, exigencia del verificador): k=4 -> 5,4%/9,8% · k=8 ->
+  5,7%/10,9% · k=16 -> 6,5%/12,8%.
+- Cobertura: de 2.080 sin_comparables (190 descentradas aparte, 449 sobre el tope),
+  1.466 unicas y 1.048 ESTIMABLES. Tesis censal operativa: 676 en demanda honda, 363
+  en baja, 9 sin censo. El top por yield lo dominan 3D1B de regiones con profundidad
+  BAJA (rancagua/la-compania 11,5% con prof 26%) — exactamente la trampa que la columna
+  de demanda censal esta para senalar; el caso tesis es santiago/barrio-republica 1D1B
+  8,96% con prof 68%.
+DECISIONES §8.4 (dentro de la autonomia dada para T-958; revertibles con una linea):
+- Umbrales E confirmados sin recalibrar: pasan con holgura y la primera medicion no
+  justifica moverlos.
+- k=8 SE QUEDA: k=4 mide marginalmente mejor (0,3pp mediano) pero el examen solo
+  SIMULA el soporte minimo (mz_minima); el k mas conservador protege los casos reales
+  de 8-15 avisos que el backtest no ve. Re-medir cuando la seccion lleve semanas.
+- GUARDA NUEVO por hallazgo de la corrida: 4D3B dio beta propio 1,067 (>1: el arriendo
+  subiria MAS que proporcional — ruido con ~30 obs). Elasticidad por tipologia fuera
+  de (0,1] cae al respaldo global; un beta GLOBAL fuera de (0,1] es modelo ND. Test
+  nuevo; habia una fila 4D3B en el top de cobertura usando ese 1,067.
+T-958 pasa a hecha. La seccion 6 queda viva en el proximo informe-semanal.

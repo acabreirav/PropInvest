@@ -364,3 +364,21 @@ def test_defaults_del_codigo_calzan_con_params_yml() -> None:
     from flujocero.agg.arriendo import MIN_COMPARABLES
 
     assert ma.MIN_SOPORTE == MIN_COMPARABLES
+
+
+def test_una_elasticidad_implausible_cae_al_respaldo_global() -> None:
+    """Medido en la corrida real (14-oct-2026): 4D3B dio beta=1,067 con ~30 obs — una
+    elasticidad >1 (el arriendo subiria MAS que proporcional) es ruido con forma de
+    coeficiente. Fuera de (0, 1], la tipologia usa el beta global."""
+    comps = _mercado()
+    # una tipologia rara cuya variacion interna dicta beta ~1.4 (ruido/segmento raro)
+    for j, mz in enumerate(MZS):
+        for i in range(6):
+            m2 = 90 + i * 4
+            y = MU + 1.4 * math.log(m2) + 0.1 + 0.01 * j
+            comps.append(Comparable(mz, "4D3B", D(str(m2)), D(str(round(math.exp(y), 6)))))
+    modelo = ma.entrenar(comps, RANGOS)
+    assert modelo is not None
+    # junto >=30 obs demeaned, pero su beta propio es implausible: respaldo al global
+    assert modelo.beta_tipologia["4D3B"] == modelo.beta
+    assert 0 < modelo.beta <= 1
