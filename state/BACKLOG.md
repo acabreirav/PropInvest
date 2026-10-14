@@ -1884,9 +1884,10 @@ gate: make gates
 estado: en_curso (14-oct-2026: usuario APROBO el arreglo — D-026 implementado: vara
   = mediana_nucleo x (m2/tipico)^beta, beta local del grupo o respaldo E
   calidad.elasticidad_m2_vara 0,45. Tests del caso diferencial (atrapa la S1 que el
-  crudo validaba / no sobre-veta / no-danio con nucleo centrado). Falta: veredicto del
-  verificador 7.6 y la re-medicion del usuario (medir_guardias con el guardia nuevo)
-  para cerrar.)
+  crudo validaba / no sobre-veta / no-danio con nucleo centrado). Verificador 7.6
+  corrido y ACATADO (1 BLOQUEA: el ajuste solo ENDURECE via min(1,.); beta local
+  eliminado — el exponente es el E declarado; ver RUNLOG 14-oct). Falta SOLO la
+  re-medicion del usuario (medir_guardias_ventana.py) para cerrar.)
 nota_continua: >
   Pregunta del usuario (14-oct): m² como variable continua. La seleccion ya es
   continua; el residuo es la ASIGNACION (mediana cruda del pool, corrimiento interno

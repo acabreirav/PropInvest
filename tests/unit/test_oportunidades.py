@@ -898,3 +898,42 @@ def test_con_nucleo_centrado_la_vara_ajustada_no_cambia_nada(con) -> None:
     # => +17.9% > 15% => ND, identico a D-024 sin ajuste
     assert r.unidades == []
     assert r.descartes["ventana_desviada"] == 1
+
+
+def test_el_ajuste_de_la_vara_jamas_RELAJA_el_veto(con) -> None:
+    """Verificador D-026 H1 (regresion): con nucleo mas CHICO que la unidad, un ajuste
+    simetrico subia la vara y dejaba pasar una ancha inflada que D-024 crudo vetaba.
+    min(1, ajuste) lo prohibe: la vara nunca queda sobre el nucleo crudo."""
+    ley = lambda m2: f"{10 * (m2 / 65) ** 0.45:.4f}"  # noqa: E731
+    # honestos chicos y nucleo honesto (61-63, bajo los 75 m² de la unidad)
+    for i, m2c in enumerate((55.0, 56.0, 61.0, 62.0, 63.0)):
+        _comp_arr(con, f"HO{i}", m2c, ley(m2c), tip="3D2B")
+    # cluster premium grande: +~28% sobre lo honesto a su tamanio
+    for i, m2c in enumerate((91.0, 92.0, 93.0, 94.0, 95.0)):
+        _comp_arr(con, f"PR{i}", m2c, "15", tip="3D2B")
+    unidad(con, tip="3D2B", m2=75, precio="3200")
+
+    r = op.emparejar(con, RANGOS)
+    # candidata ~12.43 vs nucleo crudo ~9.79 = +27%: ND, igual que D-024 crudo —
+    # el (75/62)^beta > 1 NO licencia la inflacion
+    assert r.unidades == []
+    assert r.descartes["ventana_desviada"] == 1
+
+
+def test_una_no_S1_honesta_sobrevive_el_endurecimiento_leve(con) -> None:
+    """Verificador D-026 H4: 'las no-S1 quedan exactamente igual' era falso — con el
+    tipico corrido hasta ±10% el factor endurece hasta ~4,6%. Este test cubre el
+    regimen NO degenerado: nucleo corrido +8%, ancha honesta a +12% de la vara
+    ajustada — sigue rankeando."""
+    for i, m2c in enumerate((64.0, 65.0, 66.0)):
+        _comp_arr(con, f"NU{i}", m2c, "10", tip="3D2B")
+    for i, m2c in enumerate((43.0, 44.0, 45.0, 46.0, 47.0)):
+        _comp_arr(con, f"CH{i}", m2c, "10.8", tip="3D2B")
+    for i, m2c in enumerate((73.0, 74.0, 75.0, 76.0, 77.0, 78.0)):
+        _comp_arr(con, f"GR{i}", m2c, "10.8", tip="3D2B")
+    unidad(con, tip="3D2B", m2=60, precio="3000")
+
+    r = op.emparejar(con, RANGOS)
+    # vara = 10 * (60/65)^0.45 = 9.65; candidata 10.8 = +12% < 15% => rankea
+    assert len(r.unidades) == 1
+    assert r.descartes["ventana_desviada"] == 0

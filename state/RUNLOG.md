@@ -3328,3 +3328,34 @@ con beta local del grupo (log-log dentro de mz x tip, minimo de obs) y respaldo 
 `elasticidad_m2_defecto` ~0,45 anclado en el beta global medido (0,446). Solo cambia
 la VARA del guardia, no el arriendo asignado; con nucleo centrado el ajuste ~1 (las
 no-S1 quedan como estan). Verificador 7.6 obligatorio si se aprueba.
+
+## 14-oct-2026 · verificador §7.6 de D-026 — 1 BLOQUEA + 3 MATERIAL; acatado
+Hallazgos (reporte completo recuperado del transcript del subagente):
+- H1 BLOQUEA: el ajuste simetrico RELAJABA el veto cuando el nucleo era mas chico que
+  la unidad (techo efectivo +44% sobre el nucleo con tipico=0,8·m2 y beta=1); caso
+  reproducido: cluster premium 91-95 m² que HEAD vetaba (+27%) rankeaba con beta local
+  0,975 "licenciado" por la propia contaminacion. La direccion >1 jamas se midio (la
+  2d midio solo el lado del nucleo grande).
+- H2 MATERIAL: el beta local por grupo era ruido (p10-p90 -0,09..0,99 con beta real
+  0,45 y n=8), discontinuo en 0 y 1, sin rango declarado, sin filtro de temporada, y
+  ELASTICIDAD_GRUPO_MIN_OBS era codigo muerto.
+- H3 MATERIAL: sensibilidad daba verde falso (solo variaba el respaldo que casi nunca
+  operaba); nota de params atribuia el "3/3 culpables" a la vara ajustada; el efecto
+  de D-026 sobre la base real no estaba medido.
+- H4 MATERIAL: "las no-S1 quedan exactamente igual" era falso (factor hasta ±4,6% con
+  tipico corrido <=10%); el test de no-danio usaba el caso degenerado tipico==m2.
+- H5/H6 MENOR: tests no cubrian la rama que operaba en produccion ni la direccion >1;
+  seccion 5 del script escondia la direccion, usaba los grupos sin filtrar >140 m².
+ACATADO:
+- min(1, ajuste): la vara SOLO endurece (regresion con el caso del verificador).
+- Beta local eliminado: el exponente es SIEMPRE el E calidad.elasticidad_m2_vara
+  (rango ampliado a [0.20, 0.80]); sensibilidad ahora lo varia de verdad.
+- Notas de params corregidas (la confirmacion 3/3 es de la vara CRUDA; re-medicion
+  con D-026 prescrita); D-026 con addendum.
+- Test del regimen no degenerado (tipico corrido +8%, honesta rankea) y de la
+  regresion H1. Suite oportunidades: 58 tests.
+- medir_guardias: S1 separada por signo (nucleo grande/chico), seccion 5 por
+  DIRECCION (sobreestimadas = las que el ranking sube), grupos con filtro >140 m².
+PENDIENTE (usuario): re-correr medir_guardias_ventana.py — cierra T-957 con el guardia
+nuevo medido (seccion 1: cuantas desviadas con la vara ajustada; seccion 5: la cola
+direccional que decide T-959, la pregunta del m² continuo).

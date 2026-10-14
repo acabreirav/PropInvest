@@ -296,12 +296,15 @@ calidad:
   # reales eran 3-4 (trio a +31%, huertos-familiares a +21%). El 0.15 atrapa a todos
   # los culpables medidos y libera al resto; el impacto queda visible en el descarte
   # `ventana_desviada` de cada corrida.
-  desvio_ventana_ancha_max: {v: 0.15, evidence: E, rango: [0.10, 0.20], nota: "medido sobre la base real el 13-oct-2026 y CONFIRMADO con la medicion final del 14-oct (3/3 culpables, 0 inocentes); percentiles en el RUNLOG"}
-  # T-957/D-026: respaldo de la elasticidad arriendo~m² cuando el grupo (mz, tip) no
-  # junta n>=8 con pendiente plausible para estimar la suya. Ajusta la VARA del guardia
-  # D-024 al tamanio de la unidad: mediana_nucleo x (m2/tipico)^beta. Anclado en el
-  # beta global del modelo hedonico sobre la base real (0,446, 5.227 comps, 14-oct).
-  elasticidad_m2_vara: {v: 0.45, evidence: E, rango: [0.30, 0.60], nota: "beta global medido 0,446; los betas propios por tipologia midieron 0,23-0,76"}
+  desvio_ventana_ancha_max: {v: 0.15, evidence: E, rango: [0.10, 0.20], nota: "medido el 13-oct y confirmado el 14-oct PARA LA VARA CRUDA (3/3 culpables, 0 inocentes); con la vara ajustada por tamanio (D-026) la re-medicion esta pendiente — correr medir_guardias_ventana.py"}
+  # T-957/D-026: EL exponente del ajuste de la vara del guardia D-024 al tamanio de
+  # la unidad: vara = mediana_nucleo x min(1, (m2/tipico)^beta) — el ajuste solo
+  # ENDURECE (verificador D-026 H1). Es el unico beta que opera (el local por grupo
+  # murio con el verificador H2: ruido sobre 8-20 avisos), asi que `cli sensibilidad`
+  # lo varia de verdad. Anclado en el beta global del modelo hedonico sobre la base
+  # real (0,446, 5.227 comps, 14-oct); el rango cubre los betas propios por tipologia
+  # medidos ese dia (0,23-0,76).
+  elasticidad_m2_vara: {v: 0.45, evidence: E, rango: [0.20, 0.80], nota: "beta global medido 0,446; por tipologia 0,23-0,76; con min(1,.) mas beta = vara mas estricta en nucleos grandes"}
 
 # T-958 · modelo hedonico de arriendo para celdas SIN comparables suficientes.
 # Sus salidas son evidencia E, viven en una seccion APARTE del informe (jamas el

@@ -31,7 +31,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "src"))
 
 from flujocero.agg import oportunidades as op  # noqa: E402
-from flujocero.agg.arriendo import comparables_desde_duckdb, percentil  # noqa: E402
+from flujocero.agg.arriendo import comparables_desde_duckdb, etiqueta_rango, percentil  # noqa: E402
 from flujocero.alcance import desde_config  # noqa: E402
 from flujocero.config import cargar  # noqa: E402
 
@@ -70,6 +70,11 @@ print(f"  rankean SOLO sin guardia (las que el 0.15 apaga): {len(solo_sin_guardi
 comps, _ = comparables_desde_duckdb(con, ahora)
 grupos: dict[tuple[str, str], list[tuple[D, D]]] = {}
 for c in comps:
+    # mismo filtro que `vecinos` en el motor (verificador D-026 H6: sin esto, para
+    # unidades de >=117 m² el script contaba comparables de >140 m² que el
+    # emparejamiento jamas mira, y podia clasificar mal "±20% vs ancha")
+    if etiqueta_rango(c.m2_utiles, rangos) is None:
+        continue
     grupos.setdefault((c.microzona_id, c.tipologia), []).append((c.m2_utiles, c.arriendo_uf))
 
 anchas: list[tuple[D, str, D, D, object]] = []  # (|desv|, key, mediana_angosta, asignado, unidad)
@@ -97,6 +102,8 @@ for u in base.unidades:
 # del m² de la unidad no es vara independiente — ancha y nucleo pueden estar sesgados
 # juntos. Se cuenta ADEMAS de la desviacion de medianas.
 s1 = 0
+s1_grande = 0  # nucleo MAS GRANDE que la unidad: el lado medido al alza (D-026 endurece)
+s1_chico = 0  # nucleo mas chico: el lado que un ajuste simetrico RELAJABA (H1); min(1,.) lo congela
 s1_keys: set[str] = set()
 for u in base.unidades:
     m2 = u.m2_utiles
@@ -108,8 +115,15 @@ for u in base.unidades:
         if abs(tipico - m2) > m2 * D("0.10"):
             s1 += 1
             s1_keys.add(u.unidad_key)
+            if tipico > m2:
+                s1_grande += 1
+            else:
+                s1_chico += 1
 print(f"\n== 2 · unidades asignadas en ventana ANCHA con ±20% medible (n>=3): {len(anchas)} ==")
-print(f"  firma S1 (nucleo con tipico corrido >10% del m² de la unidad): {s1}")
+print(
+    f"  firma S1 (nucleo con tipico corrido >10% del m² de la unidad): {s1} "
+    f"(nucleo grande: {s1_grande} · nucleo chico: {s1_chico})"
+)
 print("  (si es grande, la vara del nucleo no es independiente — T-957)")
 if anchas:
     desvs = sorted(d for d, *_ in anchas)
@@ -257,22 +271,29 @@ for u in base.unidades:
     factor = D(str((float(m2) / float(tipico)) ** float(BETA_REF)))
     factores.append((abs(factor - 1), u.unidad_key, m2, tipico))
 if factores:
-    vals = sorted(f for f, *_ in factores)
-    mediana_f = percentil(vals, D("0.5"))
-    p90_f = percentil(vals, D("0.9"))
+    # la DIRECCION importa (verificador D-026 H6): una unidad mas chica que el tipico
+    # de su pool queda con el arriendo SOBREestimado, y el ranking por yield sube
+    # exactamente a esas. Un reporte en valor absoluto esconde el lado peligroso.
+    sobre = sorted(f for f, _k, m2v, tipv in factores if m2v < tipv)  # chica vs pool
+    sub = sorted(f for f, _k, m2v, tipv in factores if m2v >= tipv)
     print(f"  unidades asignadas en ±20%: {len(factores)}")
     print(
-        f"  correccion de arriendo implicada |(m2/tipico)^0.45 - 1|: mediana {mediana_f:.1%} · p90 {p90_f:.1%}"
+        f"  SOBREestimadas (unidad mas chica que su pool): {len(sobre)} — "
+        f"correccion mediana {percentil(sobre, D('0.5')):.1%} · p90 {percentil(sobre, D('0.9')):.1%}"
+    )
+    print(
+        f"  subestimadas (unidad mas grande, error conservador): {len(sub)} — "
+        f"mediana {percentil(sub, D('0.5')):.1%}"
     )
     for umbral in (D("0.03"), D("0.05"), D("0.08")):
-        n = sum(1 for v in vals if v > umbral)
-        print(f"  unidades con correccion implicada > {umbral:.0%}: {n}  ({n / len(vals):.0%})")
-    print("  las 10 mas corridas (su arriendo hereda el del tamanio tipico del pool):")
-    for f, k, m2v, tipv in sorted(factores, key=lambda t: t[0], reverse=True)[:10]:
-        lado = "chica vs pool" if m2v < tipv else "grande vs pool"
-        print(f"    {k:<18} {m2v:>5.0f} m² vs tipico {tipv:>5.0f}  ({lado}, correccion {f:+.1%})")
-    print("  (mediana y p90 chicas => la asignacion cruda basta y T-959 no se abre;")
-    print("   una cola gorda sobre 5-8% => medir el ajuste de asignacion por tamanio)")
+        n = sum(1 for v in sobre if v > umbral)
+        print(f"  SOBREestimadas con correccion > {umbral:.0%}: {n}")
+    print("  las 10 sobreestimaciones mas grandes (arriendo heredado del tamanio tipico):")
+    peores = [t for t in factores if t[2] < t[3]]
+    for f, k, m2v, tipv in sorted(peores, key=lambda t: t[0], reverse=True)[:10]:
+        print(f"    {k:<18} {m2v:>5.0f} m² vs tipico {tipv:>5.0f}  (correccion implicada -{f:.1%})")
+    print("  (cola de SOBREestimadas gorda sobre 5-8% => medir T-959 — ajustar la")
+    print("   asignacion por tamanio mueve el numerador de TODOS los yields, decision 8.4)")
 else:
     print("  sin unidades medibles")
 

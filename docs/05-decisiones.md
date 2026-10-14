@@ -1030,3 +1030,22 @@ el arriendo del tamaño típico del pool — con β≈0,45, un corrimiento de +1
 mide cuánto corrimiento real hay en los pools aceptados y cuánta corrección implica;
 con esa medición se decide si la asignación misma se ajusta por tamaño (candidato
 T-959 — mover el numerador de TODOS los yields no es un commit, es una decisión §8.4).
+
+**Addendum post-verificador de D-026 (14-oct):** un BLOQUEA y tres materiales,
+acatados así. (H1) el ajuste era simétrico y la rama >1 —núcleo más chico que la
+unidad— RELAJABA el veto hasta +44% sin medición que la respalde (lo medido en 2d fue
+exclusivamente el lado del núcleo grande): ahora `min(1, ajuste)` — **la vara solo se
+endurece**, nunca queda sobre el núcleo crudo (test de regresión con el caso
+reproducido del verificador). (H2) el β local por grupo murió: un MCO sobre 8-20
+avisos es ruido (p10-p90 de −0,09 a 0,99 con β real 0,45), discontinuo en los bordes
+y auto-licenciable por la misma contaminación que el guardia frena — **el exponente es
+siempre el E declarado** `calidad.elasticidad_m2_vara` (rango ampliado a 0,20-0,80
+para cubrir los β por tipología medidos), con lo que `cli sensibilidad` lo varía de
+verdad (muere también el verde falso de H3). (H3) la nota de params que atribuía el
+"3/3 culpables" a la vara ajustada se corrigió: esa medición validó la vara CRUDA, y
+la re-medición con D-026 queda prescrita (re-correr `medir_guardias_ventana.py`, cuya
+sección 1 ya barre el umbral con el guardia nuevo). (H4) "las no-S1 quedan exactamente
+igual" era falso: con típico corrido ≤10% el factor endurece hasta ~4,6% — corregido
+el texto y cubierto el régimen no degenerado con test. (H6) la sección 5 del script
+ahora separa por DIRECCIÓN (las sobreestimadas son las que el ranking sube), y los
+grupos del script filtran >140 m² igual que el motor.

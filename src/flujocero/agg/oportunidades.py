@@ -18,7 +18,6 @@ es indistinguible de un filtro roto.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -169,13 +168,17 @@ DESVIO_NUCLEO_MIN = 3
 # m² tipico del nucleo esta corrido respecto de la unidad (firma S1, medida el
 # 14-oct-2026: 64 de 249 anchas, divergencia 8,8% vs 4,1% de las no-S1 y al ALZA),
 # nucleo y ventana ancha estan sesgados JUNTOS y el guardia D-024 validaba anchas
-# infladas. La mediana del nucleo se escala por (m²_unidad / m²_tipico_nucleo)^beta —
-# beta local del grupo (log-log sobre sus comps, n>=8 y pendiente plausible (0,1]) o
-# el respaldo E `calidad.elasticidad_m2_vara` (0,45, anclado en el beta global 0,446
-# medido por el backtest del modelo hedonico sobre 5.227 comps). Con nucleo centrado
-# el ajuste ~1: las no-S1 quedan exactamente como estaban.
+# infladas. La mediana del nucleo se escala por min(1, (m²_unidad/m²_tipico)^beta):
+# el ajuste SOLO ENDURECE (verificador D-026 H1: la rama >1 —nucleo mas chico que la
+# unidad— relajaba el veto hasta +44% sin ninguna medicion que la respalde; lo medido
+# fue exclusivamente el lado del nucleo grande). beta es el E declarado
+# `calidad.elasticidad_m2_vara` (0,45, anclado en el beta global 0,446 del modelo
+# hedonico sobre 5.227 comps) — NO una pendiente local: el MCO del grupo sobre 8-20
+# avisos es ruido (p10-p90 de -0,09 a 0,99 con beta real 0,45, verificador H2),
+# discontinuo en los bordes y auto-licenciable por la misma contaminacion que el
+# guardia frena. Con nucleo centrado el ajuste queda en [0,95; 1]: las no-S1 cambian
+# a lo mas ~4,6%, y siempre hacia MAS estricto.
 ELASTICIDAD_VARA = D("0.45")
-ELASTICIDAD_GRUPO_MIN_OBS = 8
 
 
 def emparejar_con_params(
@@ -258,32 +261,12 @@ def emparejar(
     # caminos sin params a mano.
     tope_temporada = TEMPORADA_MAX if temporada_max is None else temporada_max
     tope_desvio = DESVIO_ANCHA_MAX if desvio_ancha_max is None else desvio_ancha_max
-    respaldo_beta = float(ELASTICIDAD_VARA if elasticidad_vara is None else elasticidad_vara)
-
-    # T-957/D-026 · elasticidad arriendo~m² POR GRUPO (mz, tip), para ajustar la vara
-    # del nucleo al tamanio de la unidad. Pendiente log-log local cuando el grupo junta
-    # n>=8 con variacion y el resultado es plausible (0 < beta <= 1: el arriendo pelado
-    # sube con el tamanio y menos que proporcional — mismo guarda que el modelo T-958);
-    # si no, el respaldo E `calidad.elasticidad_m2_vara`, anclado en el beta global
-    # medido (0,446 sobre 5.227 comps, 14-oct-2026). Cache por grupo: es O(n) por celda.
-    betas_grupo: dict[tuple[str, str], float] = {}
-
-    def _beta_de_grupo(clave: tuple[str, str]) -> float:
-        if clave in betas_grupo:
-            return betas_grupo[clave]
-        pares = [(float(m2c), float(arr)) for m2c, arr in vecinos.get(clave, []) if m2c and arr]
-        beta = respaldo_beta
-        if len(pares) >= ELASTICIDAD_GRUPO_MIN_OBS:
-            xs = [math.log(m2c) for m2c, _ in pares]
-            ys = [math.log(arr) for _, arr in pares]
-            mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
-            sxx = sum((x - mx) ** 2 for x in xs)
-            if sxx > 1e-9:
-                propio = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / sxx
-                if 0 < propio <= 1:
-                    beta = propio
-        betas_grupo[clave] = beta
-        return beta
+    # T-957/D-026 · el exponente del ajuste de la vara: SIEMPRE el E declarado, nunca
+    # una pendiente local (verificador D-026 H2: el MCO del grupo sobre 8-20 avisos es
+    # ruido con forma de coeficiente, discontinuo en (0,1] y lo empina la misma
+    # contaminacion que el guardia debe frenar — y de paso dejaba a `cli sensibilidad`
+    # midiendo un respaldo que casi nunca operaba, el verde falso de siempre).
+    beta_vara = float(ELASTICIDAD_VARA if elasticidad_vara is None else elasticidad_vara)
 
     # T-014b · el riesgo por microzona, si el puente ya corrio (`cli puente-censo`).
     # Tabla vacia = dict vacio = todas las unidades al 0.5 por defecto, contado y dicho.
@@ -511,8 +494,13 @@ def emparejar(
                 # alza). Con nucleo centrado el factor ~1 y nada cambia.
                 tipico_nucleo = percentil([m2c for m2c, _ in nucleo], D("0.5"))
                 if mediana_nucleo and tipico_nucleo:
-                    beta_g = _beta_de_grupo((mz, tip))
-                    ajuste = Decimal(str((float(m2) / float(tipico_nucleo)) ** beta_g))
+                    # min(1, ·): el ajuste SOLO ENDURECE. La rama >1 (nucleo mas chico
+                    # que la unidad) relajaria el veto hasta +44% y no tiene medicion
+                    # que la respalde (verificador D-026 H1); D-024 H2 fijo el
+                    # principio — solo se tolera el error conservador.
+                    ajuste = min(
+                        D(1), Decimal(str((float(m2) / float(tipico_nucleo)) ** beta_vara))
+                    )
                     vara = mediana_nucleo * ajuste
                 else:
                     vara = mediana_nucleo
