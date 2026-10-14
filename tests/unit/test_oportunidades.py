@@ -807,3 +807,28 @@ def test_una_ventana_ancha_pero_centrada_si_sirve(con) -> None:
     assert len(r.unidades) == 1
     origen, n, _ = r.procedencia_arriendo["U1"]
     assert "típico" in origen and n == 10
+
+
+# ------------------------------------------------- T-958 · el detalle de sin_comparables
+
+
+def test_sin_comparables_deja_detalle_para_el_modelo(con) -> None:
+    """T-958: las ND por `sin_comparables` quedan identificadas (son el insumo de la
+    seccion "arriendo por modelo" del informe), y SOLO esas: temporada y ventana
+    desviada son ND deliberados sobre segmentos sospechosos y el modelo no las toca."""
+    celda(con, n=7)  # bajo el umbral: U1 cae por sin_comparables
+    unidad(con, m2=56, precio="3000")
+    r = op.emparejar(con, RANGOS)
+    assert r.descartes["sin_comparables"] == 1
+    assert r.sin_comparables_detalle == [("U1", "sm/el-llano", "2D2B", D(56), D(3000))]
+
+
+def test_el_detalle_no_incluye_temporada_ni_desviadas(con) -> None:
+    # mercado de temporada: 2 amoblados contra 2 pelados en la ventana -> ND D-022
+    for i in range(2):
+        _comp_arr(con, f"P{i}", 56 + i * 0.01, "12")
+        _comp_arr(con, f"A{i}", 56 + i * 0.01, "25", url="depto-amoblado-x")
+    unidad(con, tip="2D1B", m2=56)
+    r = op.emparejar(con, RANGOS)
+    assert r.descartes["mercado_temporada"] == 1
+    assert r.sin_comparables_detalle == []

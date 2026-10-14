@@ -297,3 +297,20 @@ calidad:
   # los culpables medidos y libera al resto; el impacto queda visible en el descarte
   # `ventana_desviada` de cada corrida.
   desvio_ventana_ancha_max: {v: 0.15, evidence: E, rango: [0.10, 0.20], nota: "medido sobre la base real el 13-oct-2026; percentiles en el RUNLOG"}
+
+# T-958 · modelo hedonico de arriendo para celdas SIN comparables suficientes.
+# Sus salidas son evidencia E, viven en una seccion APARTE del informe (jamas el
+# ranking, §12) y esa seccion solo se publica si el backtest leave-one-cell-out
+# PASA sobre la base del dia — el gate corre en cada generacion del informe, no es
+# una promesa. Los minimos estructurales (obs/celdas de entrenamiento) viven en el
+# codigo, como DESCENTRADO_MAX.
+modelo_arriendo:
+  # peso n/(n+k) del promedio propio de la celda frente a la estructura aditiva:
+  # con k=8, una celda en el umbral del §7.3 (n=8) pesa exactamente la mitad.
+  encogimiento_celda_k: {v: 8, evidence: E, rango: [4, 16], nota: "sensibilidad por medir con scripts/backtest_modelo_arriendo.py sobre la base real"}
+  # gates del backtest: si la mediana (o el p75) del |error| sobre las celdas densas
+  # los supera, la seccion del informe NO se publica y el informe dice por que.
+  error_mediano_max: {v: 0.10, evidence: E, rango: [0.08, 0.15], nota: "declarado 14-oct-2026 antes de medir; primera medicion real decide si se recalibra (§8.4)"}
+  error_p75_max: {v: 0.15, evidence: E, rango: [0.12, 0.20], nota: "alineado con desvio_ventana_ancha_max: el mismo 15% que D-024 trata como desviacion material"}
+  # bajo esto el backtest no es representativo y la seccion tampoco se publica
+  min_celdas_backtest: {v: 40, evidence: E, rango: [20, 80], nota: "con ~164 celdas densas medidas el 13-oct, 40 exige que al menos un cuarto sea evaluable"}

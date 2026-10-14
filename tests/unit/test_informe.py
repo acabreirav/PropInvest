@@ -278,3 +278,125 @@ def test_nuevas_evaluadas_al_desde_pasa_por_el_motor_con_subsidio(con) -> None:
     # primera venta: el motor le APLICA el subsidio — el corazon de T-931b
     assert f["con_subsidio"] is True
     assert f["arriendo_clp"] > 0 and f["score"] >= 0
+
+
+# ------------------------------------------- T-958 · arriendo por modelo (sección 6)
+
+
+def _mercado_sintetico(n_mz=8, n_por_celda=9, saltar=()):
+    """48 celdas densas con estructura log-log conocida: suficiente para que el gate
+    `min_celdas_backtest` (40) sea alcanzable y el error del backtest, ~0."""
+    import math
+
+    from flujocero.agg.arriendo import Comparable
+
+    tips = {"1D1B": -0.1, "2D1B": 0.0, "2D2B": 0.05, "3D2B": 0.12, "4D2B": 0.2, "1D2B": -0.05}
+    m2_tipico = {"1D1B": 30, "2D1B": 45, "2D2B": 58, "3D2B": 80, "4D2B": 100, "1D2B": 38}
+    ruido = (0.03, -0.03, 0.015, -0.015, 0.0)
+    comps = []
+    for j in range(n_mz):
+        mz = f"com{j % 4}/mz{j}"
+        for tip, t in tips.items():
+            if (mz, tip) in saltar:
+                continue
+            for i in range(n_por_celda):
+                m2 = m2_tipico[tip] + (i - n_por_celda / 2) * 1.5
+                y = -0.2 + 0.6 * math.log(m2) + t + 0.03 * j + ruido[i % 5]
+                comps.append(Comparable(mz, tip, D(str(m2)), D(str(round(math.exp(y), 6)))))
+    return comps
+
+
+def test_arriendos_por_modelo_publica_solo_si_el_backtest_pasa(con) -> None:
+    from flujocero.config import cargar
+
+    p = cargar("params")
+    # profundidad censal: com0/mz0 honda, com1/mz1 baja (mediana entre medio)
+    for mid, prof in (("com0/mz0", 0.45), ("com1/mz1", 0.10), ("com2/mz2", 0.30)):
+        con.execute(
+            "INSERT INTO dim_comuna (comuna_id, nombre, region) VALUES (?, ?, '') "
+            "ON CONFLICT DO NOTHING",
+            (mid.split("/")[0], mid.split("/")[0]),
+        )
+        con.execute(
+            "INSERT INTO dim_microzona (microzona_id, comuna_id, nombre) VALUES (?, ?, '') "
+            "ON CONFLICT DO NOTHING",
+            (mid, mid.split("/")[0]),
+        )
+        con.execute(
+            "INSERT INTO agg_riesgo_microzona (microzona_id, profundidad_arriendo) VALUES (?, ?)",
+            (mid, prof),
+        )
+    comps = _mercado_sintetico(saltar={("com0/mz0", "1D1B")})
+    detalle = [
+        ("MLC-1", "com0/mz0", "1D1B", D(30), D(900)),  # celda rala estimable, demanda honda
+        ("MLC-2", "com0/mz0", "1D1B", D(30), D(900)),  # misma firma: colapsa (§7.3)
+        ("MLC-3", "com1/mz1", "2D2B", D(58), D(1600)),  # demanda baja
+        ("MLC-4", "zz/nunca-vista", "2D2B", D(58), D(1500)),  # ND: microzona nunca vista
+    ]
+    filas, resumen = inf.arriendos_por_modelo(con, p, detalle, comps, {})
+    assert resumen["pasa"] is True
+    assert resumen["celdas_evaluadas"] >= int(p.d("modelo_arriendo.min_celdas_backtest"))
+    assert resumen["candidatas"] == 2  # MLC-2 colapsó, MLC-4 quedó ND
+    llaves = {f["unidad_key"] for f in filas}
+    assert llaves == {"MLC-1", "MLC-3"}
+    por_llave = {f["unidad_key"]: f for f in filas}
+    assert por_llave["MLC-1"]["demanda_honda"] is True
+    assert por_llave["MLC-1"]["n_celda"] == 0  # extrapolación pura, dicho
+    assert por_llave["MLC-3"]["demanda_honda"] is False
+    # el intervalo envuelve: p25 < central < p75, y el orden castiga el optimismo (p25)
+    for f in filas:
+        assert f["p25_clp"] < f["arriendo_clp"] < f["p75_clp"]
+        assert f["yield_p25"] < f["yield_modelo"]
+    assert filas[0]["yield_p25"] >= filas[-1]["yield_p25"]
+
+    # el render publica la tabla con la vara del examen a la vista
+    html = inf.render_html(
+        "2026-10-14",
+        "2026-10-07",
+        [],
+        inf.CambiosTop(),
+        [],
+        [],
+        "",
+        [],
+        modelo_filas=filas,
+        modelo_resumen=resumen,
+    )
+    assert "Arriendo por MODELO" in html
+    assert "backtest leave-one-cell-out" in html and "→ PASA" in html
+    assert "honda" in html and "baja" in html
+    assert "7 · Delta del mercado usado" in html
+
+
+def test_arriendos_por_modelo_con_pocas_celdas_NO_publica(con) -> None:
+    from flujocero.config import cargar
+
+    p = cargar("params")
+    comps = _mercado_sintetico(n_mz=4)  # 24 celdas < min_celdas_backtest (40)
+    filas, resumen = inf.arriendos_por_modelo(
+        con, p, [("MLC-9", "com0/mz0", "2D2B", D(58), D(1500))], comps, {}
+    )
+    assert resumen["pasa"] is False
+    assert filas == []
+    html = inf.render_html(
+        "2026-10-14",
+        "2026-10-07",
+        [],
+        inf.CambiosTop(),
+        [],
+        [],
+        "",
+        [],
+        modelo_filas=filas,
+        modelo_resumen=resumen,
+    )
+    assert "NO pasa su examen hoy" in html
+    assert "pocas celdas evaluables" in html
+    # sin estimaciones publicadas: ninguna fila de tabla del modelo
+    assert "Arriendo modelo (p25" not in html
+
+
+def test_sin_resumen_no_hay_seccion_del_modelo() -> None:
+    html = inf.render_html("2026-10-14", "2026-10-07", [], inf.CambiosTop(), [], [], "", [])
+    assert "Arriendo por MODELO" not in html
+    assert "6 · Delta del mercado usado" in html

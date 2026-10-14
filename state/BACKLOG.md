@@ -1902,4 +1902,47 @@ criterio_de_aceptacion:
   - si S1 es material: prototipo de vara ajustada por tamanio (elasticidad $/m² del
     nucleo o log-log arriendo~m² dentro de mz×tip) medido contra la vara actual
   - decision 8.4 con el usuario y verificador 7.6 si cambia el motor
+nota_t958: >
+  El modelo hedonico de T-958 YA estima la elasticidad log-log arriendo~m² por
+  variacion dentro de celda (agg/modelo_arriendo.py, `beta`): si S1 resulta material,
+  la vara ajustada por tamanio se construye con ese estimador en vez de inventarse
+  otro. T-957 sigue gateada en el numero S1 de la base real.
 gate: make gates
+
+
+## T-958 · Modelo hedonico de arriendo para celdas ralas — D-025
+estado: etapas 1-3 implementadas; esperando la PRIMERA corrida real
+  (`scripts/backtest_modelo_arriendo.py` en la maquina del usuario) para calibrar los
+  umbrales E del gate (§8.4). El gate ademas corre EN CADA informe: la seccion 6 solo
+  se publica si el backtest leave-one-cell-out pasa sobre la base del dia.
+agente: analista-arriendo
+fase: 2
+origen: pedido del usuario (14-oct-2026) — "un modelo de prediccion para estimar
+  arriendos en categorias con pocas muestras... doble beneficio: departamentos con
+  menos competencia, es decir, menor vacancia". Viable AHORA porque el dato de
+  entrenamiento quedo limpio (D-020..D-024: relistings, temporada, gemelos, ventanas).
+diseno: >
+  log(arriendo) = mu + beta*log(m²) + efecto_tipologia + efecto_microzona +
+  ajuste_celda_encogido. Beta por variacion DENTRO de celda (efectos fijos); efectos
+  por ajuste aditivo de dos vias; encogimiento n/(n+k) hacia la estructura; intervalo
+  por cuantiles EMPIRICOS de los residuos; exp() = mediana (la magnitud del pipeline).
+  ND antes que extrapolar: microzona/tipologia nunca vistas o en componentes
+  desconectadas del grafo bipartito no se predicen. Grupos (mz,tip) donde D-022
+  dispararia a nivel de grupo quedan FUERA del entrenamiento.
+criterio_de_aceptacion:
+  - [x] etapa 1 · modulo puro `agg/modelo_arriendo.py` + backtest leave-one-cell-out
+        sobre las celdas densas (n>=8), con 14 tests sobre mercado sintetico de
+        estructura conocida (recupera beta, predice celda nunca vista, ND en lo no
+        identificable, el backtest no esconde una celda rota)
+  - [x] etapa 2 · seccion 6 del informe "arriendo por modelo", SOLO si el backtest
+        pasa los umbrales E de params.yml (modelo_arriendo.*) EN ESA corrida; si no
+        pasa, la seccion lo dice con el error medido. Jamas el ranking (§12): las
+        unidades son las ND por `sin_comparables` (temporada y desviadas NO se tocan)
+  - [x] etapa 3 · cruce con la profundidad censal de arriendo: rala + demanda honda =
+        la tesis del usuario; rala + demanda baja = la trampa. El orden de la seccion
+        castiga el optimismo (yield del p25, no el central)
+  - [ ] primera corrida real pegada al RUNLOG: beta plausible (0-1), error por comuna,
+        sesgo con signo, cobertura (cuantas sin_comparables se vuelven estimables)
+  - [ ] decision 8.4 con el usuario sobre los umbrales E tras ver la medicion
+gate: make gates · verificador 7.6: corrido (ver RUNLOG 14-oct-2026)
+comando_usuario: uv run python scripts/backtest_modelo_arriendo.py

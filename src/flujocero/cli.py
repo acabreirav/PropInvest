@@ -1764,6 +1764,16 @@ def informe_semanal(
         evaluadas, desc_nuevas = inf.nuevas_evaluadas_al_desde(
             con, p, inv, p.crudo("ingresos.rangos_m2")
         )
+        # T-958: las ND por `sin_comparables`, estimadas por el modelo hedonico — SOLO si
+        # el backtest leave-one-cell-out PASA sobre la base de hoy (el gate corre aqui,
+        # en cada informe; si no pasa, la seccion lo dice con el error medido).
+        from flujocero.agg.arriendo import comparables_desde_duckdb, m2_amoblados_por_grupo
+
+        comps_modelo, _ = comparables_desde_duckdb(con, ahora)
+        amoblados_modelo = m2_amoblados_por_grupo(con, ahora)
+        filas_modelo, resumen_modelo = inf.arriendos_por_modelo(
+            con, p, r.sin_comparables_detalle, comps_modelo, amoblados_modelo
+        )
         delta_texto = str(dl.comparar(con, corte))
     finally:
         con.close()
@@ -1798,6 +1808,8 @@ def informe_semanal(
         nuevas_evaluadas=evaluadas,
         descartes_nuevas=desc_nuevas,
         credito_minimo_uf=float(p.d("financiamiento.credito_minimo_banco_uf")),
+        modelo_filas=filas_modelo,
+        modelo_resumen=resumen_modelo,
     )
     destino = _Path(carpeta).expanduser() if carpeta else RAIZ / "data" / "informes"
     destino.mkdir(parents=True, exist_ok=True)
@@ -1826,6 +1838,16 @@ def informe_semanal(
     typer.echo(
         f"  nuevas evaluadas al 'desde' (hipotetico): {len(evaluadas)}"
         + (f" · fuera: {fuera}" if fuera else "")
+    )
+    rm = resumen_modelo
+    typer.echo(
+        f"  arriendo por modelo (T-958): backtest {rm['celdas_evaluadas']} celdas, "
+        f"error mediano {rm['error_mediano']:.1%} / p75 {rm['error_p75']:.1%} -> "
+        + (
+            f"PASA · {len(filas_modelo)} celdas ralas estimadas (de {rm['candidatas']} candidatas)"
+            if rm["pasa"]
+            else "NO PASA; la seccion lo dice en vez de publicar estimaciones"
+        )
     )
     typer.echo(f"  informe: {ruta_html}")
 
@@ -3525,6 +3547,15 @@ def sensibilidad(
                 f"  ✗ {parametro}: este supuesto se consume en `puente-censo`, no en la"
                 "\n    evaluacion — variarlo aqui no mediria nada. Re-corre el puente con"
                 "\n    el valor propuesto y compara los dos rankings completos."
+            )
+            raise typer.Exit(2)
+        if parametro.startswith("modelo_arriendo."):
+            # T-958: el modelo hedonico vive FUERA del ranking (seccion aparte del
+            # informe), asi que variarlo aqui daria "0 movidas" — un verde falso, el
+            # mismo bug que este comando ya pago con calidad.* (auditoria 12-oct).
+            typer.echo(
+                f"  ✗ {parametro}: no toca el ranking. Mide con"
+                "\n    `uv run python scripts/backtest_modelo_arriendo.py` sobre la base real."
             )
             raise typer.Exit(2)
     alcance_s = desde_config(cargar("zonas"))

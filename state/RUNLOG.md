@@ -3155,3 +3155,36 @@ medicion se hizo con el codigo viejo; re-correr script + sensibilidad 0.10/0.20.
 Menores: tests al borde agregados (S2), textos viejos corregidos (evaluar_aviso,
 docstring del script). Nota del verificador: el 9/13 con gradiente suave (+10.9%)
 sigue pasando — bajo el umbral 0.15, conocido y dentro del rango declarado.
+
+## 14-oct-2026 · T-958/D-025 · modelo hedonico de arriendo para celdas ralas (etapas 1-3)
+- Pedido del usuario: estimar arriendos en categorias con pocas muestras desde las otras
+  categorias/comunas ("doble beneficio: menos competencia = menor vacancia"). Aprobado
+  "dale con todas las etapas".
+- Implementado: `agg/modelo_arriendo.py` (puro, sin I/O) — log(arriendo) = mu +
+  beta*log(m²) + efecto_tipologia + efecto_microzona + ajuste_celda*n/(n+k). Beta por
+  variacion DENTRO de celda; efectos por dos vias (medias alternadas ponderadas);
+  intervalo por cuantiles empiricos de residuos; ND si mz/tip no vistas o componentes
+  desconectadas (union-find del grafo bipartito); grupos con temporada D-022 a nivel de
+  grupo excluidos del entrenamiento.
+- Gate EN CADA informe: seccion 6 "arriendo por modelo" solo se publica si el backtest
+  leave-one-cell-out sobre las celdas densas de la base del dia pasa los umbrales E
+  (params modelo_arriendo.*: mediano<=0.10, p75<=0.15, celdas>=40); si no pasa, la
+  seccion publica el error medido y cero estimaciones. Jamas el ranking (§12); insumo =
+  `Emparejamiento.sin_comparables_detalle` (solo ese motivo: temporada/desviadas son ND
+  deliberados). Cruce con profundidad censal (tesis rala+honda vs rala+baja). Orden por
+  yield del p25 (castiga el optimismo).
+- `cli sensibilidad` rechaza el prefijo modelo_arriendo. (no toca el ranking: verde
+  falso garantizado) y apunta al script.
+- Tests: 14 nuevos en test_modelo_arriendo.py (mercado sintetico con estructura
+  conocida: recupera beta +-0.05, predice celda NUNCA VISTA <5%, ND en lo no
+  identificable, backtest no esconde una celda rota, encogimiento ordena aditivo <
+  prediccion < propio), 3 en test_informe.py (gate publica/no-publica/sin-seccion),
+  2 en test_oportunidades.py (detalle poblado solo por sin_comparables).
+- Smoke sobre base sintetica EN DISCO (el contenedor no tiene data/): el script
+  `scripts/backtest_modelo_arriendo.py` corre entero — beta 0.558 (verdad 0.6), LOCO
+  |error| mediano 0.0% / p75 0.4%, gate PASA, cobertura levanta la celda rala con su
+  profundidad censal. Pendiente: la corrida REAL del usuario, que decide los umbrales
+  E (§8.4).
+- make gates: VERDE (797 passed, 1 skipped; mypy --strict finance limpio).
+- Verificador §7.6: lanzado adversarial sobre el modelo + gate + integracion; su
+  reporte se pega a continuacion cuando termine. La tarea NO se cierra sin acatarlo.

@@ -931,3 +931,49 @@ diff de VALORES entre corridas; la frecuencia real decide si amerita vara ajusta
 por tamaño. (H3, proceso) T-955 vuelve a en_curso hasta re-correr la medición con
 el código nuevo + sensibilidad 0,10/0,20. El tripwire de monotonía sí marca S1 en
 la ficha — mitigación parcial visible mientras T-957 decide.
+
+## D-025 · El arriendo de las celdas ralas se ESTIMA con un modelo hedónico, fuera del ranking y con examen diario — 14-oct-2026
+
+**Pedido del usuario (verbatim en espíritu):** un modelo de predicción para estimar
+arriendos en categorías con pocas muestras, basándose en las otras categorías y en las
+distribuciones de otras comunas — con el doble beneficio de mirar departamentos con
+menos competencia (menor vacancia esperable). Aprobado con "dale con todas las etapas".
+
+**Decisión:** se construye `agg/modelo_arriendo.py` (T-958) —
+`log(arriendo) = μ + β·log(m²) + efecto_tipología + efecto_microzona + ajuste_celda` —
+entrenado SOLO con los comparables limpios post-guardias (D-020..D-024), y sus salidas
+viven bajo cuatro reglas duras:
+
+1. **Jamás el ranking (§12).** Las estimaciones son evidencia de modelo: alimentan una
+   sección APARTE del informe (sección 6, "arriendo por modelo") sobre las unidades ND
+   por `sin_comparables`, rotuladas con su intervalo y su n de celda. El precedente es
+   la sección "nuevas al desde: hipotético".
+2. **El gate corre en cada informe, no una vez.** La sección solo se publica si el
+   backtest leave-one-cell-out sobre las celdas densas (n≥8) de la base DE ESE DÍA pasa
+   los umbrales E de `params.yml` (`modelo_arriendo.error_mediano_max` 0,10 /
+   `error_p75_max` 0,15 / `min_celdas_backtest` 40). Si no pasa, la sección publica el
+   error medido y ninguna estimación. Un modelo que se validó una vez y se degradó en
+   silencio es el bug con uniforme — por eso el examen es de ejecución, no de merge.
+3. **ND antes que extrapolar (§3.2).** No se predice microzona ni tipología nunca
+   vistas, ni pares en componentes desconectadas del grafo bipartito mz↔tip (ahí los
+   efectos no son comparables). Los grupos (mz, tip) donde el guardia de temporada
+   D-022 dispararía A NIVEL DE GRUPO quedan fuera del entrenamiento: un efecto de
+   microzona envenenado se propagaría a toda predicción de esa zona. Y `temporada` /
+   `ventana_desviada` no se re-estiman: son ND deliberados, no celdas ralas.
+4. **El optimismo se castiga estructuralmente.** El orden de la sección es por el yield
+   del PISO del intervalo (p25 empírico de los residuos), no por el central; el β sale
+   solo de variación DENTRO de celda (comparar mercados distintos no mide tamaño); y el
+   ajuste propio de la celda se encoge por n/(n+k) con k=8 — en el umbral del §7.3
+   (n=8) la celda propia pesa exactamente la mitad.
+
+**La tesis del usuario queda medible, no asumida:** cada fila cruza con la profundidad
+censal de arriendo (hogares arrendatarios/hogares, T-014b) contra la mediana del
+alcance. Rala + demanda honda = "poca competencia"; rala + demanda baja = la trampa
+(nadie arrienda ahí). La vacancia REAL por celda sigue sin medirse (T-945/Assetplan):
+la profundidad es el mejor árbitro disponible y así se rotula.
+
+**Umbrales declarados ANTES de medir, a propósito:** los E de `modelo_arriendo.*`
+llevan rango y nota; la primera corrida de `scripts/backtest_modelo_arriendo.py` sobre
+la base real decide si se recalibran (§8.4) — el gate de ejecución protege el informe
+mientras tanto. T-957 (vara ajustada por tamaño) se construiría sobre el mismo β si la
+firma S1 resulta material.

@@ -322,6 +322,113 @@ def nuevas_evaluadas_al_desde(
     return salida[:top], descartes
 
 
+# ----------------------------------------- T-958 · arriendo por modelo en celdas ralas
+
+
+def arriendos_por_modelo(
+    conexion: Any,
+    p: Any,
+    detalle: list[tuple[str, str, str, Decimal, Decimal]],
+    comparables: list[Any],
+    amoblados: dict[tuple[str, str], list[Decimal]],
+    top: int = 12,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Las unidades ND por `sin_comparables`, estimadas por el modelo hedónico — con gate.
+
+    El gate corre AQUÍ, en cada generación del informe: el backtest leave-one-cell-out
+    sobre las celdas densas de la base del día decide si la sección se publica. Si el
+    error mediano o el p75 superan los umbrales de `params.yml` (o hay pocas celdas
+    evaluables), se devuelve la lista vacía y el resumen dice exactamente por qué —
+    el informe lo muestra en vez de esconder la sección.
+
+    Solo entran las descartadas por `sin_comparables`: `mercado_temporada` y
+    `ventana_desviada` son ND deliberados sobre segmentos sospechosos (D-022/D-024) y
+    el modelo no les re-pone número. El cruce con la profundidad censal de arriendo
+    (hogares arrendatarios / hogares, T-014b) es el árbitro de la tesis "celda rala =
+    poca competencia": rala con demanda honda es la tesis; rala sin demanda es la trampa.
+    """
+    from flujocero.agg import modelo_arriendo as ma
+
+    rangos = p.crudo("ingresos.rangos_m2")
+    tope = p.d("calidad.contaminacion_temporada_max")
+    k = float(p.d("modelo_arriendo.encogimiento_celda_k"))
+    umbral_med = float(p.d("modelo_arriendo.error_mediano_max"))
+    umbral_p75 = float(p.d("modelo_arriendo.error_p75_max"))
+    min_celdas = int(p.d("modelo_arriendo.min_celdas_backtest"))
+
+    bt = ma.backtest_loco(comparables, rangos, amoblados, tope, k_encogimiento=k)
+    resumen: dict[str, Any] = {
+        "celdas_evaluadas": len(bt.errores),
+        "celdas_densas": bt.celdas_densas,
+        "no_predecibles": bt.no_predecibles,
+        "error_mediano": bt.error_abs_mediano,
+        "error_p75": bt.error_abs_p75,
+        "umbral_mediano": umbral_med,
+        "umbral_p75": umbral_p75,
+        "min_celdas": min_celdas,
+        "pasa": bt.pasa(umbral_med, umbral_p75, min_celdas),
+        "candidatas": 0,
+    }
+    if not resumen["pasa"]:
+        return [], resumen
+    modelo = ma.entrenar(comparables, rangos, amoblados, tope, k_encogimiento=k)
+    if modelo is None:  # no debería tras un backtest que pasó; se cubre igual, contado
+        resumen["pasa"] = False
+        return [], resumen
+    resumen["beta"] = modelo.beta
+    resumen["n_obs"] = modelo.n_obs
+    resumen["n_celdas"] = modelo.n_celdas
+    resumen["grupos_temporada_excluidos"] = modelo.grupos_temporada_excluidos
+
+    prof: dict[str, float] = {
+        mid: float(v)
+        for mid, v in conexion.execute(
+            "SELECT microzona_id, profundidad_arriendo FROM agg_riesgo_microzona "
+            "WHERE profundidad_arriendo IS NOT NULL"
+        ).fetchall()
+    }
+    valores_prof = sorted(prof.values())
+    prof_mediana = valores_prof[len(valores_prof) // 2] if valores_prof else None
+
+    uf = float(p.d("macro.valor_uf_clp"))
+    vistos: set[tuple[Any, ...]] = set()
+    filas: list[dict[str, Any]] = []
+    for key, mz, tip, m2, precio in detalle:
+        firma = (mz, tip, m2, precio)
+        if firma in vistos:  # el mismo colapso §7.3 que aplica el ranking
+            continue
+        vistos.add(firma)
+        pred = ma.predecir(modelo, mz, tip, m2)
+        if pred is None:
+            continue
+        pf = prof.get(mz)
+        filas.append(
+            {
+                "unidad_key": key,
+                "microzona": mz,
+                "tipologia": tip,
+                "m2": float(m2),
+                "precio_uf": float(precio),
+                "arriendo_clp": int(float(pred.arriendo_uf) * uf),
+                "p25_clp": int(float(pred.p25_uf) * uf),
+                "p75_clp": int(float(pred.p75_uf) * uf),
+                "yield_modelo": float(pred.arriendo_uf) * 12 / float(precio),
+                "yield_p25": float(pred.p25_uf) * 12 / float(precio),
+                "n_celda": pred.n_celda,
+                "n_microzona": pred.n_microzona,
+                "profundidad": pf,
+                "demanda_honda": (
+                    pf is not None and prof_mediana is not None and pf >= prof_mediana
+                ),
+            }
+        )
+    resumen["candidatas"] = len(filas)
+    # El orden CASTIGA el optimismo: por el yield del p25 (el piso del intervalo), no por
+    # el central — ordenar por el central premiaría a las celdas donde el modelo mas duda.
+    filas.sort(key=lambda f: -f["yield_p25"])
+    return filas[:top], resumen
+
+
 # ------------------------------------------------------------------------------- render
 
 
@@ -361,6 +468,8 @@ def render_html(
     nuevas_evaluadas: list[dict[str, Any]] | None = None,
     descartes_nuevas: dict[str, int] | None = None,
     credito_minimo_uf: float = 0.0,
+    modelo_filas: list[dict[str, Any]] | None = None,
+    modelo_resumen: dict[str, Any] | None = None,
 ) -> str:
     entrantes = set(cambios.entraron)
 
@@ -513,6 +622,75 @@ def render_html(
             f"<th>Pie flujo 0</th><th>Score</th></tr>{cuerpo_ev}</table>{resumen_d}"
         )
 
+    def seccion_modelo() -> str:
+        """T-958: la sección existe solo si vino resumen; publica filas solo si el gate pasó."""
+        if modelo_resumen is None:
+            return ""
+        r = modelo_resumen
+        vara = (
+            f"backtest leave-one-cell-out sobre {r['celdas_evaluadas']} celdas densas: "
+            f"error mediano {r['error_mediano']:.1%} (umbral {r['umbral_mediano']:.0%}), "
+            f"p75 {r['error_p75']:.1%} (umbral {r['umbral_p75']:.0%})"
+        )
+        if not r["pasa"]:
+            motivo = (
+                f"pocas celdas evaluables ({r['celdas_evaluadas']} &lt; {r['min_celdas']})"
+                if r["celdas_evaluadas"] < r["min_celdas"]
+                else "error sobre el umbral"
+            )
+            cuerpo = (
+                f"<p>El modelo <b>NO pasa su examen hoy</b> ({motivo}) y por eso esta "
+                f"sección no publica estimaciones. {vara}.</p>"
+            )
+            return (
+                "<h2>6 · Arriendo por MODELO — celdas sin comparables (estimación, "
+                f"fuera del ranking)</h2>{cuerpo}"
+            )
+        cuerpo = ""
+        for f in modelo_filas or []:
+            if f["unidad_key"].startswith("MLC-"):
+                codigo = (
+                    "<a class='codigo' href='https://www.portalinmobiliario.com/"
+                    f"{escape(f['unidad_key'])}'>{escape(f['unidad_key'])}</a>"
+                )
+            else:
+                codigo = f"<span class='codigo'>{escape(f['unidad_key'])}</span>"
+            if f["profundidad"] is None:
+                demanda = "<span class='mini'>sin censo</span>"
+            elif f["demanda_honda"]:
+                demanda = f"<b class='pos'>honda</b> ({f['profundidad']:.0%} arrendatarios)"
+            else:
+                demanda = f"<b class='neg'>baja</b> ({f['profundidad']:.0%} arrendatarios)"
+            cuerpo += (
+                f"<tr><td>{escape(f['microzona'])}</td><td>{escape(f['tipologia'])}</td>"
+                f"<td class='n'>{f['m2']:.0f}</td><td>{codigo}</td>"
+                f"<td class='n'>UF {_f(f['precio_uf'])}</td>"
+                f"<td class='n'>${_f(f['arriendo_clp'])} <span class='mini'>"
+                f"(${_f(f['p25_clp'])}–${_f(f['p75_clp'])})</span></td>"
+                f"<td class='n'>{f['yield_modelo']:.2%} <span class='mini'>"
+                f"(piso {f['yield_p25']:.2%})</span></td>"
+                f"<td class='n'>{f['n_celda']}</td><td>{demanda}</td></tr>"
+            )
+        tabla = (
+            "<table><tr><th>Microzona</th><th>Tip.</th><th>m²</th><th>Código</th>"
+            "<th>Precio</th><th>Arriendo modelo (p25–p75)</th><th>Yield bruto</th>"
+            f"<th>n celda</th><th>Demanda censal</th></tr>{cuerpo}</table>"
+            if cuerpo
+            else "<p>El modelo pasa su examen pero ninguna celda rala resultó estimable.</p>"
+        )
+        return f"""
+<h2>6 · Arriendo por MODELO — celdas sin comparables (estimación, fuera del ranking)</h2>
+{tabla}
+<p class='nota'>Estas unidades NO compiten en el ranking: su celda no junta los 8
+comparables del umbral y el arriendo es una <b>estimación de modelo (evidencia E)</b> —
+hedónico log-log entrenado con los {modelo_resumen.get("n_obs", 0)} arriendos limpios de
+toda la base, no un dato observado. El examen de hoy: {vara} → PASA. El orden castiga el
+optimismo: va por el yield del PISO del intervalo (p25), no por el central. "Demanda
+censal" es la profundidad de arriendo del Censo 2024 (hogares arrendatarios / hogares)
+contra la mediana del alcance: <b>rala con demanda honda</b> es la tesis "poca
+competencia, menor vacancia"; <b>rala con demanda baja</b> es la trampa — nadie arrienda
+ahí. Verificar en terreno antes de ofertar: un modelo no reemplaza a un comparable.</p>"""
+
     notas_html = "".join(f"<p class='nota'>{escape(n)}</p>" for n in notas)
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Flujo Cero {fecha}</title>
@@ -577,7 +755,9 @@ Sirve para elegir a quién pedir cotización, no para ofertar.</p>
 <p class='nota'>"Desde" = el piso del modelo, no el precio de una unidad: estas filas NO
 compiten en el ranking (regla B1); son el radar para pedir cotización dirigida.</p>
 
-<h2>6 · Delta del mercado usado (corte {corte})</h2>
+{seccion_modelo()}
+
+<h2>{"7" if modelo_resumen is not None else "6"} · Delta del mercado usado (corte {corte})</h2>
 <pre>{escape(delta_texto)}</pre>
 {notas_html}
 </body></html>

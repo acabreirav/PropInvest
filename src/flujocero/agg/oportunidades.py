@@ -68,6 +68,13 @@ class Emparejamiento:
     riesgo_por_defecto: int = 0
     catalizador_medido: int = 0
     catalizador_por_defecto: int = 0
+    # T-958 · `(unidad_key, microzona, tipologia, m2, precio_uf)` de las descartadas por
+    # `sin_comparables` — y SOLO por ese motivo: `mercado_temporada` y `ventana_desviada`
+    # son ND deliberados sobre segmentos sospechosos y el modelo hedonico no debe
+    # re-ponerles numero. Es el insumo de la seccion "arriendo por modelo" del informe.
+    sin_comparables_detalle: list[tuple[str, str, str, Decimal, Decimal]] = field(
+        default_factory=list
+    )
 
     @property
     def total(self) -> int:
@@ -477,6 +484,7 @@ def emparejar(
             # SIN caida a comuna ni al tramo, a proposito. Ver el docstring del modulo.
             r.descartes["sin_comparables"] += 1
             _anotar(r, comuna, "sin_comparables")
+            r.sin_comparables_detalle.append((key, mz, tip, m2, precio))
             continue
         # D-022 · tripwire de monotonia: en el mercado pelado el $/m² cae con el tamanio.
         # Si la asignacion supera el $/m² mediano de los comparables mas chicos de su
